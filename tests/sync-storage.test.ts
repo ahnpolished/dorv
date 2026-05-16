@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DirectAdapter } from "../apps/extension/lib/adapters/direct.js";
 import { resolveAdapter } from "../apps/extension/lib/adapters/resolve.js";
 import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js";
+import { createAuthStore } from "../apps/extension/lib/storage/auth.js";
 import {
   createDocStore,
   createMappingStore,
@@ -17,15 +18,20 @@ import type {
 } from "../apps/extension/lib/adapters/types.js";
 
 describe("HUM-1193 adapter resolution", () => {
+  const storageArea = createMemoryStorageArea();
+  const authStore = createAuthStore(storageArea);
+
   it("returns DirectAdapter when backendUrl is unset", () => {
-    expect(resolveAdapter({ backendUrl: "" })).toBeInstanceOf(DirectAdapter);
-    expect(resolveAdapter({})).toBeInstanceOf(DirectAdapter);
+    expect(resolveAdapter({ backendUrl: "", authStore, storageArea })).toBeInstanceOf(
+      DirectAdapter
+    );
+    expect(resolveAdapter({ authStore, storageArea })).toBeInstanceOf(DirectAdapter);
   });
 
   it("rejects backend adapter resolution until backend scope exists", () => {
-    expect(() => resolveAdapter({ backendUrl: "https://dorv.example" })).toThrow(
-      "BackendAdapter is out of scope for v0.1.0"
-    );
+    expect(() =>
+      resolveAdapter({ backendUrl: "https://dorv.example", authStore, storageArea })
+    ).toThrow("BackendAdapter is out of scope for v0.1.0");
   });
 });
 
