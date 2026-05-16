@@ -110,7 +110,10 @@ export class DirectAdapter implements SyncAdapter {
     return Promise.resolve([]);
   }
 
-  async pushGHCommentToDoc(comment: GitHubReviewComment, mapping: DocMapping): Promise<CommentMapping> {
+  async pushGHCommentToDoc(
+    comment: GitHubReviewComment,
+    mapping: DocMapping
+  ): Promise<CommentMapping> {
     const gToken = await this.authStore.getGoogleToken(false);
     if (!gToken) {
       throw new Error("Google token missing during sync");

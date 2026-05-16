@@ -23,9 +23,9 @@ describe("DirectAdapter baseline sync", () => {
     docStore = createDocStore(storage);
     mappingStore = createMappingStore(storage);
     adapter = new DirectAdapter(authStore, storage);
-    
+
     mockFetch.mockReset();
-    
+
     (global as any).chrome = {
       runtime: { lastError: null },
       identity: {
@@ -63,7 +63,9 @@ describe("DirectAdapter baseline sync", () => {
 
   it("pushes new comments to GDoc", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) => cb("mock-g-token"));
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
 
     const ref = { repo: "org/repo", prNumber: 123 };
     const mapping: DocMapping = {
@@ -83,17 +85,20 @@ describe("DirectAdapter baseline sync", () => {
       if (urlStr.includes("github.com")) {
         return {
           ok: true,
-          json: () => Promise.resolve([{
-            id: 1,
-            body: "new comment",
-            path: "f.ts",
-            line: 10,
-            in_reply_to_id: null,
-            user: { login: "u" },
-            html_url: "h",
-            created_at: "t",
-            updated_at: "t"
-          }])
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1,
+                body: "new comment",
+                path: "f.ts",
+                line: 10,
+                in_reply_to_id: null,
+                user: { login: "u" },
+                html_url: "h",
+                created_at: "t",
+                updated_at: "t"
+              }
+            ])
         };
       } else if (urlStr.includes("googleapis.com")) {
         return {
