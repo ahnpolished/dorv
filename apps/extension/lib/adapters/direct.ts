@@ -1,10 +1,12 @@
 import { marked } from "marked";
 import type { AuthStore } from "../storage/auth.js";
-import { createDocStore, createStatusStore } from "../storage/stores.js";
+import { createDocStore, createStatusStore, createMappingStore } from "../storage/stores.js";
 import type { StorageArea } from "../storage/area.js";
 import { createGoogleDoc } from "../gdoc/drive.js";
 import { generateGDocHtml } from "../gdoc/template.js";
 import { postPRComment } from "../github/comments.js";
+import { fetchReviewComments } from "../github/fetch.js";
+import { pushGDocComment } from "../gdoc/comments.js";
 import type {
   CommentMapping,
   CreateDocInput,
@@ -19,6 +21,7 @@ import type {
 export class DirectAdapter implements SyncAdapter {
   private docStore;
   private statusStore;
+  private mappingStore;
 
   constructor(
     private authStore: AuthStore,
@@ -26,6 +29,7 @@ export class DirectAdapter implements SyncAdapter {
   ) {
     this.docStore = createDocStore(storageArea);
     this.statusStore = createStatusStore(storageArea);
+    this.mappingStore = createMappingStore(storageArea);
   }
 
   async getDoc(ref: PullRequestRef): Promise<DocMapping | undefined> {
@@ -106,8 +110,25 @@ export class DirectAdapter implements SyncAdapter {
     return Promise.resolve([]);
   }
 
-  pushGHCommentToDoc(): Promise<CommentMapping> {
-    return Promise.reject(new Error("DirectAdapter.pushGHCommentToDoc is implemented in HUM-1197"));
+  async pushGHCommentToDoc(comment: GitHubReviewComment, mapping: DocMapping): Promise<CommentMapping> {
+    const gToken = await this.authStore.getGoogleToken(false);
+    if (!gToken) {
+      throw new Error("Google token missing during sync");
+    }
+
+    const content = `**@${comment.user}** on ${comment.path}:${comment.line?.toString() ?? "?"} -- ${comment.body} -- [View](${comment.htmlUrl})`;
+    const result = await pushGDocComment(gToken, mapping.docId, content);
+
+    const commentMapping: CommentMapping = {
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      ghCommentId: comment.id,
+      docCommentId: result.id,
+      source: "github"
+    };
+
+    await this.mappingStore.upsert(commentMapping);
+    return commentMapping;
   }
 
   pushDocCommentToGH(): Promise<CommentMapping> {
@@ -115,18 +136,45 @@ export class DirectAdapter implements SyncAdapter {
   }
 
   async syncAll(): Promise<void> {
+    const ghToken = await this.authStore.getGitHubToken();
+    if (!ghToken) return;
+
     const active = await this.docStore.listActive();
     for (const ref of active) {
       const mapping = await this.docStore.get(ref.repo, ref.prNumber);
       if (mapping) {
-        mapping.lastSyncedAt = new Date().toISOString();
-        await this.docStore.upsert(mapping);
-        await this.statusStore.set({
-          repo: ref.repo,
-          prNumber: ref.prNumber,
-          state: "idle",
-          updatedAt: new Date().toISOString()
-        });
+        try {
+          await this.statusStore.set({
+            ...ref,
+            state: "syncing",
+            updatedAt: new Date().toISOString()
+          });
+
+          const comments = await fetchReviewComments(ghToken, ref.repo, ref.prNumber);
+          const newComments = comments.filter((c) => !c.inReplyToId);
+
+          for (const comment of newComments) {
+            if (!(await this.mappingStore.hasByGH(comment.id))) {
+              await this.pushGHCommentToDoc(comment, mapping);
+            }
+          }
+
+          mapping.lastSyncedAt = new Date().toISOString();
+          await this.docStore.upsert(mapping);
+          await this.statusStore.set({
+            ...ref,
+            state: "idle",
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error(`Sync failed for ${ref.repo}#${ref.prNumber.toString()}:`, err);
+          await this.statusStore.set({
+            ...ref,
+            state: "error",
+            updatedAt: new Date().toISOString(),
+            message: String(err)
+          });
+        }
       }
     }
   }
