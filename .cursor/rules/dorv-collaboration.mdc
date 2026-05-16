@@ -1,0 +1,35 @@
+---
+description: Multi-agent coordination — claim issues, wait on dependencies
+alwaysApply: true
+---
+
+# dorv — agent collaboration
+
+Full protocol: [docs/AGENT_COLLABORATION.md](../../docs/AGENT_COLLABORATION.md). Claims file: [.agents/claims.yaml](../../.agents/claims.yaml).
+
+## Before coding
+
+1. Resolve blockers: Linear `blockedBy` → description `## Depends on` → [LINEAR_DEPENDENCIES.md](../../docs/LINEAR_DEPENDENCIES.md) / [PRIORITIES.md](../../docs/PRIORITIES.md).
+2. Read `.agents/claims.yaml` — if any blocker has `status: in_progress`, **wait** (tell user) or spawn background poll (≤ **6 h**, default **5 min** interval).
+3. Scan blocker issues in Linear for `🤖 Agent claim` with `in_progress`.
+4. Blocked + auto-continue: add `wait_queue` entry, post `🤖 Agent wait` on Linear, use **Task** tool to poll until `poll_until` or all blockers `done`, then claim → worktree → PR.
+
+## Worktree (required)
+
+- Create `.worktrees/feature-hum-####` with branch `feature/hum-####` before coding.
+- All commits for that issue happen only in the worktree — not on `main` in the primary checkout.
+- See [docs/AGENT_COLLABORATION.md](../../docs/AGENT_COLLABORATION.md#git-worktree-required).
+
+## On claim (required)
+
+1. Post Linear comment (`🤖 Agent claim`, `in_progress`, include **Worktree** path).
+2. Update `.agents/claims.yaml` (`branch`, `worktree`, `depends_on`).
+3. `git worktree add` then `cd` into the worktree.
+
+## On finish (required)
+
+1. Tests/lint pass in the worktree.
+2. Push branch and **open PR** to `main` (`gh pr create`; title `HUM-####: …`).
+3. Linear comment `done` with **PR** URL; yaml `pr:` + `status: done`.
+
+Never implement while blockers are `in_progress` (background agent polls only until clear). Never mark `done` without a PR unless the user opts out. Max background wait: **6 hours** — then `expired` and notify user.

@@ -27,6 +27,8 @@ See [docs/PRIORITIES.md](docs/PRIORITIES.md) for the Linear backlog, priorities,
 | [docs/PRIORITIES.md](docs/PRIORITIES.md) | Issue backlog, P0/P1 acceptance criteria, implementation order |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Condensed architecture (canonical detail lives in Linear) |
 | [AGENTS.md](AGENTS.md) | Instructions for coding agents (Codex, Cursor, Claude Code, …) |
+| [docs/AGENT_COLLABORATION.md](docs/AGENT_COLLABORATION.md) | Claim issues, wait on dependencies, `.agents/claims.yaml` |
+| [docs/LINEAR_DEPENDENCIES.md](docs/LINEAR_DEPENDENCIES.md) | Linear **Blocked by** relations + description format for agents |
 | [.cursor/rules/](.cursor/rules/) | Cursor-specific rules (`.mdc`) |
 | [CLAUDE.md](CLAUDE.md) | Pointer to AGENTS.md for Claude Code |
 

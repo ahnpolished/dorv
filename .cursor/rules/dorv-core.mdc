@@ -21,6 +21,7 @@ Full agent playbook: [AGENTS.md](../../AGENTS.md). Backlog order: [docs/PRIORITI
 
 ## Agent behavior
 
+- **Claim + wait:** see `.cursor/rules/dorv-collaboration.mdc` — Linear comment + `.agents/claims.yaml`; wait if blockers are `in_progress`.
 - Prefer one Linear issue per task; follow dependency order in PRIORITIES.md.
 - No commits/PRs unless the user explicitly requests.
 - No secrets in repo; use `.env.example` placeholders.

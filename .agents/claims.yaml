@@ -1,0 +1,22 @@
+# Active agent claims for dorv. See docs/AGENT_COLLABORATION.md.
+#
+# Rules:
+# - Update when you claim, finish, or release an issue (keep in sync with Linear comment).
+# - status: in_progress | done | released | blocked
+# - agent: cursor | codex | claude-code | other
+# - depends_on: list of HUM-#### ids from docs/PRIORITIES.md
+# - branch: feature/hum-#### (Linear gitBranchName)
+# - worktree: .worktrees/feature-hum-#### (required; work only here)
+# - pr: URL once opened (required before status: done)
+#
+# Other agents: if a depends_on issue is in_progress here, wait — do not start your issue.
+# One issue = one worktree = one PR. Do not commit feature work on main in the primary checkout.
+#
+# wait_queue: agents blocked on dependencies (background poll up to 6h)
+#   status: waiting | ready | expired | cancelled
+#   poll_started_at / poll_until: ISO-8601 UTC (poll_until = started + 6 hours max)
+#   poll_interval_minutes: default 5
+
+claims: {}
+
+wait_queue: {}

@@ -2,6 +2,8 @@
 
 Source of truth for issue status: [Linear — dorv](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).
 
+**Dependencies:** Every issue must have Linear **Blocked by** relations and a `## Depends on` section in the description. See [LINEAR_DEPENDENCIES.md](LINEAR_DEPENDENCIES.md) for the canonical graph and checklist.
+
 All v0.1.0 issues are in milestone **v0.1.0** (DirectAdapter, no backend). Linear priority: **Urgent** = P0 path, **High** = P1 / supporting work.
 
 ## v0.1.0 acceptance criteria (from PRD)
@@ -27,21 +29,21 @@ All v0.1.0 issues are in milestone **v0.1.0** (DirectAdapter, no backend). Linea
 | --- | --- | --- |
 | [HUM-1194](https://linear.app/humphreyahn/issue/HUM-1194) | WXT scaffolding + manifest | — |
 | [HUM-1193](https://linear.app/humphreyahn/issue/HUM-1193) | SyncAdapter interface + typed storage | HUM-1194 |
-| [HUM-1196](https://linear.app/humphreyahn/issue/HUM-1196) | GH → GDoc: markdown → Google Doc creation | HUM-1193, auth, file detection |
-| [HUM-1197](https://linear.app/humphreyahn/issue/HUM-1197) | GH → GDoc: comment sync (poll + push) | HUM-1196, background worker |
+| [HUM-1196](https://linear.app/humphreyahn/issue/HUM-1196) | GH → GDoc: markdown → Google Doc creation | HUM-1193, HUM-1204, HUM-1195 |
+| [HUM-1197](https://linear.app/humphreyahn/issue/HUM-1197) | GH → GDoc: comment sync (poll + push) | HUM-1196, HUM-1202 |
 
 ### High (UI, auth, reverse sync, ship)
 
-| Issue | Title | Notes |
+| Issue | Title | Depends on |
 | --- | --- | --- |
-| [HUM-1195](https://linear.app/humphreyahn/issue/HUM-1195) | PR markdown file detection | Gates sidebar visibility |
-| [HUM-1204](https://linear.app/humphreyahn/issue/HUM-1204) | Auth: GitHub PAT + Google OAuth | Early; blocks API calls |
-| [HUM-1200](https://linear.app/humphreyahn/issue/HUM-1200) | PRSidebar (GitHub content script) | Shadow DOM in discussion sidebar |
-| [HUM-1201](https://linear.app/humphreyahn/issue/HUM-1201) | DocSidebar (Chrome side panel) | `docs.google.com` |
-| [HUM-1202](https://linear.app/humphreyahn/issue/HUM-1202) | Background: alarms + message bus | 2 min poll, `syncAll` |
-| [HUM-1198](https://linear.app/humphreyahn/issue/HUM-1198) | GDoc → GH: comment push + line match | P0 criterion #6 |
-| [HUM-1199](https://linear.app/humphreyahn/issue/HUM-1199) | Reply sync bidirectional | P1 criterion #7 |
-| [HUM-1203](https://linear.app/humphreyahn/issue/HUM-1203) | Enterprise packaging + distribution | P1 criterion #10; README, zip |
+| [HUM-1195](https://linear.app/humphreyahn/issue/HUM-1195) | PR markdown file detection | HUM-1194 |
+| [HUM-1204](https://linear.app/humphreyahn/issue/HUM-1204) | Auth: GitHub PAT + Google OAuth | HUM-1194 |
+| [HUM-1200](https://linear.app/humphreyahn/issue/HUM-1200) | PRSidebar (GitHub content script) | HUM-1193, HUM-1195 |
+| [HUM-1201](https://linear.app/humphreyahn/issue/HUM-1201) | DocSidebar (Chrome side panel) | HUM-1197 |
+| [HUM-1202](https://linear.app/humphreyahn/issue/HUM-1202) | Background: alarms + message bus | HUM-1193, HUM-1196 |
+| [HUM-1198](https://linear.app/humphreyahn/issue/HUM-1198) | GDoc → GH: comment push + line match | HUM-1193, HUM-1201 |
+| [HUM-1199](https://linear.app/humphreyahn/issue/HUM-1199) | Reply sync bidirectional | HUM-1197, HUM-1198 |
+| [HUM-1203](https://linear.app/humphreyahn/issue/HUM-1203) | Enterprise packaging + distribution | HUM-1194, HUM-1197 |
 
 > **Duplicate:** [HUM-1192](https://linear.app/humphreyahn/issue/HUM-1192) duplicates HUM-1193 — close or merge in Linear before implementation.
 
