@@ -1,0 +1,36 @@
+:root {
+  color: #202124;
+  background: #f8fbff;
+  font-family: "Google Sans", "Product Sans", "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.dorv-sidepanel {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.dorv-eyebrow {
+  color: #1a73e8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.dorv-sidepanel h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0 0 10px;
+}
+
+.dorv-sidepanel p {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
