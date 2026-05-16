@@ -11,16 +11,19 @@
   "scripts": {
     "build": "tsc --noEmit",
     "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "dev": "pnpm --filter @dorv/extension dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "prepare": "command -v prek >/dev/null 2>&1 && prek install || true",
     "precommit": "prek run --all-files",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "zip": "pnpm --filter @dorv/extension zip"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
+    "@types/chrome": "^0.1.42",
     "@types/node": "^22.15.18",
     "eslint": "^9.27.0",
     "prettier": "^3.5.3",

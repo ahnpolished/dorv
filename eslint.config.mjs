@@ -3,14 +3,22 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: [".worktrees/**", "coverage/**", "dist/**", "node_modules/**", "pnpm-lock.yaml"]
+    ignores: [
+      "**/.output/**",
+      "**/.wxt/**",
+      ".worktrees/**",
+      "coverage/**",
+      "dist/**",
+      "node_modules/**",
+      "pnpm-lock.yaml"
+    ]
   },
   {
     files: ["**/*.{js,mjs,cjs}"],
     extends: [js.configs.recommended]
   },
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
     extends: [
       js.configs.recommended,
       ...tseslint.configs.strictTypeChecked,
@@ -21,6 +29,10 @@ export default tseslint.config(
         projectService: true,
         tsconfigRootDir: import.meta.dirname
       }
+    },
+    rules: {
+      "no-undef": "off",
+      "no-unused-vars": "off"
     }
   }
 );

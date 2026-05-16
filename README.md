@@ -64,6 +64,9 @@ pnpm install
 # Install git hooks
 prek install
 
+# Dev extension
+pnpm dev
+
 # Run all CI checks locally
 pnpm run ci
 
@@ -72,6 +75,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm zip
 ```
 
 Use `.env.example` as the placeholder reference for local extension credentials. Do not commit real PATs, OAuth client IDs, or backend URLs.
