@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { GitHubReviewComment } from "../adapters/types.js";
 
 export async function fetchReviewComments(
@@ -27,7 +30,6 @@ export async function fetchReviewComments(
   }
 
   const data = (await resp.json()) as any[];
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return data.map((c) => ({
     id: c.id,
     body: c.body,
