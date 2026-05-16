@@ -11,6 +11,7 @@ function Options() {
   const [backendUrl, setBackendUrl] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [validating, setValidating] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -27,11 +28,34 @@ function Options() {
     load();
   }, []);
 
-  const saveGithub = async () => {
-    if (!githubPat.startsWith("****")) {
-      await authStore.setGitHubToken(githubPat);
-      setGithubPat("****" + githubPat.slice(-4));
-      alert("GitHub PAT saved!");
+  const validateAndSaveGithub = async () => {
+    if (!githubPat) {
+      await authStore.clearGitHubToken();
+      alert("GitHub PAT cleared.");
+      return;
+    }
+
+    if (githubPat.startsWith("****")) {
+      return;
+    }
+
+    setValidating(true);
+    try {
+      const resp = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `token ${githubPat}` }
+      });
+      
+      if (resp.ok) {
+        await authStore.setGitHubToken(githubPat);
+        setGithubPat("****" + githubPat.slice(-4));
+        alert("GitHub PAT validated and saved!");
+      } else {
+        alert(`Validation failed: ${resp.status} ${resp.statusText}`);
+      }
+    } catch (err) {
+      alert(`Validation error: ${String(err)}`);
+    } finally {
+      setValidating(false);
     }
   };
 
@@ -50,7 +74,7 @@ function Options() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div className="options-container">Loading...</div>;
 
   return (
     <div className="options-container">
@@ -69,8 +93,11 @@ function Options() {
               value={githubPat} 
               placeholder="ghp_..."
               onChange={(e) => setGithubPat(e.target.value)}
+              disabled={validating}
             />
-            <button onClick={saveGithub}>Save PAT</button>
+            <button onClick={validateAndSaveGithub} disabled={validating}>
+              {validating ? "Validating..." : "Validate & Save"}
+            </button>
           </div>
         </section>
 
