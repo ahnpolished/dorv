@@ -70,7 +70,9 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
   );
 
   const files =
-    ref === undefined ? [] : filterMarkdownFiles(await fetchPullRequestFiles(ref, { fetch }));
+    ref === undefined
+      ? []
+      : filterMarkdownFiles(await fetchPullRequestFiles(ref, { fetch: fetch.bind(window) }));
   const model = buildPrSidebarModel({ files, mode: "no-doc" });
   const existingRoot = document.getElementById(ROOT_ID);
 
