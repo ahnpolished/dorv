@@ -3,9 +3,16 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createStatusStore } from "../lib/storage/stores.js";
+import type { CreateDocInput } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
 const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
+
+interface ChromeMessage {
+  type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any;
+}
 
 export default defineBackground(() => {
   const storageArea = createChromeStorageArea(chrome.storage.local);
@@ -46,7 +53,7 @@ export default defineBackground(() => {
     }
   });
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: ChromeMessage, _sender, sendResponse) => {
     const run = async () => {
       try {
         const backendUrl = await authStore.getBackendUrl();
@@ -56,9 +63,12 @@ export default defineBackground(() => {
           storageArea
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const payload = message.payload;
+
         switch (message.type) {
           case "CREATE_DOC": {
-            const result = await adapter.createDoc(message.payload);
+            const result = await adapter.createDoc(payload as CreateDocInput);
             sendResponse({ success: true, payload: result });
             break;
           }
@@ -68,7 +78,8 @@ export default defineBackground(() => {
             break;
           }
           case "GET_SYNC_STATUS": {
-            const status = await statusStore.get(message.payload.repo, message.payload.prNumber);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            const status = await statusStore.get(payload.repo as string, payload.prNumber as number);
             sendResponse({ success: true, payload: status });
             break;
           }

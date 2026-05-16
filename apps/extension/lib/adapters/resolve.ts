@@ -4,7 +4,7 @@ import type { AuthStore } from "../storage/auth.js";
 import type { StorageArea } from "../storage/area.js";
 
 export interface ResolveAdapterOptions {
-  backendUrl?: string;
+  backendUrl?: string | undefined;
   authStore: AuthStore;
   storageArea: StorageArea;
 }

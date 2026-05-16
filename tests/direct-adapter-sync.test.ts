@@ -1,14 +1,19 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it, beforeEach } from "vitest";
 import { DirectAdapter } from "../apps/extension/lib/adapters/direct.js";
 import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js";
-import { createAuthStore } from "../apps/extension/lib/storage/auth.js";
+import { createAuthStore, type AuthStore } from "../apps/extension/lib/storage/auth.js";
 import { createDocStore, createStatusStore } from "../apps/extension/lib/storage/stores.js";
 import type { DocMapping } from "../apps/extension/lib/adapters/types.js";
+import type { StorageArea } from "../apps/extension/lib/storage/area.js";
 
 describe("DirectAdapter baseline sync", () => {
-  let storage: any;
+  let storage: StorageArea;
   let adapter: DirectAdapter;
-  let authStore: any;
+  let authStore: AuthStore;
   let docStore: any;
   let statusStore: any;
 
@@ -43,7 +48,7 @@ describe("DirectAdapter baseline sync", () => {
     // Verify updates
     const updatedMapping = await docStore.get(ref.repo, ref.prNumber);
     expect(updatedMapping?.lastSyncedAt).not.toBe("2026-05-16T12:00:00Z");
-    
+
     const status = await statusStore.get(ref.repo, ref.prNumber);
     expect(status?.state).toBe("idle");
   });
