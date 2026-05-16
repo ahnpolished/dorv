@@ -5,6 +5,7 @@ import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createStatusStore } from "../lib/storage/stores.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
+const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
 
 export default defineBackground(() => {
   const storageArea = createChromeStorageArea(chrome.storage.local);
@@ -62,7 +63,7 @@ export default defineBackground(() => {
             break;
           }
           case "SYNC_NOW": {
-            await adapter.syncAll(); // Current baseline syncs all active PRs
+            await adapter.syncAll();
             sendResponse({ success: true });
             break;
           }
@@ -81,6 +82,16 @@ export default defineBackground(() => {
     };
 
     void run();
-    return true; // Keep channel open for async response
+    return true;
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === "complete" && tab.url?.startsWith(GDOC_URL_PREFIX)) {
+      void chrome.sidePanel.setOptions({
+        tabId,
+        path: "sidepanel.html",
+        enabled: true
+      });
+    }
   });
 });
