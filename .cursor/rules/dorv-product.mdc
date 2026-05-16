@@ -1,0 +1,26 @@
+---
+description: dorv product context — what we build and where to look
+alwaysApply: true
+---
+
+# dorv — product context
+
+Chrome extension: GitHub PR markdown → Google Doc; bidirectional review comment sync.
+
+## Docs
+
+| File | Purpose |
+| --- | --- |
+| [README.md](../../README.md) | Human overview |
+| [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) | Adapters, entrypoints, data model |
+| [docs/PRIORITIES.md](../../docs/PRIORITIES.md) | P0/P1 criteria, issue order |
+| [Linear](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues) | Issue specs |
+
+## UI targets (from specs)
+
+- **GitHub PRSidebar:** shadow DOM in `#partial-discussion-sidebar`; Primer colors (`#1f2328`, `#d0d7de`, `#0969da`); remount on `turbo:load`.
+- **Docs side panel:** Google Sans, `#202124` text, `#1a73e8` actions; enable on `docs.google.com` tabs.
+
+## Adapter seam
+
+`SyncAdapter` with `DirectAdapter` (empty `backend_url`) vs `BackendAdapter` (later). Do not couple feature code to DirectAdapter internals beyond the interface.

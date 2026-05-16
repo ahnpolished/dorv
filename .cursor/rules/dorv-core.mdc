@@ -1,0 +1,27 @@
+---
+description: dorv core principles — simplicity, TDD, scope, v0.1.0 boundaries
+alwaysApply: true
+---
+
+# dorv — core rules
+
+Full agent playbook: [AGENTS.md](../../AGENTS.md). Backlog order: [docs/PRIORITIES.md](../../docs/PRIORITIES.md).
+
+## Principles
+
+- Simplicity over architectural beauty; smallest change that satisfies the Linear issue.
+- TDD first; ~100% coverage on touched code; CI gates merges.
+- Monorepo: one README per package; root README links to them.
+- prek for pre-commit — do not skip hooks unless the user asks.
+
+## v0.1.0 boundaries
+
+- **In scope:** DirectAdapter (PAT + `chrome.identity`), 2-min poll, `chrome.storage.local`.
+- **Out of scope unless assigned:** backend, webhooks, GitHub App, auto-updating doc on new commits, non-MD sync, multiple docs per PR.
+
+## Agent behavior
+
+- Prefer one Linear issue per task; follow dependency order in PRIORITIES.md.
+- No commits/PRs unless the user explicitly requests.
+- No secrets in repo; use `.env.example` placeholders.
+- Prevent double-sync (`hasByGH` / `hasByDoc`, `source` on mappings). Isolate errors per PR in sync loops.
