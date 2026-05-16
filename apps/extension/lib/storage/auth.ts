@@ -41,15 +41,16 @@ export function createAuthStore(storage: StorageArea): AuthStore {
             resolve(undefined);
             return;
           }
-          resolve(token);
+          resolve(token as string | undefined);
         });
       });
     },
     async revokeGoogleToken(): Promise<void> {
       return new Promise((resolve) => {
         chrome.identity.getAuthToken({ interactive: false }, (token) => {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (token) {
-            chrome.identity.removeCachedAuthToken({ token }, () => {
+            chrome.identity.removeCachedAuthToken({ token: token as string }, () => {
               resolve();
             });
           } else {

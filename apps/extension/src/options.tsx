@@ -16,16 +16,16 @@ function Options() {
   useEffect(() => {
     async function load() {
       const pat = await authStore.getGitHubToken();
-      setGithubPat(pat ? "****" + pat.slice(-4) : "");
-      
+      setGithubPat(pat ? `****${pat.slice(-4)}` : "");
+
       const url = await authStore.getBackendUrl();
-      setBackendUrl(url || "");
-      
+      setBackendUrl(url ?? "");
+
       const token = await authStore.getGoogleToken(false);
       setGoogleConnected(!!token);
       setLoading(false);
     }
-    load();
+    void load();
   }, []);
 
   const validateAndSaveGithub = async () => {
@@ -44,13 +44,13 @@ function Options() {
       const resp = await fetch("https://api.github.com/user", {
         headers: { Authorization: `token ${githubPat}` }
       });
-      
+
       if (resp.ok) {
         await authStore.setGitHubToken(githubPat);
-        setGithubPat("****" + githubPat.slice(-4));
+        setGithubPat(`****${githubPat.slice(-4)}`);
         alert("GitHub PAT validated and saved!");
       } else {
-        alert(`Validation failed: ${resp.status} ${resp.statusText}`);
+        alert(`Validation failed: ${resp.status.toString()} ${resp.statusText}`);
       }
     } catch (err) {
       alert(`Validation error: ${String(err)}`);
@@ -59,18 +59,21 @@ function Options() {
     }
   };
 
-  const saveBackend = async () => {
-    await authStore.setBackendUrl(backendUrl);
-    alert("Backend URL saved!");
+  const saveBackend = () => {
+    void authStore.setBackendUrl(backendUrl).then(() => {
+      alert("Backend URL saved!");
+    });
   };
 
-  const toggleGoogle = async () => {
+  const toggleGoogle = () => {
     if (googleConnected) {
-      await authStore.revokeGoogleToken();
-      setGoogleConnected(false);
+      void authStore.revokeGoogleToken().then(() => {
+        setGoogleConnected(false);
+      });
     } else {
-      const token = await authStore.getGoogleToken(true);
-      setGoogleConnected(!!token);
+      void authStore.getGoogleToken(true).then((token) => {
+        setGoogleConnected(!!token);
+      });
     }
   };
 
@@ -82,20 +85,30 @@ function Options() {
         <p className="eyebrow">dorv</p>
         <h1>Extension Settings</h1>
       </header>
-      
+
       <main>
         <section>
           <h2>GitHub Authentication</h2>
-          <p className="description">Provide a Personal Access Token (PAT) with <code>repo</code> scope to sync PR comments.</p>
+          <p className="description">
+            Provide a Personal Access Token (PAT) with <code>repo</code> scope to sync PR comments.
+          </p>
           <div className="input-group">
-            <input 
-              type="password" 
-              value={githubPat} 
+            <input
+              type="password"
+              value={githubPat}
               placeholder="ghp_..."
-              onChange={(e) => setGithubPat(e.target.value)}
+              onChange={(e) => {
+                setGithubPat(e.target.value);
+              }}
               disabled={validating}
             />
-            <button onClick={validateAndSaveGithub} disabled={validating}>
+            <button
+              type="button"
+              onClick={() => {
+                void validateAndSaveGithub();
+              }}
+              disabled={validating}
+            >
               {validating ? "Validating..." : "Validate & Save"}
             </button>
           </div>
@@ -103,8 +116,16 @@ function Options() {
 
         <section>
           <h2>Google Authentication</h2>
-          <p className="description">Connect your Google account to sync review comments to Google Docs.</p>
-          <button className={googleConnected ? "secondary" : "primary"} onClick={toggleGoogle}>
+          <p className="description">
+            Connect your Google account to sync review comments to Google Docs.
+          </p>
+          <button
+            type="button"
+            className={googleConnected ? "secondary" : "primary"}
+            onClick={() => {
+              toggleGoogle();
+            }}
+          >
             {googleConnected ? "Sign Out from Google" : "Connect Google Account"}
           </button>
         </section>
@@ -113,15 +134,24 @@ function Options() {
           <h2>Advanced</h2>
           <p className="description">Custom backend URL (DirectAdapter is used if empty).</p>
           <div className="input-group">
-            <input 
-              type="text" 
-              value={backendUrl} 
+            <input
+              type="text"
+              value={backendUrl}
               placeholder="https://api.dorv.dev"
-              onChange={(e) => setBackendUrl(e.target.value)}
+              onChange={(e) => {
+                setBackendUrl(e.target.value);
+              }}
             />
             <span className="badge-it">Set by IT (Placeholder)</span>
           </div>
-          <button onClick={saveBackend}>Save Backend URL</button>
+          <button
+            type="button"
+            onClick={() => {
+              saveBackend();
+            }}
+          >
+            Save Backend URL
+          </button>
         </section>
       </main>
     </div>
