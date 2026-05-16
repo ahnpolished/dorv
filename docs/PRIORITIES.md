@@ -45,7 +45,7 @@ All v0.1.0 issues are in milestone **v0.1.0** (DirectAdapter, no backend). Linea
 | [HUM-1199](https://linear.app/humphreyahn/issue/HUM-1199) | Reply sync bidirectional | HUM-1197, HUM-1198 |
 | [HUM-1203](https://linear.app/humphreyahn/issue/HUM-1203) | Enterprise packaging + distribution | HUM-1194, HUM-1197 |
 
-> **Duplicate:** [HUM-1192](https://linear.app/humphreyahn/issue/HUM-1192) duplicates HUM-1193 — close or merge in Linear before implementation.
+> **Duplicate:** [HUM-1192](https://linear.app/humphreyahn/issue/HUM-1192) duplicates HUM-1193 — **Canceled in Linear**.
 
 ## Suggested implementation order
 

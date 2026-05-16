@@ -82,7 +82,7 @@ Set **Blocked by** on the right-hand issue for each row.
 
 **Parallel lanes** (after HUM-1194): HUM-1193, HUM-1204, HUM-1195 can run in parallel in separate worktrees.
 
-**Close duplicate:** HUM-1192 — merge into HUM-1193; no new dependencies on 1192.
+**Close duplicate:** HUM-1192 — **Canceled in Linear**; no new dependencies on 1192.
 
 ### Mermaid (visual)
 
