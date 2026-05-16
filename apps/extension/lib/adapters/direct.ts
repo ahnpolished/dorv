@@ -1,6 +1,6 @@
 import { marked } from "marked";
 import type { AuthStore } from "../storage/auth.js";
-import { createDocStore } from "../storage/stores.js";
+import { createDocStore, createStatusStore } from "../storage/stores.js";
 import type { StorageArea } from "../storage/area.js";
 import { createGoogleDoc } from "../gdoc/drive.js";
 import { generateGDocHtml } from "../gdoc/template.js";
@@ -18,12 +18,14 @@ import type {
 
 export class DirectAdapter implements SyncAdapter {
   private docStore;
+  private statusStore;
 
   constructor(
     private authStore: AuthStore,
     storageArea: StorageArea
   ) {
     this.docStore = createDocStore(storageArea);
+    this.statusStore = createStatusStore(storageArea);
   }
 
   async getDoc(ref: PullRequestRef): Promise<DocMapping | undefined> {
@@ -112,7 +114,20 @@ export class DirectAdapter implements SyncAdapter {
     return Promise.reject(new Error("DirectAdapter.pushDocCommentToGH is implemented in HUM-1198"));
   }
 
-  syncAll(): Promise<void> {
-    return Promise.resolve();
+  async syncAll(): Promise<void> {
+    const active = await this.docStore.listActive();
+    for (const ref of active) {
+      const mapping = await this.docStore.get(ref.repo, ref.prNumber);
+      if (mapping) {
+        mapping.lastSyncedAt = new Date().toISOString();
+        await this.docStore.upsert(mapping);
+        await this.statusStore.set({
+          repo: ref.repo,
+          prNumber: ref.prNumber,
+          state: "idle",
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
   }
 }
