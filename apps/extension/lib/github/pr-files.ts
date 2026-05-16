@@ -20,6 +20,10 @@ export interface PrSidebarState {
 }
 
 export interface GitHubFileClientOptions {
+  /**
+   * The fetch function to use. If using window.fetch, it MUST be bound to window:
+   * fetch: fetch.bind(window)
+   */
   fetch: typeof fetch;
   token?: string;
 }

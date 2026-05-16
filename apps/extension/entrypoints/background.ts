@@ -3,7 +3,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createStatusStore } from "../lib/storage/stores.js";
-import type { CreateDocInput } from "../lib/adapters/types.js";
+import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
 const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
@@ -78,8 +78,8 @@ export default defineBackground(() => {
             break;
           }
           case "GET_SYNC_STATUS": {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            const status = await statusStore.get(payload.repo as string, payload.prNumber as number);
+            const p = payload as PullRequestRef;
+            const status = await statusStore.get(p.repo, p.prNumber);
             sendResponse({ success: true, payload: status });
             break;
           }
