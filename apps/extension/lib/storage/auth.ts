@@ -6,9 +6,11 @@ export interface AuthStore {
   clearGitHubToken(): Promise<void>;
   getBackendUrl(): Promise<string | undefined>;
   setBackendUrl(url: string): Promise<void>;
+  getGoogleToken(interactive: boolean): Promise<string | undefined>;
+  revokeGoogleToken(): Promise<void>;
 }
 
-export function createAuthStore(storage: StorageArea) {
+export function createAuthStore(storage: StorageArea): AuthStore {
   const keys = {
     githubPat: "github_pat",
     backendUrl: "backend_url"
@@ -31,6 +33,30 @@ export function createAuthStore(storage: StorageArea) {
     },
     async setBackendUrl(url: string): Promise<void> {
       await storage.set({ [keys.backendUrl]: url });
+    },
+    async getGoogleToken(interactive: boolean): Promise<string | undefined> {
+      return new Promise((resolve) => {
+        chrome.identity.getAuthToken({ interactive }, (token) => {
+          if (chrome.runtime.lastError) {
+            resolve(undefined);
+            return;
+          }
+          resolve(token);
+        });
+      });
+    },
+    async revokeGoogleToken(): Promise<void> {
+      return new Promise((resolve) => {
+        chrome.identity.getAuthToken({ interactive: false }, (token) => {
+          if (token) {
+            chrome.identity.removeCachedAuthToken({ token }, () => {
+              resolve();
+            });
+          } else {
+            resolve();
+          }
+        });
+      });
     }
   };
 }

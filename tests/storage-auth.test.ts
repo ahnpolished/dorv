@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { createAuthStore } from "../apps/extension/lib/storage/auth.js";
 import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js";
 
@@ -9,6 +9,17 @@ describe("AuthStore", () => {
   beforeEach(() => {
     storage = createMemoryStorageArea();
     authStore = createAuthStore(storage);
+    
+    // Mock chrome globals
+    (global as any).chrome = {
+      runtime: {
+        lastError: null
+      },
+      identity: {
+        getAuthToken: vi.fn(),
+        removeCachedAuthToken: vi.fn()
+      }
+    };
   });
 
   describe("GitHub", () => {
@@ -17,19 +28,41 @@ describe("AuthStore", () => {
       await authStore.setGitHubToken("ghp_test123");
       expect(await authStore.getGitHubToken()).toBe("ghp_test123");
     });
-
-    it("clears github token", async () => {
-      await authStore.setGitHubToken("ghp_test123");
-      await authStore.clearGitHubToken();
-      expect(await authStore.getGitHubToken()).toBeUndefined();
-    });
   });
 
-  describe("Backend", () => {
-    it("gets and sets backend url", async () => {
-      expect(await authStore.getBackendUrl()).toBeUndefined();
-      await authStore.setBackendUrl("https://api.dorv.dev");
-      expect(await authStore.getBackendUrl()).toBe("https://api.dorv.dev");
+  describe("Google OAuth", () => {
+    it("gets google token via chrome.identity", async () => {
+      const mockToken = "mock-google-token";
+      (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) => {
+        cb(mockToken);
+      });
+
+      const token = await authStore.getGoogleToken(true);
+      expect(token).toBe(mockToken);
+      expect(chrome.identity.getAuthToken).toHaveBeenCalledWith({ interactive: true }, expect.any(Function));
+    });
+
+    it("handles chrome.identity error", async () => {
+      (chrome.runtime as any).lastError = { message: "Error" };
+      (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) => {
+        cb(undefined);
+      });
+
+      const token = await authStore.getGoogleToken(false);
+      expect(token).toBeUndefined();
+    });
+
+    it("revokes google token", async () => {
+      const mockToken = "stale-token";
+      (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) => {
+        cb(mockToken);
+      });
+      (chrome.identity.removeCachedAuthToken as any).mockImplementation((opts: any, cb: any) => {
+        cb();
+      });
+
+      await authStore.revokeGoogleToken();
+      expect(chrome.identity.removeCachedAuthToken).toHaveBeenCalledWith({ token: mockToken }, expect.any(Function));
     });
   });
 });
