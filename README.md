@@ -27,6 +27,8 @@ See [docs/PRIORITIES.md](docs/PRIORITIES.md) for the Linear backlog, priorities,
 | [docs/PRIORITIES.md](docs/PRIORITIES.md) | Issue backlog, P0/P1 acceptance criteria, implementation order |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Condensed architecture (canonical detail lives in Linear) |
 | [AGENTS.md](AGENTS.md) | Instructions for coding agents (Codex, Cursor, Claude Code, …) |
+| [docs/AGENT_COLLABORATION.md](docs/AGENT_COLLABORATION.md) | Claim issues, wait on dependencies, `.agents/claims.yaml` |
+| [docs/LINEAR_DEPENDENCIES.md](docs/LINEAR_DEPENDENCIES.md) | Linear **Blocked by** relations + description format for agents |
 | [.cursor/rules/](.cursor/rules/) | Cursor-specific rules (`.mdc`) |
 | [CLAUDE.md](CLAUDE.md) | Pointer to AGENTS.md for Claude Code |
 
@@ -47,6 +49,33 @@ GitHub diff review is a poor fit for long markdown. Teams often review in Google
 - GitHub REST API (PAT), Google Drive / Docs comments API (`chrome.identity`)
 - `marked` for markdown → HTML on doc creation
 
+## Local development
+
+Prerequisites:
+
+- Node.js 22+
+- pnpm 10+
+- `prek` for local git hooks (`uv tool install prek`, `brew install prek`, or another supported install path)
+
+```bash
+# Install dependencies
+pnpm install
+
+# Install git hooks
+prek install
+
+# Run all CI checks locally
+pnpm run ci
+
+# Individual checks
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+```
+
+Use `.env.example` as the placeholder reference for local extension credentials. Do not commit real PATs, OAuth client IDs, or backend URLs.
+
 ## Status
 
-Greenfield — implementation not started. Track work in [Linear (dorv)](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).
+Bootstrap in progress. Track feature work in [Linear (dorv)](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).

@@ -5,6 +5,7 @@
 | Tool | Location |
 | --- | --- |
 | **All agents (Codex, Cursor, etc.)** | [AGENTS.md](AGENTS.md) |
+| **Multi-agent claims / waits** | [docs/AGENT_COLLABORATION.md](docs/AGENT_COLLABORATION.md) |
 | **Cursor** | [AGENTS.md](AGENTS.md) + [.cursor/rules/](.cursor/rules/) |
 | **Humans** | [README.md](README.md) |
 
