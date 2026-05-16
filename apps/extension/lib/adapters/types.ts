@@ -45,6 +45,8 @@ export interface GitHubReviewComment {
   inReplyToId?: number;
   createdAt: string;
   updatedAt: string;
+  user: string;
+  htmlUrl: string;
 }
 
 export interface GoogleDocComment {
