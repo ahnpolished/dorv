@@ -23,6 +23,7 @@ Full agent playbook: [AGENTS.md](../../AGENTS.md). Backlog order: [docs/PRIORITI
 
 - **Claim + wait:** see `.cursor/rules/dorv-collaboration.mdc` — Linear comment + `.agents/claims.yaml`; wait if blockers are `in_progress`.
 - Prefer one Linear issue per task; follow dependency order in PRIORITIES.md.
-- No commits/PRs unless the user explicitly requests.
+- A user assigning a Linear issue is permission to commit, push, and open a PR for that issue at the end of the session unless the user opts out.
+- Do not make unrelated commits or PRs outside the claimed issue branch.
 - No secrets in repo; use `.env.example` placeholders.
 - Prevent double-sync (`hasByGH` / `hasByDoc`, `source` on mappings). Isolate errors per PR in sync loops.

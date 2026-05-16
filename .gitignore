@@ -1,2 +1,13 @@
 # Agent worktrees (see docs/AGENT_COLLABORATION.md)
 .worktrees/
+
+# Dependencies and build outputs
+node_modules/
+dist/
+coverage/
+.wxt/
+
+# Local environment
+.env
+.env.*
+!.env.example

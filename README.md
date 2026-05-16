@@ -49,6 +49,33 @@ GitHub diff review is a poor fit for long markdown. Teams often review in Google
 - GitHub REST API (PAT), Google Drive / Docs comments API (`chrome.identity`)
 - `marked` for markdown → HTML on doc creation
 
+## Local development
+
+Prerequisites:
+
+- Node.js 22+
+- pnpm 10+
+- `prek` for local git hooks (`uv tool install prek`, `brew install prek`, or another supported install path)
+
+```bash
+# Install dependencies
+pnpm install
+
+# Install git hooks
+prek install
+
+# Run all CI checks locally
+pnpm run ci
+
+# Individual checks
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+```
+
+Use `.env.example` as the placeholder reference for local extension credentials. Do not commit real PATs, OAuth client IDs, or backend URLs.
+
 ## Status
 
-Greenfield — implementation not started. Track work in [Linear (dorv)](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).
+Bootstrap in progress. Track feature work in [Linear (dorv)](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).

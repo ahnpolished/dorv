@@ -118,7 +118,7 @@ Use lowercase agent ids: `cursor`, `codex`, `claude-code`, `other`.
 
 ## Finishing: open a PR (required)
 
-When implementation is complete and tests/lint pass **in the worktree**:
+When implementation is complete and tests/lint pass **in the worktree**, agents should create the PR before ending the session. Assigning a Linear issue implies permission to make focused commits, push the issue branch, and open the PR unless the user explicitly opts out.
 
 1. **Push** the feature branch.
 2. **Open a PR** to `main` (use `gh` if available).

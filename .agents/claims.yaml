@@ -17,6 +17,13 @@
 #   poll_started_at / poll_until: ISO-8601 UTC (poll_until = started + 6 hours max)
 #   poll_interval_minutes: default 5
 
-claims: {}
+claims:
+  HUM-1205:
+    agent: codex
+    status: in_progress
+    claimed_at: "2026-05-16T14:36:29Z"
+    depends_on: []
+    branch: feature/hum-1205
+    worktree: .worktrees/feature-hum-1205
 
 wait_queue: {}

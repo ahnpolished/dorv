@@ -56,6 +56,7 @@ Several agents may work on this repo at once. **Claim → worktree → code → 
 - **Do not** commit secrets (PATs, `GOOGLE_CLIENT_ID`, `.env` with real values). Use `.env.example` placeholders only.
 - **Do not** implement features on `main` in the primary checkout — use a [worktree](docs/AGENT_COLLABORATION.md#git-worktree-required) per issue.
 - **Finish with a PR** for agent-driven work (unless the user says otherwise). Commits live on the feature branch in the worktree.
+- Assigning a Linear issue to an agent implies permission to create focused commits, push the issue branch, and open the PR at the end of the session.
 - **Loop guards:** respect `CommentMapping.source` and `hasByGH` / `hasByDoc` — double-sync is a P0 failure mode.
 - **Errors:** one PR’s sync failure must not abort other PRs in `active_prs`.
 
@@ -69,26 +70,32 @@ Monorepo shape will emerge with HUM-1194. Expect roughly:
 
 When layout exists, follow existing paths; do not invent a second structure.
 
-## Commands (update when scaffold lands)
-
-Until `package.json` exists, skip inventing scripts. After HUM-1194, this section should list real commands, for example:
+## Commands
 
 ```bash
-# Install (example — replace with actual package manager)
-npm install
+# Install
+pnpm install
 
-# Dev extension
-npm run dev
+# Run all CI checks locally
+pnpm run ci
 
 # Test
-npm test
+pnpm test
 
 # Lint
-npm run lint
+pnpm lint
 
-# Extension zip for distribution
-npm run zip
+# Typecheck
+pnpm typecheck
+
+# Format check
+pnpm format:check
+
+# Install pre-commit hooks
+prek install
 ```
+
+The extension dev/build/zip commands land with the WXT package in HUM-1194.
 
 **Definition of done for a change:**
 
@@ -103,6 +110,7 @@ npm run zip
 ## Pull requests (required for agent work)
 
 - Open a PR when the issue is ready for review — do not leave work only on a local branch.
+- Do this by default at the end of each completed Linear issue session unless the user explicitly says to stop before PR creation.
 - Title: `HUM-####: Short description` (e.g. `HUM-1194: WXT scaffolding`).
 - Body: summary, Linear link, test plan checklist.
 - Use `gh pr create` when available; push with `git push -u origin HEAD` from the worktree first.
