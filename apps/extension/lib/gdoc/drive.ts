@@ -34,8 +34,8 @@ export async function createGoogleDoc(
   );
 
   if (!resp.ok) {
-    throw new Error(`Drive API failed: ${resp.status} ${await resp.text()}`);
+    throw new Error(`Drive API failed: ${resp.status.toString()} ${await resp.text()}`);
   }
 
-  return resp.json() as Promise<{ id: string; webViewLink: string }>;
+  return (await resp.json()) as { id: string; webViewLink: string };
 }

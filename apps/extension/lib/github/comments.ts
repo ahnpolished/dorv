@@ -4,8 +4,15 @@ export async function postPRComment(
   prNumber: number,
   body: string
 ): Promise<void> {
-  const [owner, name] = repo.split("/");
-  const url = `https://api.github.com/repos/${owner}/${name}/issues/${prNumber}/comments`;
+  const parts = repo.split("/");
+  const owner = parts[0];
+  const name = parts[1];
+
+  if (!owner || !name) {
+    throw new Error(`Invalid repo format: ${repo}`);
+  }
+
+  const url = `https://api.github.com/repos/${owner}/${name}/issues/${prNumber.toString()}/comments`;
 
   const resp = await fetch(url, {
     method: "POST",
@@ -18,6 +25,6 @@ export async function postPRComment(
   });
 
   if (!resp.ok) {
-    throw new Error(`GitHub API failed: ${resp.status} ${await resp.text()}`);
+    throw new Error(`GitHub API failed: ${resp.status.toString()} ${await resp.text()}`);
   }
 }
