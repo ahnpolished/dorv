@@ -1,21 +1,50 @@
 import { createRoot } from "react-dom/client";
 import { defineContentScript } from "wxt/utils/define-content-script";
 
+import {
+  buildPrSidebarState,
+  fetchPullRequestFiles,
+  filterMarkdownFiles,
+  parseGitHubPullRequestUrl
+} from "../lib/github/pr-files.js";
+import type { PrSidebarState } from "../lib/github/pr-files.js";
+
 const ROOT_ID = "dorv-pr-sidebar-root";
 
-function GithubSidebar() {
+function GithubSidebar({ state }: { state: PrSidebarState }) {
+  if (!state.visible) {
+    return null;
+  }
+
   return (
     <aside data-dorv-surface="github-pr-sidebar">
       <strong>dorv</strong>
-      <span> Markdown review sync ready.</span>
+      <ul>
+        {state.files.map((file) => (
+          <li key={file.filename}>
+            <span>{file.filename}</span>
+            <small>{file.status}</small>
+          </li>
+        ))}
+      </ul>
+      <button type="button">{state.buttonLabel}</button>
     </aside>
   );
 }
 
-function mountGithubSidebar() {
-  if (document.getElementById(ROOT_ID) !== null) {
+async function renderGithubSidebar() {
+  const ref = parseGitHubPullRequestUrl(window.location.href);
+  const state = buildPrSidebarState(
+    ref === undefined ? [] : filterMarkdownFiles(await fetchPullRequestFiles(ref, { fetch }))
+  );
+
+  const existingRoot = document.getElementById(ROOT_ID);
+  if (!state.visible) {
+    existingRoot?.remove();
     return;
   }
+
+  existingRoot?.remove();
 
   const root = document.createElement("div");
   root.id = ROOT_ID;
@@ -30,14 +59,16 @@ function mountGithubSidebar() {
     sidebar.prepend(root);
   }
 
-  createRoot(root).render(<GithubSidebar />);
+  createRoot(root).render(<GithubSidebar state={state} />);
 }
 
 export default defineContentScript({
   matches: ["https://github.com/*/*/pull/*"],
   runAt: "document_idle",
   main() {
-    mountGithubSidebar();
-    document.addEventListener("turbo:load", mountGithubSidebar);
+    void renderGithubSidebar();
+    document.addEventListener("turbo:load", () => {
+      void renderGithubSidebar();
+    });
   }
 });
