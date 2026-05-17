@@ -43,4 +43,26 @@ describe("findLineMatch", () => {
 
     expect(result).toEqual([{ path: "docs/rfc.md", line: 2 }]);
   });
+
+  it("matches a GDoc quote spanning multiple raw markdown lines", () => {
+    const result = findLineMatch("first selected line second selected line", [
+      {
+        filename: "docs/rfc.md",
+        content: "intro\nfirst selected line\nsecond selected line\noutro"
+      }
+    ]);
+
+    expect(result).toEqual([{ path: "docs/rfc.md", line: 2 }]);
+  });
+
+  it("matches rendered GDoc text against raw markdown syntax", () => {
+    const result = findLineMatch("Please review bold text before merging", [
+      {
+        filename: "README.md",
+        content: "intro\nPlease review **bold text** before merging\noutro"
+      }
+    ]);
+
+    expect(result).toEqual([{ path: "README.md", line: 2 }]);
+  });
 });
