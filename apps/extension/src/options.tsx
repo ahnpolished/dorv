@@ -4,12 +4,16 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import "./options.css";
 
-const authStore = createAuthStore(createChromeStorageArea(chrome.storage.local));
+const authStore = createAuthStore(
+  createChromeStorageArea(chrome.storage.local),
+  createChromeStorageArea(chrome.storage.managed)
+);
 
 function Options() {
   const [githubPat, setGithubPat] = useState("");
   const [backendUrl, setBackendUrl] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [isManagedBackend, setIsManagedBackend] = useState(false);
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
 
@@ -17,6 +21,9 @@ function Options() {
     async function load() {
       const pat = await authStore.getGitHubToken();
       setGithubPat(pat ? `****${pat.slice(-4)}` : "");
+
+      const isManaged = await authStore.isManagedBackendUrl();
+      setIsManagedBackend(isManaged);
 
       const url = await authStore.getBackendUrl();
       setBackendUrl(url ?? "");
@@ -141,17 +148,20 @@ function Options() {
               onChange={(e) => {
                 setBackendUrl(e.target.value);
               }}
+              disabled={isManagedBackend}
             />
-            <span className="badge-it">Set by IT (Placeholder)</span>
+            {isManagedBackend && <span className="badge-it">Set by IT</span>}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              saveBackend();
-            }}
-          >
-            Save Backend URL
-          </button>
+          {!isManagedBackend && (
+            <button
+              type="button"
+              onClick={() => {
+                saveBackend();
+              }}
+            >
+              Save Backend URL
+            </button>
+          )}
         </section>
       </main>
     </div>

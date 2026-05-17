@@ -3,10 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { GoogleDocComment } from "../adapters/types.js";
 
-export async function fetchGDocComments(
-  token: string,
-  docId: string
-): Promise<GoogleDocComment[]> {
+export async function fetchGDocComments(token: string, docId: string): Promise<GoogleDocComment[]> {
   const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments?fields=comments(id,content,quotedFileContent,author,createdTime)`;
 
   const resp = await fetch(url, {

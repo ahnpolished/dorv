@@ -6,11 +6,12 @@ export interface AuthStore {
   clearGitHubToken(): Promise<void>;
   getBackendUrl(): Promise<string | undefined>;
   setBackendUrl(url: string): Promise<void>;
+  isManagedBackendUrl(): Promise<boolean>;
   getGoogleToken(interactive: boolean): Promise<string | undefined>;
   revokeGoogleToken(): Promise<void>;
 }
 
-export function createAuthStore(storage: StorageArea): AuthStore {
+export function createAuthStore(storage: StorageArea, managedStorage?: StorageArea): AuthStore {
   const keys = {
     githubPat: "github_pat",
     backendUrl: "backend_url"
@@ -28,11 +29,20 @@ export function createAuthStore(storage: StorageArea): AuthStore {
       await storage.remove([keys.githubPat]);
     },
     async getBackendUrl(): Promise<string | undefined> {
+      if (managedStorage) {
+        const managed = await managedStorage.get([keys.backendUrl]);
+        if (managed[keys.backendUrl]) return managed[keys.backendUrl] as string;
+      }
       const values = await storage.get([keys.backendUrl]);
       return values[keys.backendUrl] as string | undefined;
     },
     async setBackendUrl(url: string): Promise<void> {
       await storage.set({ [keys.backendUrl]: url });
+    },
+    async isManagedBackendUrl(): Promise<boolean> {
+      if (!managedStorage) return false;
+      const managed = await managedStorage.get([keys.backendUrl]);
+      return !!managed[keys.backendUrl];
     },
     async getGoogleToken(interactive: boolean): Promise<string | undefined> {
       return new Promise((resolve) => {

@@ -16,7 +16,7 @@ interface ChromeMessage {
 
 export default defineBackground(() => {
   const storageArea = createChromeStorageArea(chrome.storage.local);
-  const authStore = createAuthStore(storageArea);
+  const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
   const statusStore = createStatusStore(storageArea);
 
   const startPolling = () => {

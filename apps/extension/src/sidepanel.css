@@ -48,9 +48,15 @@ h1 {
   border-radius: 50%;
 }
 
-.status-dot.idle { background: var(--idle-color); }
-.status-dot.syncing { background: var(--syncing-color); }
-.status-dot.error { background: var(--error-color); }
+.status-dot.idle {
+  background: var(--idle-color);
+}
+.status-dot.syncing {
+  background: var(--syncing-color);
+}
+.status-dot.error {
+  background: var(--error-color);
+}
 
 .tabs {
   display: flex;
@@ -103,8 +109,13 @@ h1 {
   font-size: 11px;
 }
 
-.comment-meta .author { font-weight: 700; color: var(--text-color); }
-.comment-meta .line { color: var(--secondary-text); }
+.comment-meta .author {
+  font-weight: 700;
+  color: var(--text-color);
+}
+.comment-meta .line {
+  color: var(--secondary-text);
+}
 
 .comment-body {
   font-size: 13px;
@@ -119,7 +130,9 @@ h1 {
   text-decoration: none;
 }
 
-.view-link:hover { text-decoration: underline; }
+.view-link:hover {
+  text-decoration: underline;
+}
 
 .empty-msg {
   text-align: center;
@@ -143,7 +156,11 @@ h1 {
   font-size: 14px;
 }
 
-.small { font-size: 10px; color: var(--secondary-text); word-break: break-all; }
+.small {
+  font-size: 10px;
+  color: var(--secondary-text);
+  word-break: break-all;
+}
 .comment-card.gdoc {
   background: #fdfcf3;
   border-left: 3px solid #f9ab00;
