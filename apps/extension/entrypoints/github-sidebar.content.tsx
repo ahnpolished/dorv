@@ -20,6 +20,8 @@ import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocViaBackground, openSidePanelViaBackground } from "../lib/adapters/messages.js";
 import type { MarkdownFileRef } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
+import animationsCss from "../lib/design/animations.css?inline";
+import tokensCss from "../lib/design/tokens.css?inline";
 
 const storageArea = createChromeStorageArea(chrome.storage.local);
 const authStore = createAuthStore(storageArea);
@@ -62,8 +64,10 @@ function GithubSidebar({
     });
   };
 
+  const renderSyncIcon = model.kind === "linked" && model.syncState === "syncing";
+
   return (
-    <aside className="dorv-pr-sidebar" data-dorv-surface="github-pr-sidebar">
+    <aside className="dorv-pr-sidebar dorv-state-enter" data-dorv-surface="github-pr-sidebar">
       <style>{styles}</style>
       <header>
         <strong>{model.title}</strong>
@@ -77,14 +81,20 @@ function GithubSidebar({
           </button>
         </>
       )}
-      {model.kind === "loading" && <p>{model.message}</p>}
+      {model.kind === "loading" && (
+        <div className="dorv-loading-stack" aria-label={model.message}>
+          <div className="dorv-skeleton dorv-skeleton-title" />
+          <div className="dorv-skeleton dorv-skeleton-line" />
+          <div className="dorv-skeleton dorv-skeleton-short" />
+        </div>
+      )}
       {model.kind === "error" && <p className="dorv-error">{model.message}</p>}
       {model.kind === "no-doc" && (
         <>
           <ul>
             {model.files.map((file) => (
               <li key={file.filename}>
-                <span>{file.filename}</span>
+                <span className="dorv-file-path">{file.filename}</span>
                 <small>{file.status}</small>
               </li>
             ))}
@@ -102,7 +112,12 @@ function GithubSidebar({
           </a>
           <p>{model.lastSyncedLabel}</p>
           <small>{model.syncState}</small>
-          <button type="button">{model.syncNowLabel}</button>
+          <button type="button" className="dorv-sync-button">
+            {renderSyncIcon && (
+              <img src={chrome.runtime.getURL("dorv-sync.svg")} alt="" className="dorv-sync-icon" />
+            )}
+            {model.syncNowLabel}
+          </button>
         </>
       )}
       {model.kind === "stale" && (
@@ -227,38 +242,13 @@ export default defineContentScript({
 });
 
 const styles = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500&family=Geist+Mono:wght@400&display=swap');
-:host {
-  --dorv-font-sans: 'DM Sans', -apple-system, ui-sans-serif, sans-serif;
-  --dorv-font-mono: 'Geist Mono', 'SF Mono', Menlo, ui-monospace, monospace;
-  --dorv-orange: #f97316;
-  --dorv-orange-hover: #ea6c0a;
-  --dorv-orange-subtle: rgba(249,115,22,0.12);
-  --dorv-orange-border: rgba(249,115,22,0.35);
-  --dorv-error: #ef4444;
-  --dorv-warning: #f59e0b;
-  --dorv-warning-subtle: rgba(245,158,11,0.12);
-  --dorv-radius-sm: 6px;
-  --gh-bg: #ffffff;
-  --gh-bg-subtle: #f6f8fa;
-  --gh-border: #d0d7de;
-  --gh-text: #1f2328;
-  --gh-muted: #57606a;
-}
-@media (prefers-color-scheme: dark) {
-  :host {
-    --gh-bg: #161b22;
-    --gh-bg-subtle: #21262d;
-    --gh-border: #30363d;
-    --gh-text: #e6edf3;
-    --gh-muted: #8b949e;
-  }
-}
+${tokensCss}
+${animationsCss}
 .dorv-pr-sidebar {
-  background-color: var(--gh-bg);
-  border: 1px solid var(--gh-border);
-  border-radius: var(--dorv-radius-sm);
-  color: var(--gh-text);
+  background-color: var(--dorv-light-surface);
+  border: 1px solid var(--dorv-border-strong);
+  border-radius: var(--dorv-radius);
+  color: var(--dorv-text);
   font: 13px/1.45 var(--dorv-font-sans);
   margin-bottom: 12px;
   padding: 12px;
@@ -279,7 +269,7 @@ const styles = `
   padding: 4px 0;
 }
 .dorv-pr-sidebar small {
-  color: var(--gh-muted);
+  color: var(--dorv-muted);
 }
 .dorv-pr-sidebar a {
   color: var(--dorv-orange);
@@ -294,7 +284,7 @@ const styles = `
   background: var(--dorv-orange);
   border: none;
   border-radius: var(--dorv-radius-sm);
-  color: #fff;
+  color: var(--dorv-text-on-accent);
   cursor: pointer;
   font-weight: 500;
   padding: 6px 10px;
@@ -305,13 +295,13 @@ const styles = `
   background: var(--dorv-orange-hover);
 }
 .dorv-pr-sidebar button:disabled {
-  background: var(--gh-bg-subtle);
-  border: 1px solid var(--gh-border);
-  color: var(--gh-muted);
+  background: var(--dorv-light-hover);
+  border: 1px solid var(--dorv-border-strong);
+  color: var(--dorv-muted);
   cursor: default;
 }
 .dorv-needs-setup {
-  color: var(--gh-muted);
+  color: var(--dorv-muted);
   font-size: 12px;
   margin: 0;
 }
@@ -328,39 +318,34 @@ const styles = `
   margin: 0 0 8px;
   padding: 6px 8px;
 }
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes dorv-spin {
-    to { transform: rotate(360deg); }
-  }
-  .dorv-spinning {
-    animation: dorv-spin 1s linear infinite;
-    display: inline-block;
-    transform-origin: center;
-  }
-  @keyframes dorv-slide-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .dorv-comment-enter {
-    animation: dorv-slide-in 200ms ease-out both;
-  }
-  @keyframes dorv-shimmer {
-    0%   { background-position: -200% 0; }
-    100% { background-position:  200% 0; }
-  }
-  .dorv-skeleton {
-    animation: dorv-shimmer 1.4s ease-in-out infinite;
-    background: linear-gradient(90deg,
-      var(--gh-border) 25%,
-      var(--gh-bg-subtle) 50%,
-      var(--gh-border) 75%
-    );
-    background-size: 200% 100%;
-    border-radius: var(--dorv-radius-sm);
-  }
+.dorv-file-path {
+  font-family: var(--dorv-font-mono);
 }
-@media (prefers-reduced-motion: reduce) {
-  .dorv-spinning { animation: none; }
-  .dorv-skeleton { animation: none; background: var(--gh-border); }
+.dorv-loading-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dorv-skeleton-title {
+  height: 14px;
+  width: 62%;
+}
+.dorv-skeleton-line {
+  height: 12px;
+  width: 86%;
+}
+.dorv-skeleton-short {
+  height: 12px;
+  width: 44%;
+}
+.dorv-sync-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  justify-content: center;
+}
+.dorv-sync-icon {
+  height: 16px;
+  width: 16px;
 }
 `;

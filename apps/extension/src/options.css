@@ -9,18 +9,33 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.options-shell {
+  min-height: 100vh;
+  padding: 1px 0;
+}
+
 .options-container {
   max-width: 680px;
   margin: 60px auto;
   padding: 0 20px;
 }
 
-header {
+.options-header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
   margin-bottom: 40px;
+}
+
+.options-logo {
+  border-radius: var(--dorv-radius);
+  height: 48px;
+  width: 48px;
 }
 
 .eyebrow {
   color: var(--dorv-orange);
+  font-family: var(--dorv-font-mono);
   font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
@@ -32,6 +47,13 @@ h1 {
   font-size: 28px;
   margin: 0;
   color: var(--dorv-text);
+}
+
+.options-subtitle {
+  color: var(--dorv-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 4px 0 0;
 }
 
 section {
@@ -86,7 +108,7 @@ button {
   border: none;
   font-size: 14px;
   background: var(--dorv-orange);
-  color: white;
+  color: var(--dorv-text-on-accent);
   transition: background 0.15s;
 }
 
@@ -111,5 +133,33 @@ button.secondary:hover:not(:disabled) {
   border: 1px solid var(--dorv-border-strong);
   padding: 4px 8px;
   border-radius: var(--dorv-radius-sm);
+  font-family: var(--dorv-font-mono);
   white-space: nowrap;
+}
+
+.save-confirmation {
+  background: var(--dorv-success-subtle);
+  border: 1px solid var(--dorv-border-strong);
+  border-radius: var(--dorv-radius-sm);
+  color: var(--dorv-text);
+  font-size: 13px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+}
+
+.options-skeleton-title {
+  height: 28px;
+  margin-bottom: 10px;
+  width: 40%;
+}
+
+.options-skeleton-line {
+  height: 14px;
+  margin-bottom: 28px;
+  width: 64%;
+}
+
+.options-skeleton-card {
+  height: 160px;
+  width: 100%;
 }
