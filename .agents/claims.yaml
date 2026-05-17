@@ -194,4 +194,12 @@ claims:
     branch: feature/hum-1223
     worktree: .worktrees/feature-hum-1223
 
+  HUM-1224:
+    agent: codex
+    status: in_progress
+    claimed_at: "2026-05-17T21:42:16Z"
+    depends_on: []
+    branch: feature/hum-1224
+    worktree: .worktrees/feature-hum-1224
+
 wait_queue: {}
