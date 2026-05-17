@@ -13,6 +13,8 @@ import type { PrSidebarModel } from "../lib/github/pr-sidebar.js";
 
 const ROOT_ID = "dorv-pr-sidebar-root";
 
+let currentUi: Awaited<ReturnType<typeof createShadowRootUi>> | null = null;
+
 function GithubSidebar({ model }: { model: PrSidebarModel }) {
   if (model.kind === "hidden") {
     return null;
@@ -64,6 +66,9 @@ function GithubSidebar({ model }: { model: PrSidebarModel }) {
 }
 
 async function renderGithubSidebar(ctx: ContentScriptContext) {
+  currentUi?.remove();
+  currentUi = null;
+
   const ref = parseGitHubPullRequestUrl(window.location.href);
   const sidebar = document.querySelector<HTMLElement>(
     "#partial-discussion-sidebar, .Layout-sidebar"
@@ -74,14 +79,10 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
       ? []
       : filterMarkdownFiles(await fetchPullRequestFiles(ref, { fetch: fetch.bind(window) }));
   const model = buildPrSidebarModel({ files, mode: "no-doc" });
-  const existingRoot = document.getElementById(ROOT_ID);
 
   if (model.kind === "hidden") {
-    existingRoot?.remove();
     return;
   }
-
-  existingRoot?.remove();
 
   const ui = await createShadowRootUi(ctx, {
     name: ROOT_ID,
@@ -97,6 +98,7 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
   });
 
   ui.mount();
+  currentUi = ui;
 }
 
 export default defineContentScript({
