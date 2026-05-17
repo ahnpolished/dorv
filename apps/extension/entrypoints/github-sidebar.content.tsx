@@ -17,6 +17,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createStatusStore } from "../lib/storage/stores.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
+import { createDocViaBackground } from "../lib/adapters/messages.js";
 import type { MarkdownFileRef } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 
@@ -106,13 +107,11 @@ function buildOnCreate(
   pat: string
 ): () => Promise<void> {
   return async () => {
-    const backendUrl = await authStore.getBackendUrl();
-    const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
     const meta = await fetchPullRequestMeta(ref, {
       fetch: fetch.bind(window),
       token: pat
     });
-    await adapter.createDoc({
+    await createDocViaBackground({
       repo: `${ref.owner}/${ref.repo}`,
       prNumber: ref.prNumber,
       files,
