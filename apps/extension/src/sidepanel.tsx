@@ -64,14 +64,10 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
   const handleGoogleAuth = async () => {
     setSaving(true);
     try {
-      const token = await authStore.getGoogleToken(true);
-      if (!token) {
-        setError("Google sign-in was cancelled or failed.");
-        return;
-      }
+      await authStore.getGoogleToken(true);
       advance("done");
-    } catch {
-      setError("Google sign-in failed. Try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed.");
     } finally {
       setSaving(false);
     }
