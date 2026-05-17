@@ -227,7 +227,10 @@ export default defineContentScript({
 });
 
 const styles = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500&family=Geist+Mono:wght@400&display=swap');
 :host {
+  --dorv-font-sans: 'DM Sans', -apple-system, ui-sans-serif, sans-serif;
+  --dorv-font-mono: 'Geist Mono', 'SF Mono', Menlo, ui-monospace, monospace;
   --dorv-orange: #f97316;
   --dorv-orange-hover: #ea6c0a;
   --dorv-orange-subtle: rgba(249,115,22,0.12);
@@ -256,7 +259,7 @@ const styles = `
   border: 1px solid var(--gh-border);
   border-radius: var(--dorv-radius-sm);
   color: var(--gh-text);
-  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 13px/1.45 var(--dorv-font-sans);
   margin-bottom: 12px;
   padding: 12px;
 }
@@ -280,7 +283,7 @@ const styles = `
 }
 .dorv-pr-sidebar a {
   color: var(--dorv-orange);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
 }
 .dorv-pr-sidebar a:hover {
@@ -293,7 +296,7 @@ const styles = `
   border-radius: var(--dorv-radius-sm);
   color: #fff;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
   padding: 6px 10px;
   width: 100%;
   transition: background 0.15s;

@@ -41,6 +41,16 @@
   --dorv-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   --dorv-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.18);
 
+  /* Typography */
+  --dorv-font-sans: "DM Sans", -apple-system, ui-sans-serif, sans-serif;
+  --dorv-font-mono: "Geist Mono", "SF Mono", Menlo, ui-monospace, monospace;
+  --dorv-text-xs: 12px;
+  --dorv-text-sm: 13px;
+  --dorv-text-md: 14px;
+  --dorv-text-lg: 16px;
+  --dorv-lh-tight: 1.5;
+  --dorv-lh-normal: 1.6;
+
   /* Semantic — functional states */
   --dorv-error: #ef4444;
   --dorv-error-subtle: rgba(239, 68, 68, 0.12);
