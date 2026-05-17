@@ -1,12 +1,21 @@
 import { marked } from "marked";
 import type { AuthStore } from "../storage/auth.js";
-import { createDocStore, createStatusStore, createMappingStore } from "../storage/stores.js";
+import {
+  createDocStore,
+  createStatusStore,
+  createMappingStore,
+  createReplyMappingStore
+} from "../storage/stores.js";
 import type { StorageArea } from "../storage/area.js";
 import { createGoogleDoc } from "../gdoc/drive.js";
 import { generateGDocHtml } from "../gdoc/template.js";
-import { postPRComment, createReviewComment } from "../github/comments.js";
+import {
+  postPRComment,
+  createReviewComment,
+  createReviewCommentReply
+} from "../github/comments.js";
 import { fetchReviewComments } from "../github/fetch.js";
-import { pushGDocComment } from "../gdoc/comments.js";
+import { pushGDocComment, pushGDocReply } from "../gdoc/comments.js";
 import { fetchGDocComments } from "../gdoc/fetch.js";
 import { findLineMatch } from "../gdoc/matching.js";
 import { fetchPullRequestFiles, filterMarkdownFiles } from "../github/pr-files.js";
@@ -18,6 +27,7 @@ import type {
   GitHubReviewComment,
   GoogleDocComment,
   PullRequestRef,
+  ReplyMapping,
   SyncAdapter
 } from "./types.js";
 
@@ -25,6 +35,7 @@ export class DirectAdapter implements SyncAdapter {
   private docStore;
   private statusStore;
   private mappingStore;
+  private replyMappingStore;
 
   constructor(
     private authStore: AuthStore,
@@ -33,6 +44,7 @@ export class DirectAdapter implements SyncAdapter {
     this.docStore = createDocStore(storageArea);
     this.statusStore = createStatusStore(storageArea);
     this.mappingStore = createMappingStore(storageArea);
+    this.replyMappingStore = createReplyMappingStore(storageArea);
   }
 
   async getDoc(ref: PullRequestRef): Promise<DocMapping | undefined> {
@@ -226,42 +238,108 @@ export class DirectAdapter implements SyncAdapter {
     const ghToken = await this.authStore.getGitHubToken();
     if (!ghToken) return;
 
+    const gToken = await this.authStore.getGoogleToken(false);
+
     const active = await this.docStore.listActive();
     for (const ref of active) {
       const mapping = await this.docStore.get(ref.repo, ref.prNumber);
-      if (mapping) {
-        try {
-          await this.statusStore.set({
-            ...ref,
-            state: "syncing",
-            updatedAt: new Date().toISOString()
-          });
+      if (!mapping) continue;
 
-          const comments = await fetchReviewComments(ghToken, ref.repo, ref.prNumber);
-          const newComments = comments.filter((c) => !c.inReplyToId);
+      try {
+        await this.statusStore.set({
+          ...ref,
+          state: "syncing",
+          updatedAt: new Date().toISOString()
+        });
 
-          for (const comment of newComments) {
-            if (!(await this.mappingStore.hasByGH(comment.id))) {
-              await this.pushGHCommentToDoc(comment, mapping);
+        const comments = await fetchReviewComments(ghToken, ref.repo, ref.prNumber);
+
+        // GH top-level comments → Doc
+        for (const comment of comments.filter((c) => !c.inReplyToId)) {
+          if (!(await this.mappingStore.hasByGH(comment.id))) {
+            await this.pushGHCommentToDoc(comment, mapping);
+          }
+        }
+
+        if (gToken) {
+          // GH replies → Doc
+          type GHReply = GitHubReviewComment & { inReplyToId: number };
+          const ghReplies = comments.filter((c): c is GHReply => c.inReplyToId != null);
+          for (const reply of ghReplies) {
+            if (await this.replyMappingStore.hasByGH(reply.id)) continue;
+            const parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
+            if (!parentMapping) continue;
+            try {
+              const content = `**@${reply.user}** (reply): ${reply.body} -- [View](${reply.htmlUrl})`;
+              const result = await pushGDocReply(
+                gToken,
+                mapping.docId,
+                parentMapping.docCommentId,
+                content
+              );
+              const replyMapping: ReplyMapping = {
+                repo: mapping.repo,
+                prNumber: mapping.prNumber,
+                ghReplyId: reply.id,
+                docReplyId: result.id,
+                ghParentCommentId: reply.inReplyToId,
+                docParentCommentId: parentMapping.docCommentId,
+                source: "github"
+              };
+              await this.replyMappingStore.upsert(replyMapping);
+            } catch (err) {
+              console.error(`GH reply ${reply.id.toString()} sync failed:`, err);
             }
           }
 
-          mapping.lastSyncedAt = new Date().toISOString();
-          await this.docStore.upsert(mapping);
-          await this.statusStore.set({
-            ...ref,
-            state: "idle",
-            updatedAt: new Date().toISOString()
-          });
-        } catch (err) {
-          console.error(`Sync failed for ${ref.repo}#${ref.prNumber.toString()}:`, err);
-          await this.statusStore.set({
-            ...ref,
-            state: "error",
-            updatedAt: new Date().toISOString(),
-            message: String(err)
-          });
+          // Doc replies → GH
+          const docComments = await fetchGDocComments(gToken, mapping.docId);
+          for (const docComment of docComments) {
+            const parentMapping = await this.mappingStore.getByDoc(docComment.id);
+            if (!parentMapping) continue;
+            for (const reply of docComment.replies ?? []) {
+              if (await this.replyMappingStore.hasByDoc(reply.id)) continue;
+              try {
+                const body = `> From Google Docs -- @${reply.author} -- ${reply.content}`;
+                const result = await createReviewCommentReply(
+                  ghToken,
+                  mapping.repo,
+                  mapping.prNumber,
+                  parentMapping.ghCommentId,
+                  body
+                );
+                const replyMapping: ReplyMapping = {
+                  repo: mapping.repo,
+                  prNumber: mapping.prNumber,
+                  ghReplyId: result.id,
+                  docReplyId: reply.id,
+                  ghParentCommentId: parentMapping.ghCommentId,
+                  docParentCommentId: docComment.id,
+                  source: "gdoc"
+                };
+                await this.replyMappingStore.upsert(replyMapping);
+              } catch (err) {
+                console.error(`Doc reply ${reply.id} push failed:`, err);
+              }
+            }
+          }
         }
+
+        mapping.lastSyncedAt = new Date().toISOString();
+        await this.docStore.upsert(mapping);
+        await this.statusStore.set({
+          ...ref,
+          state: "idle",
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error(`Sync failed for ${ref.repo}#${ref.prNumber.toString()}:`, err);
+        await this.statusStore.set({
+          ...ref,
+          state: "error",
+          updatedAt: new Date().toISOString(),
+          message: String(err)
+        });
       }
     }
   }

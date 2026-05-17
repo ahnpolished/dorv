@@ -29,7 +29,7 @@ describe("DirectAdapter baseline sync", () => {
     (global as any).chrome = {
       runtime: { lastError: null },
       identity: {
-        getAuthToken: vi.fn(),
+        getAuthToken: vi.fn((_opts: any, cb: any) => cb(undefined)),
         removeCachedAuthToken: vi.fn()
       }
     };

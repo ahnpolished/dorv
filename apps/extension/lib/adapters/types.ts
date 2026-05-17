@@ -49,14 +49,21 @@ export interface GitHubReviewComment {
   htmlUrl: string;
 }
 
+export interface GoogleDocReply {
+  id: string;
+  content: string;
+  author: string;
+  createdAt: string;
+}
+
 export interface GoogleDocComment {
   id: string;
   content: string;
   quotedFileContent?: string;
-  inReplyToId?: string;
   createdAt: string;
   updatedAt: string;
   author: string;
+  replies?: GoogleDocReply[];
 }
 
 export interface CreateDocInput extends PullRequestRef {
