@@ -9,10 +9,11 @@ export function groupCommentsByPath(comments: GitHubReviewComment[]): CommentGro
   const groups: Record<string, GitHubReviewComment[]> = {};
 
   for (const comment of comments) {
-    if (!groups[comment.path]) {
-      groups[comment.path] = [];
+    groups[comment.path] ??= [];
+    const group = groups[comment.path];
+    if (group) {
+      group.push(comment);
     }
-    groups[comment.path].push(comment);
   }
 
   return Object.entries(groups)
