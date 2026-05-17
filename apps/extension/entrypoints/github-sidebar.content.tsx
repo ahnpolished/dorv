@@ -26,6 +26,8 @@ const authStore = createAuthStore(storageArea);
 
 const ROOT_ID = "dorv-pr-sidebar-root";
 let currentUi: Awaited<ReturnType<typeof createShadowRootUi>> | null = null;
+// Incremented on every render call; lets stale async renders bail before mounting.
+let renderGeneration = 0;
 
 function GithubSidebar({
   model,
@@ -126,6 +128,8 @@ function buildOnCreate(
 }
 
 async function renderGithubSidebar(ctx: ContentScriptContext) {
+  const generation = ++renderGeneration;
+
   if (currentUi) {
     currentUi.remove();
     currentUi = null;
@@ -154,6 +158,10 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
   const status = ref
     ? await createStatusStore(storageArea).get(mapping?.repo ?? "", ref.prNumber)
     : undefined;
+
+  if (generation !== renderGeneration) {
+    return;
+  }
 
   let mode: PrSidebarMode = "no-doc";
   if (mapping) {
