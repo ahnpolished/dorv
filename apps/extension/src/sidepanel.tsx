@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { createDocStore, createStatusStore } from "../lib/storage/stores.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
@@ -37,22 +37,14 @@ function IconButton({
   href?: string;
   disabled?: boolean;
 }) {
-  const handleMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLAnchorElement>) => {
-      if (!disabled) e.currentTarget.style.background = "var(--dorv-muted-subtle)";
-    },
-    [disabled]
-  );
-  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.currentTarget.style.background = "transparent";
-  }, []);
-
   return (
     <a
       href={disabled ? undefined : href}
       target="_blank"
       rel="noreferrer"
       aria-label={label}
+      className="dorv-icon-btn"
+      aria-disabled={disabled ? "true" : undefined}
       onClick={
         disabled
           ? (e) => {
@@ -60,24 +52,28 @@ function IconButton({
             }
           : undefined
       }
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: 28,
-        height: 28,
-        borderRadius: "var(--dorv-radius-sm)",
-        color: disabled ? "var(--dorv-border-strong)" : "var(--dorv-muted)",
-        textDecoration: "none",
-        cursor: disabled ? "default" : "pointer",
-        transition: "background 120ms ease, color 120ms ease",
-        flexShrink: 0
-      }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
     >
-      <i className={`ti ${icon}`} style={{ fontSize: 16 }} aria-hidden="true" />
+      <i className={`ti ${icon}`} aria-hidden="true" />
     </a>
+  );
+}
+
+function SkeletonRows({ variant = "default" }: { variant?: "default" | "compact" }) {
+  return (
+    <div className={`dorv-skeleton-stack ${variant}`}>
+      <div className="dorv-skeleton skeleton-title" />
+      <div className="dorv-skeleton skeleton-line" />
+      <div className="dorv-skeleton skeleton-short" />
+      {variant === "default" && <div className="dorv-skeleton skeleton-line" />}
+    </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="push-success-icon" viewBox="0 0 20 20" aria-hidden="true">
+      <path className="dorv-check-path" d="M4 10.5 8.1 14 16 6" />
+    </svg>
   );
 }
 
@@ -225,6 +221,7 @@ function SidePanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
   const [pushingId, setPushingId] = useState<string | undefined>(undefined);
+  const [pushedId, setPushedId] = useState<string | undefined>(undefined);
   const [pushingAll, setPushingAll] = useState(false);
   const [syncingNow, setSyncingNow] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -364,6 +361,10 @@ function SidePanel() {
     setPushingId(comment.id);
     try {
       await pushDocComment(comment);
+      setPushedId(comment.id);
+      window.setTimeout(() => {
+        setPushedId(undefined);
+      }, 1500);
       await loadData();
       alert("Comment pushed to GitHub!");
     } catch (err) {
@@ -424,11 +425,7 @@ function SidePanel() {
   if (onboarding === "checking")
     return (
       <div className="dorv-sidepanel">
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 8 }}>
-          <div className="dorv-skeleton" style={{ height: 13, width: "55%" }} />
-          <div className="dorv-skeleton" style={{ height: 13, width: "75%" }} />
-          <div className="dorv-skeleton" style={{ height: 13, width: "40%" }} />
-        </div>
+        <SkeletonRows variant="compact" />
       </div>
     );
 
@@ -447,12 +444,7 @@ function SidePanel() {
   if (loading)
     return (
       <div className="dorv-sidepanel">
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 8 }}>
-          <div className="dorv-skeleton" style={{ height: 20, width: "60%" }} />
-          <div className="dorv-skeleton" style={{ height: 13, width: "80%" }} />
-          <div className="dorv-skeleton" style={{ height: 13, width: "50%" }} />
-          <div className="dorv-skeleton" style={{ height: 13, width: "70%" }} />
-        </div>
+        <SkeletonRows />
       </div>
     );
   if (error) return <div className="dorv-sidepanel error">{error}</div>;
@@ -637,7 +629,12 @@ function SidePanel() {
                       void handlePush(c);
                     }}
                   >
-                    {pushingId === c.id ? "Pushing..." : "Push to GitHub"}
+                    {pushedId === c.id && <CheckIcon />}
+                    {pushedId === c.id
+                      ? "Pushed"
+                      : pushingId === c.id
+                        ? "Pushing..."
+                        : "Push to GitHub"}
                   </button>
                 </div>
               ))

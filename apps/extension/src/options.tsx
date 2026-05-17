@@ -16,6 +16,7 @@ function Options() {
   const [isManagedBackend, setIsManagedBackend] = useState(false);
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
+  const [notice, setNotice] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     async function load() {
@@ -41,9 +42,10 @@ function Options() {
   }, []);
 
   const validateAndSaveGithub = async () => {
+    setNotice(undefined);
     if (!githubPat) {
       await authStore.clearGitHubToken();
-      alert("GitHub PAT cleared.");
+      setNotice("GitHub PAT cleared.");
       return;
     }
 
@@ -60,12 +62,12 @@ function Options() {
       if (resp.ok) {
         await authStore.setGitHubToken(githubPat);
         setGithubPat(`****${githubPat.slice(-4)}`);
-        alert("GitHub PAT validated and saved!");
+        setNotice("GitHub PAT validated and saved.");
       } else {
-        alert(`Validation failed: ${resp.status.toString()} ${resp.statusText}`);
+        setNotice(`Validation failed: ${resp.status.toString()} ${resp.statusText}`);
       }
     } catch (err) {
-      alert(`Validation error: ${String(err)}`);
+      setNotice(`Validation error: ${String(err)}`);
     } finally {
       setValidating(false);
     }
@@ -73,7 +75,7 @@ function Options() {
 
   const saveBackend = () => {
     void authStore.setBackendUrl(backendUrl).then(() => {
-      alert("Backend URL saved!");
+      setNotice("Backend URL saved.");
     });
   };
 
@@ -89,87 +91,104 @@ function Options() {
     }
   };
 
-  if (loading) return <div className="options-container">Loading...</div>;
+  if (loading)
+    return (
+      <div className="options-shell dorv-state-enter">
+        <div className="options-container">
+          <div className="dorv-skeleton options-skeleton-title" />
+          <div className="dorv-skeleton options-skeleton-line" />
+          <div className="dorv-skeleton options-skeleton-card" />
+        </div>
+      </div>
+    );
 
   return (
-    <div className="options-container">
-      <header>
-        <p className="eyebrow">dorv</p>
-        <h1>Extension Settings</h1>
-      </header>
+    <div className="options-shell dorv-state-enter">
+      <div className="options-container">
+        <header className="options-header">
+          <img src="/dorv.svg" alt="" className="options-logo" />
+          <div>
+            <p className="eyebrow">dorv</p>
+            <h1>Extension Settings</h1>
+            <p className="options-subtitle">Sync GitHub review threads with Google Docs.</p>
+          </div>
+        </header>
 
-      <main>
-        <section>
-          <h2>GitHub Authentication</h2>
-          <p className="description">
-            Provide a GitHub PAT that can read PR markdown and write PR comments. Org repos may
-            require an org-owned, approved fine-grained token.
-          </p>
-          <div className="input-group">
-            <input
-              type="password"
-              value={githubPat}
-              placeholder="ghp_..."
-              onChange={(e) => {
-                setGithubPat(e.target.value);
-              }}
-              disabled={validating}
-            />
+        {notice && <p className="save-confirmation dorv-state-enter">{notice}</p>}
+
+        <main>
+          <section>
+            <h2>GitHub Authentication</h2>
+            <p className="description">
+              Provide a GitHub PAT that can read PR markdown and write PR comments. Org repos may
+              require an org-owned, approved fine-grained token.
+            </p>
+            <div className="input-group">
+              <input
+                type="password"
+                value={githubPat}
+                placeholder="ghp_..."
+                onChange={(e) => {
+                  setGithubPat(e.target.value);
+                }}
+                disabled={validating}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  void validateAndSaveGithub();
+                }}
+                disabled={validating}
+              >
+                {validating ? "Validating..." : "Validate & Save"}
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <h2>Google Authentication</h2>
+            <p className="description">
+              Connect your Google account to sync review comments to Google Docs.
+            </p>
             <button
               type="button"
+              className={googleConnected ? "secondary" : "primary"}
               onClick={() => {
-                void validateAndSaveGithub();
-              }}
-              disabled={validating}
-            >
-              {validating ? "Validating..." : "Validate & Save"}
-            </button>
-          </div>
-        </section>
-
-        <section>
-          <h2>Google Authentication</h2>
-          <p className="description">
-            Connect your Google account to sync review comments to Google Docs.
-          </p>
-          <button
-            type="button"
-            className={googleConnected ? "secondary" : "primary"}
-            onClick={() => {
-              toggleGoogle();
-            }}
-          >
-            {googleConnected ? "Sign Out from Google" : "Connect Google Account"}
-          </button>
-        </section>
-
-        <section>
-          <h2>Advanced</h2>
-          <p className="description">Custom backend URL (DirectAdapter is used if empty).</p>
-          <div className="input-group">
-            <input
-              type="text"
-              value={backendUrl}
-              placeholder="https://api.dorv.dev"
-              onChange={(e) => {
-                setBackendUrl(e.target.value);
-              }}
-              disabled={isManagedBackend}
-            />
-            {isManagedBackend && <span className="badge-it">Set by IT</span>}
-          </div>
-          {!isManagedBackend && (
-            <button
-              type="button"
-              onClick={() => {
-                saveBackend();
+                toggleGoogle();
               }}
             >
-              Save Backend URL
+              {googleConnected ? "Sign Out from Google" : "Connect Google Account"}
             </button>
-          )}
-        </section>
-      </main>
+          </section>
+
+          <section>
+            <h2>Advanced</h2>
+            <p className="description">Custom backend URL (DirectAdapter is used if empty).</p>
+            <div className="input-group">
+              <input
+                type="text"
+                value={backendUrl}
+                placeholder="https://api.dorv.dev"
+                onChange={(e) => {
+                  setBackendUrl(e.target.value);
+                }}
+                disabled={isManagedBackend}
+              />
+              {isManagedBackend && <span className="badge-it">Set by IT</span>}
+            </div>
+            {!isManagedBackend && (
+              <button
+                type="button"
+                onClick={() => {
+                  saveBackend();
+                }}
+              >
+                Save Backend URL
+              </button>
+            )}
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
