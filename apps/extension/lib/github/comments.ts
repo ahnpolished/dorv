@@ -28,3 +28,37 @@ export async function postPRComment(
     throw new Error(`GitHub API failed: ${resp.status.toString()} ${await resp.text()}`);
   }
 }
+
+export interface ReviewCommentPayload {
+  body: string;
+  commit_id: string;
+  path: string;
+  line: number;
+  side: "RIGHT";
+}
+
+export async function createReviewComment(
+  token: string,
+  repo: string,
+  prNumber: number,
+  payload: ReviewCommentPayload
+): Promise<{ id: number }> {
+  const [owner, name] = repo.split("/");
+  const url = `https://api.github.com/repos/${owner}/${name}/pulls/${prNumber.toString()}/comments`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!resp.ok) {
+    throw new Error(`GitHub comment failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+
+  return (await resp.json()) as { id: number };
+}
