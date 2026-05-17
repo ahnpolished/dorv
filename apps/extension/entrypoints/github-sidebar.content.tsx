@@ -227,11 +227,35 @@ export default defineContentScript({
 });
 
 const styles = `
+:host {
+  --dorv-orange: #f97316;
+  --dorv-orange-hover: #ea6c0a;
+  --dorv-orange-subtle: rgba(249,115,22,0.12);
+  --dorv-orange-border: rgba(249,115,22,0.35);
+  --dorv-error: #ef4444;
+  --dorv-warning: #f59e0b;
+  --dorv-warning-subtle: rgba(245,158,11,0.12);
+  --dorv-radius-sm: 6px;
+  --gh-bg: #ffffff;
+  --gh-bg-subtle: #f6f8fa;
+  --gh-border: #d0d7de;
+  --gh-text: #1f2328;
+  --gh-muted: #57606a;
+}
+@media (prefers-color-scheme: dark) {
+  :host {
+    --gh-bg: #161b22;
+    --gh-bg-subtle: #21262d;
+    --gh-border: #30363d;
+    --gh-text: #e6edf3;
+    --gh-muted: #8b949e;
+  }
+}
 .dorv-pr-sidebar {
-  background-color: #ffffff;
-  border: 1px solid #d0d7de;
-  border-radius: 6px;
-  color: #1f2328;
+  background-color: var(--gh-bg);
+  border: 1px solid var(--gh-border);
+  border-radius: var(--dorv-radius-sm);
+  color: var(--gh-text);
   font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin-bottom: 12px;
   padding: 12px;
@@ -252,65 +276,53 @@ const styles = `
   padding: 4px 0;
 }
 .dorv-pr-sidebar small {
-  color: #57606a;
+  color: var(--gh-muted);
 }
 .dorv-pr-sidebar a {
-  color: #0969da;
+  color: var(--dorv-orange);
   font-weight: 600;
   text-decoration: none;
 }
+.dorv-pr-sidebar a:hover {
+  color: var(--dorv-orange-hover);
+  text-decoration: underline;
+}
 .dorv-pr-sidebar button {
-  background: #f6f8fa;
-  border: 1px solid #d0d7de;
-  border-radius: 6px;
-  color: #1f2328;
+  background: var(--dorv-orange);
+  border: none;
+  border-radius: var(--dorv-radius-sm);
+  color: #fff;
   cursor: pointer;
   font-weight: 600;
   padding: 6px 10px;
   width: 100%;
+  transition: background 0.15s;
+}
+.dorv-pr-sidebar button:hover:not(:disabled) {
+  background: var(--dorv-orange-hover);
 }
 .dorv-pr-sidebar button:disabled {
-  color: #8c959f;
+  background: var(--gh-bg-subtle);
+  border: 1px solid var(--gh-border);
+  color: var(--gh-muted);
   cursor: default;
 }
 .dorv-needs-setup {
-  color: #57606a;
+  color: var(--gh-muted);
   font-size: 12px;
   margin: 0;
 }
 .dorv-error {
-  color: #cf222e;
+  color: var(--dorv-error);
   font-size: 12px;
   margin: 0 0 8px;
 }
 .dorv-stale {
-  background: #fff8c5;
-  border: 1px solid #d4a72c;
-  border-radius: 6px;
+  background: var(--dorv-warning-subtle);
+  border: 1px solid var(--dorv-warning);
+  border-radius: var(--dorv-radius-sm);
+  color: var(--dorv-warning);
   margin: 0 0 8px;
   padding: 6px 8px;
-}
-@media (prefers-color-scheme: dark) {
-  .dorv-pr-sidebar {
-    background-color: #161b22;
-    border-color: #30363d;
-    color: #e6edf3;
-  }
-  .dorv-pr-sidebar small {
-    color: #8b949e;
-  }
-  .dorv-pr-sidebar a {
-    color: #58a6ff;
-  }
-  .dorv-pr-sidebar button {
-    background: #21262d;
-    border-color: #30363d;
-    color: #e6edf3;
-  }
-  .dorv-stale {
-    background: #2d2a16;
-    border-color: #9e6a03;
-    color: #e3b341;
-  }
 }
 `;
