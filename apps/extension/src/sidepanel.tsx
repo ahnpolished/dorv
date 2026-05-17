@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { createDocStore, createStatusStore } from "../lib/storage/stores.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
@@ -25,6 +25,61 @@ import type {
 } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 import "./sidepanel.css";
+
+function IconButton({
+  icon,
+  label,
+  href,
+  disabled
+}: {
+  icon: string;
+  label: string;
+  href?: string;
+  disabled?: boolean;
+}) {
+  const handleMouseEnter = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!disabled) e.currentTarget.style.background = "var(--dorv-muted-subtle)";
+    },
+    [disabled]
+  );
+  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.currentTarget.style.background = "transparent";
+  }, []);
+
+  return (
+    <a
+      href={disabled ? undefined : href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      onClick={
+        disabled
+          ? (e) => {
+              e.preventDefault();
+            }
+          : undefined
+      }
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 28,
+        height: 28,
+        borderRadius: "var(--dorv-radius-sm)",
+        color: disabled ? "var(--dorv-border-strong)" : "var(--dorv-muted)",
+        textDecoration: "none",
+        cursor: disabled ? "default" : "pointer",
+        transition: "background 120ms ease, color 120ms ease",
+        flexShrink: 0
+      }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <i className={`ti ${icon}`} style={{ fontSize: 16 }} aria-hidden="true" />
+    </a>
+  );
+}
 
 const storageArea = createChromeStorageArea(chrome.storage.local);
 const docStore = createDocStore(storageArea);
@@ -436,26 +491,41 @@ function SidePanel() {
 
   return (
     <main className="dorv-sidepanel">
-      <header>
-        <p className="dorv-eyebrow">dorv</p>
-        <h1>Review Sync</h1>
-        <div className="status-bar">
-          <span className={`status-dot ${status?.state ?? "idle"}`} />
-          <span>
-            {status?.state === "syncing"
-              ? "Syncing..."
-              : `Last synced: ${new Date(mapping.lastSyncedAt).toLocaleTimeString()}`}
-          </span>
+      <header className="dorv-header">
+        <div className="dorv-header-title">
+          <p className="dorv-eyebrow">dorv</p>
+          <h1>Review Sync</h1>
+        </div>
+        <div className="dorv-header-actions">
+          <IconButton
+            icon="ti-brand-github"
+            label="Open GitHub PR"
+            href={`https://github.com/${mapping.repo}/pull/${mapping.prNumber.toString()}`}
+          />
+          <IconButton
+            icon="ti-file-description"
+            label="Open Google Doc"
+            href={mapping.docUrl}
+            disabled={!mapping.docUrl}
+          />
           <button
             type="button"
             className="sync-now-btn"
             disabled={syncingNow}
             onClick={() => void handleManualSync()}
           >
-            {syncingNow ? "Syncing..." : "Sync now"}
+            {syncingNow ? "Syncing…" : "Sync now"}
           </button>
         </div>
       </header>
+      <div className="status-bar">
+        <span className={`status-dot ${status?.state ?? "idle"}`} />
+        <span>
+          {status?.state === "syncing"
+            ? "Syncing..."
+            : `Last synced: ${new Date(mapping.lastSyncedAt).toLocaleTimeString()}`}
+        </span>
+      </div>
 
       <div className="tabs">
         <button

@@ -12,6 +12,31 @@ body {
   padding: 16px;
 }
 
+.dorv-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dorv-header-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.dorv-header-title h1 {
+  margin: 0;
+}
+
+.dorv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 18px;
+}
+
 .dorv-eyebrow {
   color: var(--dorv-orange);
   font-size: 11px;
