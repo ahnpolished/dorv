@@ -6,6 +6,7 @@ import { createStatusStore } from "../lib/storage/stores.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
+const SYNC_POLL_MINUTES = 1;
 const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
 
 interface ChromeMessage {
@@ -20,7 +21,7 @@ export default defineBackground(() => {
   const statusStore = createStatusStore(storageArea);
 
   const startPolling = () => {
-    void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: 2 });
+    void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: SYNC_POLL_MINUTES });
   };
 
   const handlePoll = async () => {

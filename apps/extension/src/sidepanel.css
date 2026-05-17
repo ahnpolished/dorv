@@ -58,6 +58,23 @@ h1 {
   background: var(--error-color);
 }
 
+.sync-now-btn {
+  margin-left: auto;
+  padding: 4px 8px;
+  background: #f8f9fa;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sync-now-btn:disabled {
+  color: var(--secondary-text);
+  cursor: not-allowed;
+}
+
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--border-color);
@@ -191,6 +208,10 @@ h1 {
 .push-btn:disabled {
   background: #dadce0;
   cursor: not-allowed;
+}
+
+.comment-list > .push-btn {
+  margin-bottom: 12px;
 }
 
 h3 {

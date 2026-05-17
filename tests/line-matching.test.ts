@@ -32,4 +32,15 @@ describe("findLineMatch", () => {
     expect(findLineMatch("", files)).toHaveLength(0);
     expect(findLineMatch("   ", files)).toHaveLength(0);
   });
+
+  it("matches multi-line GDoc quotes with normalized whitespace", () => {
+    const result = findLineMatch("first selected line\nsecond selected line", [
+      {
+        filename: "docs/rfc.md",
+        content: "intro\nfirst selected line   second selected line\noutro"
+      }
+    ]);
+
+    expect(result).toEqual([{ path: "docs/rfc.md", line: 2 }]);
+  });
 });

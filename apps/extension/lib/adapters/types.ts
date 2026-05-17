@@ -36,6 +36,11 @@ export interface ReplyMapping extends PullRequestRef {
   source: SyncSource;
 }
 
+export interface IdentityMapping {
+  googleAuthor: string;
+  githubLogin: string;
+}
+
 export interface GitHubReviewComment {
   id: number;
   body: string;

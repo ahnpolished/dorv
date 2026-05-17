@@ -13,7 +13,7 @@ import {
   filterMarkdownFiles
 } from "../lib/github/pr-files.js";
 import { fetchPullRequestMeta } from "../lib/github/fetch.js";
-import { createDocViaBackground } from "../lib/adapters/messages.js";
+import { createDocViaBackground, syncNowViaBackground } from "../lib/adapters/messages.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
@@ -170,6 +170,8 @@ function SidePanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
   const [pushingId, setPushingId] = useState<string | undefined>(undefined);
+  const [pushingAll, setPushingAll] = useState(false);
+  const [syncingNow, setSyncingNow] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>(undefined);
 
@@ -306,15 +308,61 @@ function SidePanel() {
     if (!mapping) return;
     setPushingId(comment.id);
     try {
-      const backendUrl = await authStore.getBackendUrl();
-      const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
-      await adapter.pushDocCommentToGH(comment, mapping);
+      await pushDocComment(comment);
       await loadData();
       alert("Comment pushed to GitHub!");
     } catch (err) {
       alert(`Push failed: ${String(err)}`);
     } finally {
       setPushingId(undefined);
+    }
+  };
+
+  const pushDocComment = async (comment: GoogleDocComment) => {
+    if (!mapping) return;
+    const backendUrl = await authStore.getBackendUrl();
+    const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
+    await adapter.pushDocCommentToGH(comment, mapping);
+  };
+
+  const handlePushAll = async () => {
+    const pushable = unmappedGdocComments.filter((comment) => comment.quotedFileContent);
+    if (pushable.length === 0) return;
+
+    setPushingAll(true);
+    let pushed = 0;
+    const failures: string[] = [];
+    try {
+      for (const comment of pushable) {
+        setPushingId(comment.id);
+        try {
+          await pushDocComment(comment);
+          pushed += 1;
+        } catch (err) {
+          failures.push(`${comment.author}: ${String(err)}`);
+        }
+      }
+      await loadData();
+      if (failures.length > 0) {
+        alert(`Pushed ${pushed.toString()} comments. ${failures.length.toString()} failed.`);
+      } else {
+        alert(`Pushed ${pushed.toString()} comments to GitHub.`);
+      }
+    } finally {
+      setPushingId(undefined);
+      setPushingAll(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setSyncingNow(true);
+    try {
+      await syncNowViaBackground();
+      await loadData();
+    } catch (err) {
+      alert(`Sync failed: ${String(err)}`);
+    } finally {
+      setSyncingNow(false);
     }
   };
 
@@ -398,6 +446,14 @@ function SidePanel() {
               ? "Syncing..."
               : `Last synced: ${new Date(mapping.lastSyncedAt).toLocaleTimeString()}`}
           </span>
+          <button
+            type="button"
+            className="sync-now-btn"
+            disabled={syncingNow}
+            onClick={() => void handleManualSync()}
+          >
+            {syncingNow ? "Syncing..." : "Sync now"}
+          </button>
         </div>
       </header>
 
@@ -460,6 +516,16 @@ function SidePanel() {
         {activeTab === "gdoc" && (
           <div className="comment-list">
             <h3>New GDoc Comments ({unmappedGdocComments.length.toString()})</h3>
+            {unmappedGdocComments.some((c) => c.quotedFileContent) && (
+              <button
+                type="button"
+                className="push-btn"
+                disabled={pushingAll}
+                onClick={() => void handlePushAll()}
+              >
+                {pushingAll ? "Pushing..." : "Push all"}
+              </button>
+            )}
             {unmappedGdocComments.length === 0 ? (
               <p className="empty-msg">No new comments in GDoc.</p>
             ) : (
