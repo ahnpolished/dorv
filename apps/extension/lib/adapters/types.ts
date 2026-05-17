@@ -56,6 +56,7 @@ export interface GoogleDocComment {
   inReplyToId?: string;
   createdAt: string;
   updatedAt: string;
+  author: string;
 }
 
 export interface CreateDocInput extends PullRequestRef {
