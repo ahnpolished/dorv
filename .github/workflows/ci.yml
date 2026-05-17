@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   checks:
@@ -30,3 +31,47 @@ jobs:
 
       - name: Run checks
         run: pnpm run ci
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Run on pushes to main or manual dispatch; skip for PRs to keep review cycles fast
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: checks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers + system deps
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Install Xvfb (virtual display for headful extension tests)
+        run: sudo apt-get install -y xvfb
+
+      - name: Build extension
+        run: GOOGLE_CLIENT_ID=e2e-test pnpm e2e:build
+
+      - name: Run E2E tests
+        run: xvfb-run --auto-servernum pnpm e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
