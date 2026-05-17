@@ -7,14 +7,23 @@ import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { parseDocId } from "../lib/gdoc/urls.js";
 import { groupCommentsByPath } from "../lib/gdoc/grouping.js";
 import { buildOnboardingStep } from "../lib/onboarding/model.js";
+import {
+  parseGitHubPullRequestUrl,
+  fetchPullRequestFiles,
+  filterMarkdownFiles
+} from "../lib/github/pr-files.js";
+import { fetchPullRequestMeta } from "../lib/github/fetch.js";
+import { createDocViaBackground } from "../lib/adapters/messages.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
   GitHubReviewComment,
   GoogleDocComment,
   SyncStatus,
-  CommentMapping
+  CommentMapping,
+  MarkdownFileRef
 } from "../lib/adapters/types.js";
+import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 import "./sidepanel.css";
 
 const storageArea = createChromeStorageArea(chrome.storage.local);
@@ -22,6 +31,7 @@ const docStore = createDocStore(storageArea);
 const statusStore = createStatusStore(storageArea);
 const authStore = createAuthStore(storageArea);
 
+type TabKind = "loading" | "gdoc" | "github-pr" | "neutral";
 type TabType = "github" | "gdoc" | "info";
 type OnboardingView = "checking" | "github" | "google" | "done" | "complete";
 
@@ -147,6 +157,9 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
 
 function SidePanel() {
   const [onboarding, setOnboarding] = useState<OnboardingView>("checking");
+  const [tabKind, setTabKind] = useState<TabKind>("loading");
+  const [prRef, setPrRef] = useState<GitHubPullRequestRef | undefined>(undefined);
+  const [prFiles, setPrFiles] = useState<MarkdownFileRef[]>([]);
   const [mapping, setMapping] = useState<DocMapping | undefined>(undefined);
   const [ghComments, setGhComments] = useState<GitHubReviewComment[]>([]);
   const [gdocComments, setGdocComments] = useState<GoogleDocComment[]>([]);
@@ -156,6 +169,8 @@ function SidePanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
   const [pushingId, setPushingId] = useState<string | undefined>(undefined);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -173,46 +188,73 @@ function SidePanel() {
     void checkAuth();
   }, []);
 
+  const loadSyncData = async (m: DocMapping) => {
+    const backendUrl = await authStore.getBackendUrl();
+    const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
+    const [gh, gd, cm, s] = await Promise.all([
+      adapter.getGHComments(m),
+      adapter.getDocComments(m),
+      adapter.getCommentMappings(m),
+      statusStore.get(m.repo, m.prNumber)
+    ]);
+    setGhComments(gh);
+    setGdocComments(gd);
+    setCommentMappings(cm);
+    setStatus(s);
+  };
+
   const loadData = async () => {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const activeTab = tabs[0];
-      if (!activeTab?.url) {
+      const tab = tabs[0];
+      if (!tab?.url) {
+        setTabKind("neutral");
         setLoading(false);
         return;
       }
 
-      const docId = parseDocId(activeTab.url);
-      if (!docId) {
+      const docId = parseDocId(tab.url);
+      if (docId) {
+        setTabKind("gdoc");
+        const m = await docStore.getByDocId(docId);
+        if (m) {
+          setMapping(m);
+          await loadSyncData(m);
+        }
         setLoading(false);
         return;
       }
 
-      const m = await docStore.getByDocId(docId);
-      if (!m) {
+      const ref = parseGitHubPullRequestUrl(tab.url);
+      if (ref) {
+        setTabKind("github-pr");
+        setPrRef(ref);
+        const pat = await authStore.getGitHubToken();
+        const adapter = resolveAdapter({ authStore, storageArea });
+        const m = await adapter.getDoc({
+          repo: `${ref.owner}/${ref.repo}`,
+          prNumber: ref.prNumber
+        });
+        if (m) {
+          setMapping(m);
+          await loadSyncData(m);
+        } else {
+          const files = filterMarkdownFiles(
+            await fetchPullRequestFiles(ref, {
+              fetch: fetch.bind(window),
+              ...(pat ? { token: pat } : {})
+            })
+          );
+          setPrFiles(files);
+        }
         setLoading(false);
         return;
       }
 
-      setMapping(m);
-
-      const backendUrl = await authStore.getBackendUrl();
-      const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
-
-      const [gh, gd, cm, s] = await Promise.all([
-        adapter.getGHComments(m),
-        adapter.getDocComments(m),
-        adapter.getCommentMappings(m),
-        statusStore.get(m.repo, m.prNumber)
-      ]);
-
-      setGhComments(gh);
-      setGdocComments(gd);
-      setCommentMappings(cm);
-      setStatus(s);
+      setTabKind("neutral");
+      setLoading(false);
     } catch (err) {
       setError(String(err));
-    } finally {
       setLoading(false);
     }
   };
@@ -222,6 +264,36 @@ function SidePanel() {
       void loadData();
     }
   }, [onboarding]);
+
+  const handleCreateDoc = async () => {
+    if (!prRef) return;
+    setCreating(true);
+    setCreateError(undefined);
+    try {
+      const pat = await authStore.getGitHubToken();
+      if (!pat) throw new Error("GitHub token not set.");
+      const meta = await fetchPullRequestMeta(prRef, {
+        fetch: fetch.bind(window),
+        token: pat
+      });
+      const result = await createDocViaBackground({
+        repo: `${prRef.owner}/${prRef.repo}`,
+        prNumber: prRef.prNumber,
+        title: meta.title,
+        author: meta.author,
+        branch: meta.branch,
+        headSha: meta.headSha,
+        prUrl: meta.prUrl,
+        files: prFiles
+      });
+      setMapping(result.mapping);
+      await loadSyncData(result.mapping);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const groupedGhComments = useMemo(() => groupCommentsByPath(ghComments), [ghComments]);
 
@@ -262,12 +334,53 @@ function SidePanel() {
   if (loading) return <div className="dorv-sidepanel">Loading...</div>;
   if (error) return <div className="dorv-sidepanel error">{error}</div>;
 
+  if (tabKind === "neutral") {
+    return (
+      <div className="dorv-sidepanel">
+        <p className="dorv-eyebrow">dorv</p>
+        <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
+      </div>
+    );
+  }
+
+  if (tabKind === "github-pr" && !mapping) {
+    return (
+      <div className="dorv-sidepanel">
+        <p className="dorv-eyebrow">dorv</p>
+        {prFiles.length === 0 ? (
+          <p className="neutral-msg">No markdown files found in this PR.</p>
+        ) : (
+          <>
+            <h1>Create Review Doc</h1>
+            <ul className="file-list">
+              {prFiles.map((f) => (
+                <li key={f.filename} className="file-list-item">
+                  {f.filename}
+                </li>
+              ))}
+            </ul>
+            {createError && <p className="onboarding-error">{createError}</p>}
+            <button
+              type="button"
+              className="onboarding-btn"
+              disabled={creating}
+              onClick={() => void handleCreateDoc()}
+            >
+              {creating
+                ? "Creating..."
+                : `Create Google Doc (${prFiles.length.toString()} ${prFiles.length === 1 ? "file" : "files"})`}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (!mapping) {
     return (
       <div className="dorv-sidepanel">
         <p className="dorv-eyebrow">dorv</p>
-        <h1>Not Linked</h1>
-        <p>This Google Doc is not linked to a GitHub PR yet.</p>
+        <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
       </div>
     );
   }
