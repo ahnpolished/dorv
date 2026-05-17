@@ -10,6 +10,10 @@ import {
 } from "../lib/github/pr-files.js";
 import { buildPrSidebarModel } from "../lib/github/pr-sidebar.js";
 import type { PrSidebarModel } from "../lib/github/pr-sidebar.js";
+import { createAuthStore } from "../lib/storage/auth.js";
+import { createChromeStorageArea } from "../lib/storage/area.js";
+
+const authStore = createAuthStore(createChromeStorageArea(chrome.storage.local));
 
 const ROOT_ID = "dorv-pr-sidebar-root";
 
@@ -26,6 +30,7 @@ function GithubSidebar({ model }: { model: PrSidebarModel }) {
       <header>
         <strong>{model.title}</strong>
       </header>
+      {model.kind === "needs-setup" && <p className="dorv-needs-setup">{model.message}</p>}
       {model.kind === "loading" && <p>{model.message}</p>}
       {model.kind === "error" && <p className="dorv-error">{model.message}</p>}
       {model.kind === "no-doc" && (
@@ -74,11 +79,19 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
     "#partial-discussion-sidebar, .Layout-sidebar"
   );
 
+  const pat = await authStore.getGitHubToken();
+  const hasCredentials = !!pat;
+
   const files =
     ref === undefined
       ? []
-      : filterMarkdownFiles(await fetchPullRequestFiles(ref, { fetch: fetch.bind(window) }));
-  const model = buildPrSidebarModel({ files, mode: "no-doc" });
+      : filterMarkdownFiles(
+          await fetchPullRequestFiles(ref, {
+            fetch: fetch.bind(window),
+            ...(pat ? { token: pat } : {})
+          })
+        );
+  const model = buildPrSidebarModel({ files, mode: "no-doc", hasCredentials });
 
   if (model.kind === "hidden") {
     return;
@@ -153,6 +166,11 @@ const styles = `
     cursor: pointer;
     font-weight: 600;
     padding: 6px 10px;
+  }
+  .dorv-needs-setup {
+    color: #57606a;
+    font-size: 12px;
+    margin: 0;
   }
   .dorv-error {
     color: #cf222e;

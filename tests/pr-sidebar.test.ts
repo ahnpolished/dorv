@@ -31,6 +31,44 @@ function build(input: Partial<PrSidebarInput>) {
   });
 }
 
+describe("HUM-1212 needs-setup state", () => {
+  it("returns needs-setup when hasCredentials is false and files exist", () => {
+    expect(build({ hasCredentials: false })).toEqual({
+      kind: "needs-setup",
+      title: "dorv",
+      message: "Set up dorv to create and sync review docs."
+    });
+  });
+
+  it("returns needs-setup even with a linked doc when credentials missing", () => {
+    expect(
+      build({
+        hasCredentials: false,
+        mode: "linked",
+        doc: {
+          repo: "ahnpolished/dorv",
+          prNumber: 42,
+          docId: "doc-1",
+          docUrl: "https://docs.google.com/document/d/doc-1",
+          createdAt: "2026-05-16T15:00:00Z",
+          lastSyncedAt: "2026-05-16T15:29:00Z",
+          headSha: "abcdef123456",
+          latestSha: "abcdef123456",
+          isStale: false
+        }
+      })
+    ).toEqual({
+      kind: "needs-setup",
+      title: "dorv",
+      message: "Set up dorv to create and sync review docs."
+    });
+  });
+
+  it("hides when no files and no credentials", () => {
+    expect(build({ hasCredentials: false, files: [] })).toEqual({ kind: "hidden" });
+  });
+});
+
 describe("HUM-1200 PR sidebar model", () => {
   it("hides when there are no markdown files", () => {
     expect(build({ files: [] })).toEqual({ kind: "hidden" });

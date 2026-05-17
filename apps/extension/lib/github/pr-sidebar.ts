@@ -8,10 +8,12 @@ export interface PrSidebarInput {
   doc?: DocMapping;
   status?: SyncStatus;
   error?: string;
+  hasCredentials?: boolean;
 }
 
 export type PrSidebarModel =
   | { kind: "hidden" }
+  | { kind: "needs-setup"; title: string; message: string }
   | { kind: "loading"; title: string; message: string }
   | {
       kind: "no-doc";
@@ -48,6 +50,14 @@ function shortSha(sha: string): string {
 export function buildPrSidebarModel(input: PrSidebarInput): PrSidebarModel {
   if (input.files.length === 0) {
     return { kind: "hidden" };
+  }
+
+  if (input.hasCredentials === false) {
+    return {
+      kind: "needs-setup",
+      title: "dorv",
+      message: "Set up dorv to create and sync review docs."
+    };
   }
 
   if (input.mode === "loading") {
