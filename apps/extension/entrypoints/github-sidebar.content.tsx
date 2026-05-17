@@ -144,11 +144,11 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
     ref === undefined
       ? []
       : filterMarkdownFiles(
-        await fetchPullRequestFiles(ref, {
-          fetch: fetch.bind(window),
-          ...(pat ? { token: pat } : {})
-        })
-      );
+          await fetchPullRequestFiles(ref, {
+            fetch: fetch.bind(window),
+            ...(pat ? { token: pat } : {})
+          })
+        );
 
   const adapter = resolveAdapter({ authStore, storageArea });
   const mapping = ref ? await adapter.getDoc(ref) : undefined;
