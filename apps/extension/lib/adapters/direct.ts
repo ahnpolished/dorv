@@ -7,7 +7,7 @@ import {
   createReplyMappingStore
 } from "../storage/stores.js";
 import type { StorageArea } from "../storage/area.js";
-import { createGoogleDoc } from "../gdoc/drive.js";
+import { createGoogleDoc, grantAnyoneCommentAccess } from "../gdoc/drive.js";
 import { generateGDocHtml } from "../gdoc/template.js";
 import {
   postPRComment,
@@ -90,6 +90,7 @@ export class DirectAdapter implements SyncAdapter {
     // 3. Create Google Doc
     const docName = `PR #${input.prNumber.toString()} - ${input.title}`;
     const driveFile = await createGoogleDoc(gToken, docName, fullHtml);
+    await grantAnyoneCommentAccess(gToken, driveFile.id);
 
     // 4. Post bot comment on PR
     const botCommentBody = `🤖 **dorv** has created a linked Google Doc for review:\n\n[${docName}](${driveFile.webViewLink})`;

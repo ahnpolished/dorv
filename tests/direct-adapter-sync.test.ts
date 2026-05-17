@@ -115,4 +115,71 @@ describe("DirectAdapter baseline sync", () => {
     expect(m).toBeDefined();
     expect(m.docCommentId).toBe("g-comm-1");
   });
+
+  it("creates review docs with anyone-with-link commenter access", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      calls.push({ url: urlStr, init });
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# RFC") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "doc-1",
+              webViewLink: "https://docs.google.com/document/d/doc-1/edit"
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/doc-1/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments")) {
+        return { ok: true, json: () => Promise.resolve({ id: 100 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 123,
+      title: "Review me",
+      author: "alice",
+      branch: "feature/docs",
+      headSha: "sha1",
+      prUrl: "https://github.com/org/repo/pull/123",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    const permissionCall = calls.find((call) =>
+      call.url.includes("/drive/v3/files/doc-1/permissions")
+    );
+
+    expect(permissionCall).toBeDefined();
+    expect(permissionCall?.init?.method).toBe("POST");
+    expect(permissionCall?.init?.headers).toEqual({
+      Authorization: "Bearer mock-g-token",
+      "Content-Type": "application/json"
+    });
+    expect(JSON.parse(String(permissionCall?.init?.body))).toEqual({
+      type: "anyone",
+      role: "commenter",
+      allowFileDiscovery: false
+    });
+  });
 });

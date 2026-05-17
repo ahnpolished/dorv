@@ -39,3 +39,25 @@ export async function createGoogleDoc(
 
   return (await resp.json()) as { id: string; webViewLink: string };
 }
+
+export async function grantAnyoneCommentAccess(token: string, fileId: string): Promise<void> {
+  const resp = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?fields=id`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        type: "anyone",
+        role: "commenter",
+        allowFileDiscovery: false
+      })
+    }
+  );
+
+  if (!resp.ok) {
+    throw new Error(`Drive permission failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+}
