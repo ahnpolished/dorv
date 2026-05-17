@@ -74,12 +74,22 @@ claims:
     completed_at: "2026-05-16T17:35:00Z"
   HUM-1201:
     agent: other:gemini-cli
-    status: in_progress
+    status: done
     claimed_at: "2026-05-16T17:40:00Z"
     depends_on: [HUM-1197]
     branch: feature/hum-1201
     worktree: .worktrees/feature-hum-1201
-
+    pr: https://github.com/ahnpolished/dorv/pull/11
+    completed_at: "2026-05-16T17:55:00Z"
+  HUM-1198:
+    agent: other:gemini-cli
+    status: done
+    claimed_at: "2026-05-16T18:00:00Z"
+    depends_on: [HUM-1201]
+    branch: feature/hum-1198
+    worktree: .worktrees/feature-hum-1198
+    pr: https://github.com/ahnpolished/dorv/pull/13
+    completed_at: "2026-05-16T18:35:00Z"
   HUM-1195:
     agent: codex
     status: done
@@ -107,4 +117,23 @@ claims:
     branch: feature/hum-1206
     worktree: .worktrees/feature-hum-1206
     pr: https://github.com/ahnpolished/dorv/pull/9
+  HUM-1203:
+    agent: claude-code
+    status: done
+    claimed_at: "2026-05-17T00:24:39Z"
+    completed_at: "2026-05-17T00:30:00Z"
+    depends_on: [HUM-1194, HUM-1197]
+    branch: feature/hum-1203
+    worktree: .worktrees/feature-hum-1203
+    pr: https://github.com/ahnpolished/dorv/pull/12
+  HUM-1199:
+    agent: claude-code
+    status: done
+    claimed_at: "2026-05-17T00:40:28Z"
+    completed_at: "2026-05-17T00:52:47Z"
+    depends_on: [HUM-1197, HUM-1198]
+    branch: feature/hum-1199
+    worktree: .worktrees/feature-hum-1199
+    pr: https://github.com/ahnpolished/dorv/pull/14
+
 wait_queue: {}
