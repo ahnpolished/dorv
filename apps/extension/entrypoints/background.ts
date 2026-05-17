@@ -11,7 +11,7 @@ const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
 interface ChromeMessage {
   type: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any;
+  payload?: any;
 }
 
 export default defineBackground(() => {
@@ -53,26 +53,39 @@ export default defineBackground(() => {
     }
   });
 
-  chrome.runtime.onMessage.addListener((message: ChromeMessage, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: ChromeMessage, sender, sendResponse) => {
     const run = async () => {
       try {
-        const backendUrl = await authStore.getBackendUrl();
-        const adapter = resolveAdapter({
-          backendUrl,
-          authStore,
-          storageArea
-        });
-
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const payload = message.payload;
 
         switch (message.type) {
+          case "OPEN_SIDE_PANEL": {
+            if (sender.tab?.id === undefined) {
+              throw new Error("Cannot open side panel without a sender tab.");
+            }
+            await chrome.sidePanel.open({ tabId: sender.tab.id });
+            sendResponse({ success: true });
+            break;
+          }
           case "CREATE_DOC": {
+            const backendUrl = await authStore.getBackendUrl();
+            const adapter = resolveAdapter({
+              backendUrl,
+              authStore,
+              storageArea
+            });
             const result = await adapter.createDoc(payload as CreateDocInput);
             sendResponse({ success: true, payload: result });
             break;
           }
           case "SYNC_NOW": {
+            const backendUrl = await authStore.getBackendUrl();
+            const adapter = resolveAdapter({
+              backendUrl,
+              authStore,
+              storageArea
+            });
             await adapter.syncAll();
             sendResponse({ success: true });
             break;

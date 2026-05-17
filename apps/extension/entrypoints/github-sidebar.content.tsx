@@ -17,7 +17,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createStatusStore } from "../lib/storage/stores.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
-import { createDocViaBackground } from "../lib/adapters/messages.js";
+import { createDocViaBackground, openSidePanelViaBackground } from "../lib/adapters/messages.js";
 import type { MarkdownFileRef } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 
@@ -31,10 +31,12 @@ let renderGeneration = 0;
 
 function GithubSidebar({
   model,
-  onCreate
+  onCreate,
+  onSetup
 }: {
   model: PrSidebarModel;
   onCreate?: () => Promise<void>;
+  onSetup?: () => Promise<void>;
 }) {
   const [createError, setCreateError] = useState<string | undefined>();
   const [isCreating, setIsCreating] = useState(false);
@@ -53,13 +55,28 @@ function GithubSidebar({
     });
   };
 
+  const handleSetup = () => {
+    setCreateError(undefined);
+    onSetup?.().catch((err: unknown) => {
+      setCreateError(String(err));
+    });
+  };
+
   return (
     <aside className="dorv-pr-sidebar" data-dorv-surface="github-pr-sidebar">
       <style>{styles}</style>
       <header>
         <strong>{model.title}</strong>
       </header>
-      {model.kind === "needs-setup" && <p className="dorv-needs-setup">{model.message}</p>}
+      {model.kind === "needs-setup" && (
+        <>
+          <p className="dorv-needs-setup">{model.message}</p>
+          {createError && <p className="dorv-error">{createError}</p>}
+          <button type="button" onClick={handleSetup}>
+            {model.setupActionLabel}
+          </button>
+        </>
+      )}
       {model.kind === "loading" && <p>{model.message}</p>}
       {model.kind === "error" && <p className="dorv-error">{model.message}</p>}
       {model.kind === "no-doc" && (
@@ -186,7 +203,10 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
       const root = document.createElement("div");
       root.id = ROOT_ID;
       container.append(root);
-      const props = onCreate !== undefined ? { model, onCreate } : { model };
+      const props =
+        onCreate !== undefined
+          ? { model, onCreate, onSetup: openSidePanelViaBackground }
+          : { model, onSetup: openSidePanelViaBackground };
       createRoot(root).render(<GithubSidebar {...props} />);
     }
   });

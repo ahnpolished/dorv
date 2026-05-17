@@ -36,7 +36,8 @@ describe("HUM-1212 needs-setup state", () => {
     expect(build({ hasCredentials: false })).toEqual({
       kind: "needs-setup",
       title: "dorv",
-      message: "Set up dorv to create and sync review docs."
+      message: "Set up dorv to create and sync review docs.",
+      setupActionLabel: "Set up dorv"
     });
   });
 
@@ -60,7 +61,8 @@ describe("HUM-1212 needs-setup state", () => {
     ).toEqual({
       kind: "needs-setup",
       title: "dorv",
-      message: "Set up dorv to create and sync review docs."
+      message: "Set up dorv to create and sync review docs.",
+      setupActionLabel: "Set up dorv"
     });
   });
 
