@@ -17,12 +17,12 @@ export async function fetchGDocComments(
     throw new Error(`Drive fetch failed: ${resp.status.toString()} ${await resp.text()}`);
   }
 
-  const data = (await resp.json()) as { comments: any[] };
-  return (data.comments || []).map((c: any) => ({
+  const data = (await resp.json()) as { comments: any[] | undefined };
+  return (data.comments ?? []).map((c: any) => ({
     id: c.id,
     content: c.content,
     quotedFileContent: c.quotedFileContent?.value,
-    author: c.author?.displayName || "Unknown",
+    author: c.author?.displayName ?? "Unknown",
     createdAt: c.createdTime,
     updatedAt: c.createdTime
   }));

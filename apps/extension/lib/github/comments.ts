@@ -43,7 +43,14 @@ export async function createReviewComment(
   prNumber: number,
   payload: ReviewCommentPayload
 ): Promise<{ id: number }> {
-  const [owner, name] = repo.split("/");
+  const parts = repo.split("/");
+  const owner = parts[0];
+  const name = parts[1];
+
+  if (!owner || !name) {
+    throw new Error(`Invalid repo format: ${repo}`);
+  }
+
   const url = `https://api.github.com/repos/${owner}/${name}/pulls/${prNumber.toString()}/comments`;
 
   const resp = await fetch(url, {

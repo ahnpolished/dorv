@@ -4,9 +4,12 @@ import { createDocStore, createStatusStore, createMappingStore } from "../storag
 import type { StorageArea } from "../storage/area.js";
 import { createGoogleDoc } from "../gdoc/drive.js";
 import { generateGDocHtml } from "../gdoc/template.js";
-import { postPRComment } from "../github/comments.js";
+import { postPRComment, createReviewComment } from "../github/comments.js";
 import { fetchReviewComments } from "../github/fetch.js";
 import { pushGDocComment } from "../gdoc/comments.js";
+import { fetchGDocComments } from "../gdoc/fetch.js";
+import { findLineMatch } from "../gdoc/matching.js";
+import { fetchPullRequestFiles, filterMarkdownFiles } from "../github/pr-files.js";
 import type {
   CommentMapping,
   CreateDocInput,
@@ -106,9 +109,18 @@ export class DirectAdapter implements SyncAdapter {
     return fetchReviewComments(ghToken, ref.repo, ref.prNumber);
   }
 
-  getDocComments(): Promise<GoogleDocComment[]> {
-    // Implementing this in HUM-1198
-    return Promise.resolve([]);
+  async getDocComments(ref: PullRequestRef): Promise<GoogleDocComment[]> {
+    const gToken = await this.authStore.getGoogleToken(false);
+    if (!gToken) {
+      throw new Error("Google account not connected.");
+    }
+
+    const mapping = await this.getDoc(ref);
+    if (!mapping) {
+      throw new Error("PR not linked to a Google Doc.");
+    }
+
+    return fetchGDocComments(gToken, mapping.docId);
   }
 
   async getCommentMappings(ref: PullRequestRef): Promise<CommentMapping[]> {
@@ -136,8 +148,72 @@ export class DirectAdapter implements SyncAdapter {
     return commentMapping;
   }
 
-  pushDocCommentToGH(): Promise<CommentMapping> {
-    return Promise.reject(new Error("DirectAdapter.pushDocCommentToGH is implemented in HUM-1198"));
+  async pushDocCommentToGH(comment: GoogleDocComment, mapping: DocMapping): Promise<CommentMapping> {
+    const ghToken = await this.authStore.getGitHubToken();
+    if (!ghToken) {
+      throw new Error("GitHub token missing during push");
+    }
+
+    if (!comment.quotedFileContent) {
+      throw new Error("Cannot push comment without highlighted text (no line match possible)");
+    }
+
+    // 1. Fetch raw PR files to match lines
+    const parts = mapping.repo.split("/");
+    const owner = parts[0];
+    const name = parts[1];
+    if (!owner || !name) {
+      throw new Error(`Invalid repo format: ${mapping.repo}`);
+    }
+
+    const prFiles = await fetchPullRequestFiles(
+      { owner, repo: name, prNumber: mapping.prNumber },
+      {
+        fetch: fetch.bind(window),
+        token: ghToken
+      }
+    );
+    const mdFiles = filterMarkdownFiles(prFiles);
+
+    // 2. Fetch contents and match
+    const filesWithContent = await Promise.all(
+      mdFiles.map(async (f) => {
+        const resp = await fetch(f.rawUrl, { headers: { Authorization: `token ${ghToken}` } });
+        return { filename: f.filename, content: await resp.text() };
+      })
+    );
+
+    const matches = findLineMatch(comment.quotedFileContent, filesWithContent);
+    if (matches.length === 0) {
+      throw new Error("Could not find matching text in any PR files.");
+    }
+
+    // Default to first match for now
+    const bestMatch = matches[0];
+    if (!bestMatch) {
+      throw new Error("Match array empty after check.");
+    }
+
+    // 3. Push to GH
+    const body = `> From Google Docs -- @${comment.author} -- ${comment.content}`;
+    const result = await createReviewComment(ghToken, mapping.repo, mapping.prNumber, {
+      body,
+      commit_id: mapping.headSha,
+      path: bestMatch.path,
+      line: bestMatch.line,
+      side: "RIGHT"
+    });
+
+    const commentMapping: CommentMapping = {
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      ghCommentId: result.id,
+      docCommentId: comment.id,
+      source: "gdoc"
+    };
+
+    await this.mappingStore.upsert(commentMapping);
+    return commentMapping;
   }
 
   async syncAll(): Promise<void> {

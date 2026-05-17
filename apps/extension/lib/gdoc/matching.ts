@@ -14,7 +14,7 @@ export function findLineMatch(
   for (const file of files) {
     const lines = file.content.split("\n");
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(cleanQuote)) {
+      if (lines[i]?.includes(cleanQuote)) {
         matches.push({ path: file.filename, line: i + 1 });
       }
     }
