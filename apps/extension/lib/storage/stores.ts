@@ -68,9 +68,9 @@ export function createMappingStore(storage: StorageArea) {
       const ghk = ghKey("mappingStore", mapping.ghCommentId);
       const dk = docKey("mappingStore", mapping.docCommentId);
       const prk = prKey("mappingStore:pr", mapping);
-      
+
       const prMappings = await getArray<CommentMapping>(storage, prk);
-      const updated = prMappings.filter(m => m.ghCommentId !== mapping.ghCommentId);
+      const updated = prMappings.filter((m) => m.ghCommentId !== mapping.ghCommentId);
       updated.push(mapping);
 
       await storage.set({

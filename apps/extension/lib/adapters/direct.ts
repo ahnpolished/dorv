@@ -127,7 +127,10 @@ export class DirectAdapter implements SyncAdapter {
     return this.mappingStore.listByPR(ref.repo, ref.prNumber);
   }
 
-  async pushGHCommentToDoc(comment: GitHubReviewComment, mapping: DocMapping): Promise<CommentMapping> {
+  async pushGHCommentToDoc(
+    comment: GitHubReviewComment,
+    mapping: DocMapping
+  ): Promise<CommentMapping> {
     const gToken = await this.authStore.getGoogleToken(false);
     if (!gToken) {
       throw new Error("Google token missing during sync");
@@ -148,7 +151,10 @@ export class DirectAdapter implements SyncAdapter {
     return commentMapping;
   }
 
-  async pushDocCommentToGH(comment: GoogleDocComment, mapping: DocMapping): Promise<CommentMapping> {
+  async pushDocCommentToGH(
+    comment: GoogleDocComment,
+    mapping: DocMapping
+  ): Promise<CommentMapping> {
     const ghToken = await this.authStore.getGitHubToken();
     if (!ghToken) {
       throw new Error("GitHub token missing during push");
