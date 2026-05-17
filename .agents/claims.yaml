@@ -168,10 +168,12 @@ claims:
 
   HUM-1220:
     agent: codex
-    status: in_progress
+    status: done
     claimed_at: "2026-05-17T16:05:57Z"
+    completed_at: "2026-05-17T16:08:42Z"
     depends_on: []
     branch: feature/hum-1220
     worktree: .worktrees/feature-hum-1220
+    pr: https://github.com/ahnpolished/dorv/pull/25
 
 wait_queue: {}
