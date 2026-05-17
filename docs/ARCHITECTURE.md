@@ -24,7 +24,7 @@ Chrome extension: on PRs with markdown files, create a Google Doc from PR conten
 | Storage | `chrome.storage.local` | Postgres (backend) |
 | Switch | `backend_url` empty | `backend_url` set in options |
 
-No reinstall to move from phase 1 → 2.
+No reinstall to move from phase 1 → 2. DirectAdapter works for GitHub Organization repositories only when the user's PAT is allowed to access that org and repository; see [GitHub authentication](GITHUB_AUTH.md).
 
 ## Data model
 

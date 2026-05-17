@@ -92,7 +92,8 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
           <div className="step-indicator">Step 1 of 2</div>
           <h1>Connect GitHub</h1>
           <p className="onboarding-desc">
-            Paste a GitHub personal access token with <code>repo</code> scope to read PR comments.
+            Paste a GitHub PAT that can read PR markdown and write PR comments. Org repos may need
+            an org-approved fine-grained token.
           </p>
           <input
             className="pat-input"
