@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- dark rounded-square background -->
+  <rect width="128" height="128" rx="24" fill="#111827"/>
+  <!-- orange arc — top half of a sync loop -->
+  <path d="M34 64 A30 30 0 0 1 94 64" fill="none" stroke="#F97316" stroke-width="10" stroke-linecap="round"/>
+  <!-- white arc — bottom half -->
+  <path d="M94 64 A30 30 0 0 1 34 64" fill="none" stroke="#F8FAFC" stroke-width="10" stroke-linecap="round"/>
+  <!-- orange arrowhead right -->
+  <polyline points="88,52 94,64 82,64" fill="none" stroke="#F97316" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- white arrowhead left -->
+  <polyline points="40,76 34,64 46,64" fill="none" stroke="#F8FAFC" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
