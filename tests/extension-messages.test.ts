@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createDocViaBackground,
-  openSidePanelViaBackground
+  openSidePanelViaBackground,
+  syncNowViaBackground
 } from "../apps/extension/lib/adapters/messages.js";
 import type { CreateDocInput, CreateDocResult } from "../apps/extension/lib/adapters/types.js";
 
@@ -45,6 +46,24 @@ describe("extension background messages", () => {
     await expect(openSidePanelViaBackground()).resolves.toBeUndefined();
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
       { type: "OPEN_SIDE_PANEL" },
+      expect.any(Function)
+    );
+  });
+
+  it("requests manual sync through the background script", async () => {
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(
+          (message: { type: "SYNC_NOW" }, callback: (response: CreateDocResponse) => void) => {
+            callback({ success: true });
+          }
+        )
+      }
+    } as unknown as typeof chrome;
+
+    await expect(syncNowViaBackground()).resolves.toBeUndefined();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { type: "SYNC_NOW" },
       expect.any(Function)
     );
   });

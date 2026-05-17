@@ -2,6 +2,7 @@ import { marked } from "marked";
 import type { AuthStore } from "../storage/auth.js";
 import {
   createDocStore,
+  createIdentityStore,
   createStatusStore,
   createMappingStore,
   createReplyMappingStore
@@ -36,6 +37,7 @@ export class DirectAdapter implements SyncAdapter {
   private statusStore;
   private mappingStore;
   private replyMappingStore;
+  private identityStore;
 
   constructor(
     private authStore: AuthStore,
@@ -45,6 +47,7 @@ export class DirectAdapter implements SyncAdapter {
     this.statusStore = createStatusStore(storageArea);
     this.mappingStore = createMappingStore(storageArea);
     this.replyMappingStore = createReplyMappingStore(storageArea);
+    this.identityStore = createIdentityStore(storageArea);
   }
 
   async getDoc(ref: PullRequestRef): Promise<DocMapping | undefined> {
@@ -188,7 +191,7 @@ export class DirectAdapter implements SyncAdapter {
     const prFiles = await fetchPullRequestFiles(
       { owner, repo: name, prNumber: mapping.prNumber },
       {
-        fetch: fetch.bind(window),
+        fetch: fetch.bind(globalThis),
         token: ghToken
       }
     );
@@ -214,7 +217,7 @@ export class DirectAdapter implements SyncAdapter {
     }
 
     // 3. Push to GH
-    const body = `> From Google Docs -- @${comment.author} -- ${comment.content}`;
+    const body = `> From Google Docs -- ${await this.formatGDocAuthor(comment.author)} -- ${comment.content}`;
     const result = await createReviewComment(ghToken, mapping.repo, mapping.prNumber, {
       body,
       commit_id: mapping.headSha,
@@ -301,7 +304,7 @@ export class DirectAdapter implements SyncAdapter {
             for (const reply of docComment.replies ?? []) {
               if (await this.replyMappingStore.hasByDoc(reply.id)) continue;
               try {
-                const body = `> From Google Docs -- @${reply.author} -- ${reply.content}`;
+                const body = `> From Google Docs -- ${await this.formatGDocAuthor(reply.author)} -- ${reply.content}`;
                 const result = await createReviewCommentReply(
                   ghToken,
                   mapping.repo,
@@ -343,5 +346,10 @@ export class DirectAdapter implements SyncAdapter {
         });
       }
     }
+  }
+
+  private async formatGDocAuthor(googleAuthor: string): Promise<string> {
+    const mapping = await this.identityStore.getByGoogleAuthor(googleAuthor);
+    return mapping ? `@${mapping.githubLogin}` : googleAuthor;
   }
 }

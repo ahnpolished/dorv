@@ -3,7 +3,11 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { DirectAdapter } from "../apps/extension/lib/adapters/direct.js";
 import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js";
 import { createAuthStore, type AuthStore } from "../apps/extension/lib/storage/auth.js";
-import { createDocStore, createMappingStore } from "../apps/extension/lib/storage/stores.js";
+import {
+  createDocStore,
+  createIdentityStore,
+  createMappingStore
+} from "../apps/extension/lib/storage/stores.js";
 import type { DocMapping } from "../apps/extension/lib/adapters/types.js";
 import type { StorageArea } from "../apps/extension/lib/storage/area.js";
 
@@ -180,6 +184,71 @@ describe("DirectAdapter baseline sync", () => {
       type: "anyone",
       role: "commenter",
       allowFileDiscovery: false
+    });
+  });
+
+  it("pushes GDoc comments to GitHub with mapped GitHub author mention", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    const identityStore = createIdentityStore(storage);
+    await identityStore.upsert({ googleAuthor: "Sangtae Ahn", githubLogin: "humphreyahn" });
+
+    let reviewBody: unknown;
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+
+      if (urlStr.includes("/pulls/123/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                filename: "README.md",
+                raw_url: "https://raw.example/README.md",
+                status: "modified"
+              }
+            ])
+        };
+      }
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("hello selected text") };
+      }
+
+      if (urlStr.includes("/pulls/123/comments") && method === "POST") {
+        reviewBody = JSON.parse(String(init?.body));
+        return { ok: true, json: () => Promise.resolve({ id: 777 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.pushDocCommentToGH(
+      {
+        id: "doc-comment-1",
+        content: "Please fix this",
+        quotedFileContent: "selected text",
+        createdAt: "t",
+        updatedAt: "t",
+        author: "Sangtae Ahn"
+      },
+      {
+        repo: "org/repo",
+        prNumber: 123,
+        docId: "doc-1",
+        docUrl: "https://docs.google.com/document/d/doc-1/edit",
+        createdAt: "t",
+        lastSyncedAt: "t",
+        headSha: "sha1",
+        latestSha: "sha1",
+        isStale: false
+      }
+    );
+
+    expect(reviewBody).toMatchObject({
+      body: "> From Google Docs -- @humphreyahn -- Please fix this",
+      path: "README.md",
+      line: 1
     });
   });
 });

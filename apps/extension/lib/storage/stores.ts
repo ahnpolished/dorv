@@ -1,6 +1,7 @@
 import type {
   CommentMapping,
   DocMapping,
+  IdentityMapping,
   PullRequestRef,
   ReplyMapping,
   SyncStatus
@@ -19,6 +20,10 @@ function ghKey(prefix: string, id: number): string {
 
 function docKey(prefix: string, id: string): string {
   return `${prefix}:doc:${id}`;
+}
+
+function identityKey(googleAuthor: string): string {
+  return `identityStore:google:${googleAuthor}`;
 }
 
 async function getValue<T>(storage: StorageArea, key: string): Promise<T | undefined> {
@@ -116,6 +121,17 @@ export function createReplyMappingStore(storage: StorageArea) {
     },
     async hasByDoc(docReplyId: string): Promise<boolean> {
       return (await this.getByDoc(docReplyId)) !== undefined;
+    }
+  };
+}
+
+export function createIdentityStore(storage: StorageArea) {
+  return {
+    async upsert(mapping: IdentityMapping): Promise<void> {
+      await storage.set({ [identityKey(mapping.googleAuthor)]: mapping });
+    },
+    async getByGoogleAuthor(googleAuthor: string): Promise<IdentityMapping | undefined> {
+      return getValue<IdentityMapping>(storage, identityKey(googleAuthor));
     }
   };
 }

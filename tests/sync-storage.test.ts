@@ -6,6 +6,7 @@ import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js
 import { createAuthStore } from "../apps/extension/lib/storage/auth.js";
 import {
   createDocStore,
+  createIdentityStore,
   createMappingStore,
   createReplyMappingStore,
   createStatusStore
@@ -100,5 +101,16 @@ describe("HUM-1193 typed storage stores", () => {
     await expect(replyStore.getByGH(2002)).resolves.toEqual(reply);
     await expect(replyStore.getByDoc("doc-reply-2")).resolves.toEqual(reply);
     await expect(statusStore.get("ahnpolished/dorv", 42)).resolves.toEqual(status);
+  });
+
+  it("stores Google author to GitHub login mappings", async () => {
+    const store = createIdentityStore(createMemoryStorageArea());
+
+    await store.upsert({ googleAuthor: "Sangtae Ahn", githubLogin: "humphreyahn" });
+
+    await expect(store.getByGoogleAuthor("Sangtae Ahn")).resolves.toEqual({
+      googleAuthor: "Sangtae Ahn",
+      githubLogin: "humphreyahn"
+    });
   });
 });
