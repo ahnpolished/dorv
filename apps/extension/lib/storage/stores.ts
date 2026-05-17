@@ -50,6 +50,14 @@ export function createDocStore(storage: StorageArea) {
     },
     async listActive(): Promise<PullRequestRef[]> {
       return getArray<PullRequestRef>(storage, activePrsKey);
+    },
+    async getByDocId(docId: string): Promise<DocMapping | undefined> {
+      const active = await this.listActive();
+      for (const ref of active) {
+        const mapping = await this.get(ref.repo, ref.prNumber);
+        if (mapping?.docId === docId) return mapping;
+      }
+      return undefined;
     }
   };
 }
@@ -57,9 +65,18 @@ export function createDocStore(storage: StorageArea) {
 export function createMappingStore(storage: StorageArea) {
   return {
     async upsert(mapping: CommentMapping): Promise<void> {
+      const ghk = ghKey("mappingStore", mapping.ghCommentId);
+      const dk = docKey("mappingStore", mapping.docCommentId);
+      const prk = prKey("mappingStore:pr", mapping);
+      
+      const prMappings = await getArray<CommentMapping>(storage, prk);
+      const updated = prMappings.filter(m => m.ghCommentId !== mapping.ghCommentId);
+      updated.push(mapping);
+
       await storage.set({
-        [ghKey("mappingStore", mapping.ghCommentId)]: mapping,
-        [docKey("mappingStore", mapping.docCommentId)]: mapping
+        [ghk]: mapping,
+        [dk]: mapping,
+        [prk]: updated
       });
     },
     async getByGH(ghCommentId: number): Promise<CommentMapping | undefined> {
@@ -73,6 +90,9 @@ export function createMappingStore(storage: StorageArea) {
     },
     async hasByDoc(docCommentId: string): Promise<boolean> {
       return (await this.getByDoc(docCommentId)) !== undefined;
+    },
+    async listByPR(repo: string, prNumber: number): Promise<CommentMapping[]> {
+      return getArray<CommentMapping>(storage, prKey("mappingStore:pr", { repo, prNumber }));
     }
   };
 }

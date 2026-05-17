@@ -98,22 +98,24 @@ export class DirectAdapter implements SyncAdapter {
     return { mapping };
   }
 
-  getGHComments(): Promise<GitHubReviewComment[]> {
-    return Promise.resolve([]);
+  async getGHComments(ref: PullRequestRef): Promise<GitHubReviewComment[]> {
+    const ghToken = await this.authStore.getGitHubToken();
+    if (!ghToken) {
+      throw new Error("GitHub PAT not configured.");
+    }
+    return fetchReviewComments(ghToken, ref.repo, ref.prNumber);
   }
 
   getDocComments(): Promise<GoogleDocComment[]> {
+    // Implementing this in HUM-1198
     return Promise.resolve([]);
   }
 
-  getCommentMappings(): Promise<CommentMapping[]> {
-    return Promise.resolve([]);
+  async getCommentMappings(ref: PullRequestRef): Promise<CommentMapping[]> {
+    return this.mappingStore.listByPR(ref.repo, ref.prNumber);
   }
 
-  async pushGHCommentToDoc(
-    comment: GitHubReviewComment,
-    mapping: DocMapping
-  ): Promise<CommentMapping> {
+  async pushGHCommentToDoc(comment: GitHubReviewComment, mapping: DocMapping): Promise<CommentMapping> {
     const gToken = await this.authStore.getGoogleToken(false);
     if (!gToken) {
       throw new Error("Google token missing during sync");
