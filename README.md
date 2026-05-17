@@ -26,6 +26,7 @@ See [docs/PRIORITIES.md](docs/PRIORITIES.md) for the Linear backlog, priorities,
 | --- | --- |
 | [docs/PRIORITIES.md](docs/PRIORITIES.md) | Issue backlog, P0/P1 acceptance criteria, implementation order |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Condensed architecture (canonical detail lives in Linear) |
+| [docs/GITHUB_AUTH.md](docs/GITHUB_AUTH.md) | GitHub PAT setup, org approval, and 403 troubleshooting |
 | [AGENTS.md](AGENTS.md) | Instructions for coding agents (Codex, Cursor, Claude Code, …) |
 | [docs/AGENT_COLLABORATION.md](docs/AGENT_COLLABORATION.md) | Claim issues, wait on dependencies, `.agents/claims.yaml` |
 | [docs/LINEAR_DEPENDENCIES.md](docs/LINEAR_DEPENDENCIES.md) | Linear **Blocked by** relations + description format for agents |
@@ -78,7 +79,7 @@ pnpm test
 pnpm zip
 ```
 
-Use `.env.example` as the placeholder reference for local extension credentials. Do not commit real PATs, OAuth client IDs, or backend URLs.
+Use `.env.example` as the placeholder reference for local extension credentials. Do not commit real PATs, OAuth client IDs, or backend URLs. For GitHub Organization repositories, follow [GitHub authentication](docs/GITHUB_AUTH.md) before testing the create-doc flow.
 
 ## Status
 

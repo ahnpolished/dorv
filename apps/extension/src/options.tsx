@@ -97,7 +97,8 @@ function Options() {
         <section>
           <h2>GitHub Authentication</h2>
           <p className="description">
-            Provide a Personal Access Token (PAT) with <code>repo</code> scope to sync PR comments.
+            Provide a GitHub PAT that can read PR markdown and write PR comments. Org repos may
+            require an org-owned, approved fine-grained token.
           </p>
           <div className="input-group">
             <input
