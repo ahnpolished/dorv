@@ -112,6 +112,7 @@ export default defineContentScript({
 
 const styles = `
   .dorv-pr-sidebar {
+    background-color: #ffffff;
     border: 1px solid #d0d7de;
     border-radius: 6px;
     color: #1f2328;
@@ -160,5 +161,28 @@ const styles = `
     border-radius: 6px;
     margin: 0 0 8px;
     padding: 6px 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    .dorv-pr-sidebar {
+      background-color: #161b22;
+      border-color: #30363d;
+      color: #e6edf3;
+    }
+    .dorv-pr-sidebar small {
+      color: #8b949e;
+    }
+    .dorv-pr-sidebar a {
+      color: #58a6ff;
+    }
+    .dorv-pr-sidebar button {
+      background: #21262d;
+      border-color: #30363d;
+      color: #e6edf3;
+    }
+    .dorv-stale {
+      background: #2d2a16;
+      border-color: #9e6a03;
+      color: #e3b341;
+    }
   }
 `;
