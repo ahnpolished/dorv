@@ -110,6 +110,12 @@ export function createReplyMappingStore(storage: StorageArea) {
     },
     async getByDoc(docReplyId: string): Promise<ReplyMapping | undefined> {
       return getValue<ReplyMapping>(storage, docKey("replyMappingStore", docReplyId));
+    },
+    async hasByGH(ghReplyId: number): Promise<boolean> {
+      return (await this.getByGH(ghReplyId)) !== undefined;
+    },
+    async hasByDoc(docReplyId: string): Promise<boolean> {
+      return (await this.getByDoc(docReplyId)) !== undefined;
     }
   };
 }
