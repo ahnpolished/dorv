@@ -188,11 +188,13 @@ claims:
 
   HUM-1223:
     agent: claude-code
-    status: in_progress
+    status: done
     claimed_at: "2026-05-17T21:36:00Z"
+    completed_at: "2026-05-17T21:46:00Z"
     depends_on: []
     branch: feature/hum-1223
     worktree: .worktrees/feature-hum-1223
+    pr: https://github.com/ahnpolished/dorv/pull/28
 
   HUM-1224:
     agent: codex
@@ -203,5 +205,15 @@ claims:
     branch: feature/hum-1224
     worktree: .worktrees/feature-hum-1224
     pr: https://github.com/ahnpolished/dorv/pull/29
+
+  HUM-1225:
+    agent: claude-code
+    status: done
+    claimed_at: "2026-05-17T22:22:00Z"
+    completed_at: "2026-05-17T22:28:00Z"
+    depends_on: []
+    branch: feature/hum-1225
+    worktree: .worktrees/feature-hum-1225
+    pr: https://github.com/ahnpolished/dorv/pull/30
 
 wait_queue: {}
