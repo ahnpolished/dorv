@@ -192,6 +192,18 @@ export async function setupPageRoutes(
     });
   });
 
+  // Drive permissions — set anyone-with-link commenter access (service worker during doc creation)
+  await context.route(
+    "https://www.googleapis.com/drive/v3/files/*/permissions*",
+    (route: Route) => {
+      void route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ id: "perm-1" })
+      });
+    }
+  );
+
   // Drive comments — GET list + POST new comment (service worker during sync)
   await context.route("https://www.googleapis.com/drive/v3/files/*/comments*", (route: Route) => {
     if (route.request().method() === "POST") {
