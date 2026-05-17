@@ -216,4 +216,14 @@ claims:
     worktree: .worktrees/feature-hum-1225
     pr: https://github.com/ahnpolished/dorv/pull/30
 
+  HUM-1226:
+    agent: claude-code
+    status: done
+    claimed_at: "2026-05-17T22:51:00Z"
+    completed_at: "2026-05-17T22:57:00Z"
+    depends_on: [HUM-1225]
+    branch: feature/hum-1226
+    worktree: .worktrees/feature-hum-1226
+    pr: https://github.com/ahnpolished/dorv/pull/31
+
 wait_queue: {}

@@ -3,7 +3,7 @@
 body {
   margin: 0;
   background: var(--dorv-light);
-  font-family: "DM Sans", "Google Sans", "Product Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--dorv-font-sans);
   color: var(--dorv-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -21,7 +21,7 @@ header {
 .eyebrow {
   color: var(--dorv-orange);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 0 0 8px;
@@ -80,7 +80,7 @@ input:focus {
 button {
   padding: 10px 18px;
   border-radius: var(--dorv-radius-sm);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   border: none;
   font-size: 14px;

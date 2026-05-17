@@ -3,7 +3,7 @@
 body {
   margin: 0;
   background: var(--dorv-bg);
-  font-family: "DM Sans", "Google Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--dorv-font-sans);
   color: var(--dorv-text-on-dark);
   -webkit-font-smoothing: antialiased;
 }
@@ -15,7 +15,7 @@ body {
 .dorv-eyebrow {
   color: var(--dorv-orange);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 0 0 4px;
@@ -130,7 +130,7 @@ h1 {
 }
 
 .comment-meta .author {
-  font-weight: 700;
+  font-weight: 500;
   color: var(--dorv-text-on-dark);
 }
 .comment-meta .line {
@@ -209,7 +209,7 @@ h1 {
   border: none;
   border-radius: var(--dorv-radius-sm);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -267,7 +267,7 @@ h3 {
 
 .step-indicator {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--dorv-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -281,7 +281,7 @@ h3 {
 }
 
 .onboarding-desc code {
-  font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--dorv-font-mono);
   background: var(--dorv-bg-elevated);
   padding: 1px 5px;
   border-radius: 3px;
@@ -296,7 +296,7 @@ h3 {
   border: 1px solid var(--dorv-border-strong);
   border-radius: var(--dorv-radius-sm);
   font-size: 13px;
-  font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--dorv-font-mono);
   outline: none;
   transition: border-color 0.15s;
   background: var(--dorv-bg-surface);
@@ -315,9 +315,9 @@ h3 {
   border: none;
   border-radius: var(--dorv-radius-sm);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  font-family: "DM Sans", "Google Sans", ui-sans-serif, sans-serif;
+  font-family: var(--dorv-font-sans);
   transition:
     background 0.15s,
     opacity 0.15s;
