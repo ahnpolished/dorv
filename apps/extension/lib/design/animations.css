@@ -1,0 +1,115 @@
+/*
+ * dorv animation system — all keyframes, no JS animation library.
+ * Import this file in every surface after tokens.css.
+ * All motion is gated on prefers-reduced-motion: no-preference.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Sync spinner — rotating icon during syncAll() */
+  @keyframes dorv-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .dorv-spinning {
+    animation: dorv-spin 1s linear infinite;
+    display: inline-block;
+    transform-origin: center;
+  }
+
+  /* Comment slide-in — new comment appearing in the list */
+  @keyframes dorv-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .dorv-comment-enter {
+    animation: dorv-slide-in 200ms ease-out both;
+  }
+
+  /* Stale badge pulse — isStale === true */
+  @keyframes dorv-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.85;
+      transform: scale(1.04);
+    }
+  }
+  .dorv-stale-badge {
+    animation: dorv-pulse 2s ease-in-out infinite;
+  }
+
+  /* Status fade — state transitions (no-doc → linked → stale) */
+  @keyframes dorv-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .dorv-state-enter {
+    animation: dorv-fade-in 150ms ease both;
+  }
+
+  /* Push success checkmark — after pushDocCommentToGH() */
+  @keyframes dorv-check-draw {
+    from {
+      opacity: 0;
+      stroke-dashoffset: 20;
+    }
+    to {
+      opacity: 1;
+      stroke-dashoffset: 0;
+    }
+  }
+  .dorv-check-path {
+    stroke-dasharray: 20;
+    animation: dorv-check-draw 300ms ease both;
+  }
+
+  /* Loading shimmer — skeleton during initial load */
+  @keyframes dorv-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  .dorv-skeleton {
+    animation: dorv-shimmer 1.4s ease-in-out infinite;
+    background: linear-gradient(
+      90deg,
+      var(--dorv-border) 25%,
+      var(--dorv-bg-elevated) 50%,
+      var(--dorv-border) 75%
+    );
+    background-size: 200% 100%;
+    border-radius: var(--dorv-radius-sm);
+  }
+}
+
+/* Reduced-motion fallbacks — no layout shift, just static state */
+@media (prefers-reduced-motion: reduce) {
+  .dorv-spinning {
+    animation: none;
+  }
+  .dorv-stale-badge {
+    animation: none;
+  }
+  .dorv-skeleton {
+    animation: none;
+    background: var(--dorv-border);
+    border-radius: var(--dorv-radius-sm);
+  }
+}
