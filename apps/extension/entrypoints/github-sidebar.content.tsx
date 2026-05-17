@@ -107,7 +107,7 @@ function GithubSidebar({
       )}
       {model.kind === "stale" && (
         <>
-          <p className="dorv-stale">{model.staleLabel}</p>
+          <p className="dorv-stale dorv-stale-badge">{model.staleLabel}</p>
           <a href={model.docUrl} rel="noreferrer" target="_blank">
             Open review doc
           </a>
@@ -327,5 +327,40 @@ const styles = `
   color: var(--dorv-warning);
   margin: 0 0 8px;
   padding: 6px 8px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes dorv-spin {
+    to { transform: rotate(360deg); }
+  }
+  .dorv-spinning {
+    animation: dorv-spin 1s linear infinite;
+    display: inline-block;
+    transform-origin: center;
+  }
+  @keyframes dorv-slide-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .dorv-comment-enter {
+    animation: dorv-slide-in 200ms ease-out both;
+  }
+  @keyframes dorv-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+  .dorv-skeleton {
+    animation: dorv-shimmer 1.4s ease-in-out infinite;
+    background: linear-gradient(90deg,
+      var(--gh-border) 25%,
+      var(--gh-bg-subtle) 50%,
+      var(--gh-border) 75%
+    );
+    background-size: 200% 100%;
+    border-radius: var(--dorv-radius-sm);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dorv-spinning { animation: none; }
+  .dorv-skeleton { animation: none; background: var(--gh-border); }
 }
 `;

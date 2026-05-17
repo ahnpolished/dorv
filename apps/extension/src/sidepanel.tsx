@@ -421,7 +421,16 @@ function SidePanel() {
     }
   };
 
-  if (onboarding === "checking") return <div className="dorv-sidepanel">Loading...</div>;
+  if (onboarding === "checking")
+    return (
+      <div className="dorv-sidepanel">
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 8 }}>
+          <div className="dorv-skeleton" style={{ height: 13, width: "55%" }} />
+          <div className="dorv-skeleton" style={{ height: 13, width: "75%" }} />
+          <div className="dorv-skeleton" style={{ height: 13, width: "40%" }} />
+        </div>
+      </div>
+    );
 
   if (onboarding === "github" || onboarding === "google") {
     return (
@@ -435,7 +444,17 @@ function SidePanel() {
     );
   }
 
-  if (loading) return <div className="dorv-sidepanel">Loading...</div>;
+  if (loading)
+    return (
+      <div className="dorv-sidepanel">
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 8 }}>
+          <div className="dorv-skeleton" style={{ height: 20, width: "60%" }} />
+          <div className="dorv-skeleton" style={{ height: 13, width: "80%" }} />
+          <div className="dorv-skeleton" style={{ height: 13, width: "50%" }} />
+          <div className="dorv-skeleton" style={{ height: 13, width: "70%" }} />
+        </div>
+      </div>
+    );
   if (error) return <div className="dorv-sidepanel error">{error}</div>;
 
   if (tabKind === "neutral") {
@@ -514,7 +533,11 @@ function SidePanel() {
             disabled={syncingNow}
             onClick={() => void handleManualSync()}
           >
-            {syncingNow ? "Syncing…" : "Sync now"}
+            <i
+              className={`ti ti-refresh${syncingNow ? " dorv-spinning" : ""}`}
+              aria-hidden="true"
+            />
+            {syncingNow ? " Syncing…" : " Sync now"}
           </button>
         </div>
       </header>
@@ -568,7 +591,7 @@ function SidePanel() {
                   <summary>{group.path}</summary>
                   <div className="comments">
                     {group.comments.map((c) => (
-                      <div key={c.id} className="comment-card">
+                      <div key={c.id} className="comment-card dorv-comment-enter">
                         <div className="comment-meta">
                           <span className="author">@{c.user}</span>
                           <span className="line">L{c.line?.toString() ?? "?"}</span>
@@ -600,7 +623,7 @@ function SidePanel() {
               <p className="empty-msg">No new comments in GDoc.</p>
             ) : (
               unmappedGdocComments.map((c) => (
-                <div key={c.id} className="comment-card gdoc">
+                <div key={c.id} className="comment-card gdoc dorv-comment-enter">
                   <div className="comment-meta">
                     <span className="author">{c.author}</span>
                   </div>
