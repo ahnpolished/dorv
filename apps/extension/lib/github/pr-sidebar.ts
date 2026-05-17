@@ -3,12 +3,12 @@ import type { DocMapping, MarkdownFileRef, SyncStatus } from "../adapters/types.
 export type PrSidebarMode = "loading" | "no-doc" | "linked" | "stale" | "error";
 
 export interface PrSidebarInput {
-  mode?: PrSidebarMode;
+  mode?: PrSidebarMode | undefined;
   files: MarkdownFileRef[];
-  doc?: DocMapping;
-  status?: SyncStatus;
-  error?: string;
-  hasCredentials?: boolean;
+  doc?: DocMapping | undefined;
+  status?: SyncStatus | undefined;
+  error?: string | undefined;
+  hasCredentials?: boolean | undefined;
 }
 
 export type PrSidebarModel =

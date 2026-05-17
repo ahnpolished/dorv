@@ -2,6 +2,41 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { GitHubReviewComment } from "../adapters/types.js";
+import type { GitHubFileClientOptions, GitHubPullRequestRef } from "./pr-files.js";
+
+export interface PullRequestMeta {
+  title: string;
+  author: string;
+  branch: string;
+  headSha: string;
+  prUrl: string;
+}
+
+export async function fetchPullRequestMeta(
+  ref: GitHubPullRequestRef,
+  options: GitHubFileClientOptions
+): Promise<PullRequestMeta> {
+  const resp = await options.fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${ref.prNumber.toString()}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {})
+      }
+    }
+  );
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch PR meta: ${resp.status.toString()}`);
+  }
+  const data = (await resp.json()) as Record<string, any>;
+  return {
+    title: data.title,
+    author: data.user.login,
+    branch: data.head.ref,
+    headSha: data.head.sha,
+    prUrl: data.html_url
+  };
+}
 
 export async function fetchReviewComments(
   token: string,
