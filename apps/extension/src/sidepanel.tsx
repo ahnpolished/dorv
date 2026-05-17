@@ -6,6 +6,8 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { parseDocId } from "../lib/gdoc/urls.js";
 import { groupCommentsByPath } from "../lib/gdoc/grouping.js";
+import { buildOnboardingStep } from "../lib/onboarding/model.js";
+import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
   GitHubReviewComment,
@@ -21,8 +23,134 @@ const statusStore = createStatusStore(storageArea);
 const authStore = createAuthStore(storageArea);
 
 type TabType = "github" | "gdoc" | "info";
+type OnboardingView = "checking" | "github" | "google" | "done" | "complete";
+
+interface OnboardingFlowProps {
+  initialStep: "github" | "google";
+  authStore: AuthStore;
+  onComplete: () => void;
+}
+
+function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowProps) {
+  const [step, setStep] = useState<"github" | "google" | "done">(initialStep);
+  const [pat, setPat] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [animKey, setAnimKey] = useState(0);
+
+  const advance = (nextStep: "github" | "google" | "done") => {
+    setAnimKey((k) => k + 1);
+    setError(undefined);
+    setStep(nextStep);
+  };
+
+  const handleSavePat = async () => {
+    const trimmed = pat.trim();
+    if (!trimmed) {
+      setError("Enter a GitHub personal access token.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await authStore.setGitHubToken(trimmed);
+      advance("google");
+    } catch {
+      setError("Could not save token. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setSaving(true);
+    try {
+      const token = await authStore.getGoogleToken(true);
+      if (!token) {
+        setError("Google sign-in was cancelled or failed.");
+        return;
+      }
+      advance("done");
+    } catch {
+      setError("Google sign-in failed. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="dorv-sidepanel onboarding">
+      <p className="dorv-eyebrow">dorv</p>
+
+      {step === "github" && (
+        <div key={animKey} className="onboarding-step fade-in">
+          <div className="step-indicator">Step 1 of 2</div>
+          <h1>Connect GitHub</h1>
+          <p className="onboarding-desc">
+            Paste a GitHub personal access token with <code>repo</code> scope to read PR comments.
+          </p>
+          <input
+            className="pat-input"
+            type="password"
+            placeholder="ghp_..."
+            value={pat}
+            onChange={(e) => {
+              setPat(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleSavePat();
+            }}
+            autoFocus
+          />
+          {error && <p className="onboarding-error">{error}</p>}
+          <button
+            type="button"
+            className="onboarding-btn"
+            disabled={saving}
+            onClick={() => void handleSavePat()}
+          >
+            {saving ? "Saving..." : "Continue"}
+          </button>
+        </div>
+      )}
+
+      {step === "google" && (
+        <div key={animKey} className="onboarding-step fade-in">
+          <div className="step-indicator">Step 2 of 2</div>
+          <h1>Connect Google</h1>
+          <p className="onboarding-desc">
+            Sign in with the Google account that has access to your review Google Docs.
+          </p>
+          {error && <p className="onboarding-error">{error}</p>}
+          <button
+            type="button"
+            className="onboarding-btn"
+            disabled={saving}
+            onClick={() => void handleGoogleAuth()}
+          >
+            {saving ? "Signing in..." : "Sign in with Google"}
+          </button>
+        </div>
+      )}
+
+      {step === "done" && (
+        <div key={animKey} className="onboarding-step fade-in">
+          <div className="done-icon">✓</div>
+          <h1>You&apos;re set</h1>
+          <p className="onboarding-desc">
+            Open a Google Doc linked to a GitHub PR and dorv will sync review comments
+            automatically.
+          </p>
+          <button type="button" className="onboarding-btn" onClick={onComplete}>
+            Get started
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SidePanel() {
+  const [onboarding, setOnboarding] = useState<OnboardingView>("checking");
   const [mapping, setMapping] = useState<DocMapping | undefined>(undefined);
   const [ghComments, setGhComments] = useState<GitHubReviewComment[]>([]);
   const [gdocComments, setGdocComments] = useState<GoogleDocComment[]>([]);
@@ -32,6 +160,22 @@ function SidePanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
   const [pushingId, setPushingId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const [pat, googleToken] = await Promise.all([
+        authStore.getGitHubToken(),
+        authStore.getGoogleToken(false)
+      ]);
+      const step = buildOnboardingStep(!!pat, !!googleToken);
+      if (step === null) {
+        setOnboarding("complete");
+      } else {
+        setOnboarding(step.step);
+      }
+    };
+    void checkAuth();
+  }, []);
 
   const loadData = async () => {
     try {
@@ -78,8 +222,10 @@ function SidePanel() {
   };
 
   useEffect(() => {
-    void loadData();
-  }, []);
+    if (onboarding === "complete") {
+      void loadData();
+    }
+  }, [onboarding]);
 
   const groupedGhComments = useMemo(() => groupCommentsByPath(ghComments), [ghComments]);
 
@@ -94,7 +240,7 @@ function SidePanel() {
       const backendUrl = await authStore.getBackendUrl();
       const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
       await adapter.pushDocCommentToGH(comment, mapping);
-      await loadData(); // Refresh
+      await loadData();
       alert("Comment pushed to GitHub!");
     } catch (err) {
       alert(`Push failed: ${String(err)}`);
@@ -102,6 +248,20 @@ function SidePanel() {
       setPushingId(undefined);
     }
   };
+
+  if (onboarding === "checking") return <div className="dorv-sidepanel">Loading...</div>;
+
+  if (onboarding === "github" || onboarding === "google") {
+    return (
+      <OnboardingFlow
+        initialStep={onboarding}
+        authStore={authStore}
+        onComplete={() => {
+          setOnboarding("complete");
+        }}
+      />
+    );
+  }
 
   if (loading) return <div className="dorv-sidepanel">Loading...</div>;
   if (error) return <div className="dorv-sidepanel error">{error}</div>;
