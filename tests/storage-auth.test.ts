@@ -47,14 +47,15 @@ describe("AuthStore", () => {
       );
     });
 
-    it("handles chrome.identity error", async () => {
-      (chrome.runtime as any).lastError = { message: "Error" };
+    it("rejects with the Chrome error message on identity failure", async () => {
+      (chrome.runtime as any).lastError = { message: "OAuth2 not granted or revoked." };
       (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
         cb(undefined);
       });
 
-      const token = await authStore.getGoogleToken(false);
-      expect(token).toBeUndefined();
+      await expect(authStore.getGoogleToken(false)).rejects.toThrow(
+        "OAuth2 not granted or revoked."
+      );
     });
 
     it("revokes google token", async () => {
