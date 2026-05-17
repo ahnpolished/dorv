@@ -8,6 +8,10 @@ coverage/
 .wxt/
 **/.output/
 
+# Playwright test artifacts
+playwright-report/
+test-results/
+
 # Local environment
 .env
 .env.*

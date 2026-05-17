@@ -28,7 +28,12 @@ function Options() {
       const url = await authStore.getBackendUrl();
       setBackendUrl(url ?? "");
 
-      const token = await authStore.getGoogleToken(false);
+      let token: string | undefined;
+      try {
+        token = await authStore.getGoogleToken(false);
+      } catch {
+        // No cached token — show disconnected state
+      }
       setGoogleConnected(!!token);
       setLoading(false);
     }
