@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDocViaBackground } from "../apps/extension/lib/adapters/messages.js";
+import {
+  createDocViaBackground,
+  openSidePanelViaBackground
+} from "../apps/extension/lib/adapters/messages.js";
 import type { CreateDocInput, CreateDocResult } from "../apps/extension/lib/adapters/types.js";
 
 interface CreateDocMessage {
@@ -25,6 +28,27 @@ const input: CreateDocInput = {
 };
 
 describe("extension background messages", () => {
+  it("requests side panel opening through the background script", async () => {
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(
+          (
+            message: { type: "OPEN_SIDE_PANEL" },
+            callback: (response: CreateDocResponse) => void
+          ) => {
+            callback({ success: true });
+          }
+        )
+      }
+    } as unknown as typeof chrome;
+
+    await expect(openSidePanelViaBackground()).resolves.toBeUndefined();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { type: "OPEN_SIDE_PANEL" },
+      expect.any(Function)
+    );
+  });
+
   it("requests Google Doc creation through the background script", async () => {
     const result: CreateDocResult = {
       mapping: {

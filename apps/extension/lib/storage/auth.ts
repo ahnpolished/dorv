@@ -7,7 +7,7 @@ export interface AuthStore {
   getBackendUrl(): Promise<string | undefined>;
   setBackendUrl(url: string): Promise<void>;
   isManagedBackendUrl(): Promise<boolean>;
-  getGoogleToken(interactive: boolean): Promise<string>;
+  getGoogleToken(interactive: boolean): Promise<string | undefined>;
   revokeGoogleToken(): Promise<void>;
 }
 
@@ -44,10 +44,14 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
       const managed = await managedStorage.get([keys.backendUrl]);
       return !!managed[keys.backendUrl];
     },
-    async getGoogleToken(interactive: boolean): Promise<string> {
+    async getGoogleToken(interactive: boolean): Promise<string | undefined> {
       return new Promise((resolve, reject) => {
         chrome.identity.getAuthToken({ interactive }, (token) => {
           if (chrome.runtime.lastError) {
+            if (!interactive) {
+              resolve(undefined);
+              return;
+            }
             reject(new Error(chrome.runtime.lastError.message ?? "Unknown identity error"));
             return;
           }

@@ -13,7 +13,7 @@ export interface PrSidebarInput {
 
 export type PrSidebarModel =
   | { kind: "hidden" }
-  | { kind: "needs-setup"; title: string; message: string }
+  | { kind: "needs-setup"; title: string; message: string; setupActionLabel: string }
   | { kind: "loading"; title: string; message: string }
   | {
       kind: "no-doc";
@@ -56,7 +56,8 @@ export function buildPrSidebarModel(input: PrSidebarInput): PrSidebarModel {
     return {
       kind: "needs-setup",
       title: "dorv",
-      message: "Set up dorv to create and sync review docs."
+      message: "Set up dorv to create and sync review docs.",
+      setupActionLabel: "Set up dorv"
     };
   }
 

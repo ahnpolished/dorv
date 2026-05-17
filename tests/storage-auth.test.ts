@@ -47,14 +47,23 @@ describe("AuthStore", () => {
       );
     });
 
-    it("rejects with the Chrome error message on identity failure", async () => {
+    it("returns undefined when passive google token lookup misses", async () => {
       (chrome.runtime as any).lastError = { message: "OAuth2 not granted or revoked." };
       (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
         cb(undefined);
       });
 
-      await expect(authStore.getGoogleToken(false)).rejects.toThrow(
-        "OAuth2 not granted or revoked."
+      await expect(authStore.getGoogleToken(false)).resolves.toBeUndefined();
+    });
+
+    it("rejects with the Chrome error message on interactive identity failure", async () => {
+      (chrome.runtime as any).lastError = { message: "The user did not approve access." };
+      (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
+        cb(undefined);
+      });
+
+      await expect(authStore.getGoogleToken(true)).rejects.toThrow(
+        "The user did not approve access."
       );
     });
 
