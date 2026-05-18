@@ -68,3 +68,26 @@ pnpm --filter @dorv/extension zip
 ```
 
 Upload to the Chrome Web Store developer dashboard or distribute via Google Admin for unlisted installs.
+
+## Release automation
+
+The `Release` GitHub Actions workflow builds the extension zip, submits it to Chrome Web Store, and creates the matching GitHub tag/release.
+
+Required repository secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | OAuth client ID embedded in the extension manifest at build time |
+| `CWS_CLIENT_ID` | OAuth client ID for the Chrome Web Store API project |
+| `CWS_CLIENT_SECRET` | OAuth client secret for the Chrome Web Store API project |
+| `CWS_REFRESH_TOKEN` | Refresh token with `https://www.googleapis.com/auth/chromewebstore` scope |
+| `CWS_PUBLISHER_ID` | Chrome Web Store publisher ID |
+| `CWS_EXTENSION_ID` | Chrome Web Store item ID |
+
+To release:
+
+1. Update `apps/extension/package.json` with the new version.
+2. Merge the release-ready PR to `main`.
+3. Run **Actions → Release → Run workflow**.
+4. Leave `version` blank to use `apps/extension/package.json`, or enter an explicit SemVer value.
+5. Keep `publish_to_chrome` enabled for a real Chrome Web Store submission; disable it to create only the GitHub release artifact.
