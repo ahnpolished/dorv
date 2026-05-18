@@ -187,6 +187,92 @@ describe("DirectAdapter baseline sync", () => {
     });
   });
 
+  it("falls back to organization commenter access when public link sharing is blocked", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      calls.push({ url: urlStr, init });
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# RFC") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "doc-1",
+              webViewLink: "https://docs.google.com/document/d/doc-1/edit",
+              owners: [{ emailAddress: "alice@example.com" }]
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/doc-1/permissions")) {
+        const body = JSON.parse(String(init?.body));
+        if (body.type === "anyone") {
+          return {
+            ok: false,
+            status: 400,
+            text: () =>
+              Promise.resolve(
+                JSON.stringify({
+                  error: {
+                    code: 400,
+                    errors: [{ reason: "publishOutNotPermitted" }]
+                  }
+                })
+              )
+          };
+        }
+        return { ok: true, json: () => Promise.resolve({ id: "perm-domain" }) };
+      }
+
+      if (urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments")) {
+        return { ok: true, json: () => Promise.resolve({ id: 100 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 123,
+      title: "Review me",
+      author: "alice",
+      branch: "feature/docs",
+      headSha: "sha1",
+      prUrl: "https://github.com/org/repo/pull/123",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    const permissionBodies = calls
+      .filter((call) => call.url.includes("/drive/v3/files/doc-1/permissions"))
+      .map((call) => JSON.parse(String(call.init?.body)));
+
+    expect(permissionBodies).toEqual([
+      {
+        type: "anyone",
+        role: "commenter",
+        allowFileDiscovery: false
+      },
+      {
+        type: "domain",
+        domain: "example.com",
+        role: "commenter",
+        allowFileDiscovery: false
+      }
+    ]);
+  });
+
   it("pushes GDoc comments to GitHub with mapped GitHub author mention", async () => {
     await authStore.setGitHubToken("mock-gh-token");
     const identityStore = createIdentityStore(storage);
