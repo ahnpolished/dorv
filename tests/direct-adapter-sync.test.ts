@@ -332,7 +332,7 @@ describe("DirectAdapter baseline sync", () => {
     );
 
     expect(reviewBody).toMatchObject({
-      body: "> From Google Docs -- @humphreyahn -- Please fix this",
+      body: "> From Google Docs -- @humphreyahn -- Please fix this\n\n[View in GDoc](https://docs.google.com/document/d/doc-1/edit)",
       path: "README.md",
       line: 1
     });
