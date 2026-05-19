@@ -278,10 +278,12 @@ claims:
 
   HUM-1252:
     agent: claude-code
-    status: in_progress
+    status: done
     claimed_at: "2026-05-19T23:24:47Z"
+    completed_at: "2026-05-19T23:28:00Z"
     depends_on: []
     branch: feature/hum-1252
     worktree: .worktrees/feature-hum-1252
+    pr: https://github.com/ahnpolished/dorv/pull/38
 
 wait_queue: {}
