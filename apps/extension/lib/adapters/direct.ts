@@ -221,7 +221,7 @@ export class DirectAdapter implements SyncAdapter {
     }
 
     // 3. Push to GH
-    const body = `> From Google Docs -- ${await this.formatGDocAuthor(comment.author)} -- ${comment.content}`;
+    const body = `> From Google Docs -- ${await this.formatGDocAuthor(comment.author)} -- ${comment.content}\n\n[View in GDoc](${mapping.docUrl})`;
     const result = await createReviewComment(ghToken, mapping.repo, mapping.prNumber, {
       body,
       commit_id: mapping.headSha,
@@ -308,7 +308,7 @@ export class DirectAdapter implements SyncAdapter {
             for (const reply of docComment.replies ?? []) {
               if (await this.replyMappingStore.hasByDoc(reply.id)) continue;
               try {
-                const body = `> From Google Docs -- ${await this.formatGDocAuthor(reply.author)} -- ${reply.content}`;
+                const body = `> From Google Docs -- ${await this.formatGDocAuthor(reply.author)} -- ${reply.content}\n\n[View in GDoc](${mapping.docUrl})`;
                 const result = await createReviewCommentReply(
                   ghToken,
                   mapping.repo,
