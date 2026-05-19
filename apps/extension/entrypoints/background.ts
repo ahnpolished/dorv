@@ -3,6 +3,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createStatusStore } from "../lib/storage/stores.js";
+import { isSidePanelSupported } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
@@ -39,7 +40,9 @@ export default defineBackground(() => {
   };
 
   chrome.runtime.onInstalled.addListener(() => {
-    void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    if (isSidePanelSupported()) {
+      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    }
     startPolling();
     void handlePoll();
   });
@@ -62,6 +65,13 @@ export default defineBackground(() => {
 
         switch (message.type) {
           case "OPEN_SIDE_PANEL": {
+            if (!isSidePanelSupported()) {
+              sendResponse({
+                success: false,
+                error: "Side panel is not supported in this browser."
+              });
+              break;
+            }
             if (sender.tab?.id === undefined) {
               throw new Error("Cannot open side panel without a sender tab.");
             }
@@ -112,11 +122,13 @@ export default defineBackground(() => {
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.status === "complete" && tab.url?.startsWith(GDOC_URL_PREFIX)) {
-      void chrome.sidePanel.setOptions({
-        tabId,
-        path: "sidepanel.html",
-        enabled: true
-      });
+      if (isSidePanelSupported()) {
+        void chrome.sidePanel.setOptions({
+          tabId,
+          path: "sidepanel.html",
+          enabled: true
+        });
+      }
     }
   });
 });
