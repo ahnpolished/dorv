@@ -455,3 +455,27 @@ h3 {
   stroke-linejoin: round;
   stroke-width: 2;
 }
+
+/* Compatibility warning */
+
+.dorv-compat-warning {
+  background: var(--dorv-warning-subtle);
+  border: 1px solid var(--dorv-warning);
+  border-radius: var(--dorv-radius-sm);
+  color: var(--dorv-warning);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+}
+
+.dorv-compat-warning strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.dorv-compat-warning p {
+  margin: 0;
+  color: var(--dorv-text-on-dark);
+}

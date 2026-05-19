@@ -289,7 +289,7 @@ claims:
   HUM-1251:
     agent: claude-code
     status: in_progress
-    claimed_at: "2026-05-19T23:55:00Z"
+    claimed_at: "2026-05-19T23:49:31Z"
     depends_on: []
     branch: feature/hum-1251
     worktree: .worktrees/feature-hum-1251

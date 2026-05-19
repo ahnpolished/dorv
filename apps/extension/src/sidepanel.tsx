@@ -14,6 +14,7 @@ import {
 } from "../lib/github/pr-files.js";
 import { fetchPullRequestMeta } from "../lib/github/fetch.js";
 import { createDocViaBackground, syncNowViaBackground } from "../lib/adapters/messages.js";
+import { checkSidePanelCompat, detectBrowserKind } from "../lib/compat.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
@@ -422,6 +423,11 @@ function SidePanel() {
     }
   };
 
+  const compat = checkSidePanelCompat(
+    typeof chrome !== "undefined" ? chrome.sidePanel : undefined,
+    detectBrowserKind()
+  );
+
   if (onboarding === "checking")
     return (
       <div className="dorv-sidepanel">
@@ -452,6 +458,12 @@ function SidePanel() {
   if (tabKind === "neutral") {
     return (
       <div className="dorv-sidepanel">
+        {!compat.compatible && compat.warning && (
+          <div className="dorv-compat-warning" role="alert">
+            <strong>Compatibility notice</strong>
+            <p>{compat.warning}</p>
+          </div>
+        )}
         <p className="dorv-eyebrow">dorv</p>
         <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
       </div>
@@ -502,6 +514,12 @@ function SidePanel() {
 
   return (
     <main className="dorv-sidepanel">
+      {!compat.compatible && compat.warning && (
+        <div className="dorv-compat-warning" role="alert">
+          <strong>Compatibility notice</strong>
+          <p>{compat.warning}</p>
+        </div>
+      )}
       <header className="dorv-header">
         <div className="dorv-header-title">
           <p className="dorv-eyebrow">dorv</p>
