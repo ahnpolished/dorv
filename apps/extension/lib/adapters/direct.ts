@@ -159,7 +159,7 @@ export class DirectAdapter implements SyncAdapter {
     const result = await pushGDocComment(
       gToken,
       mapping.docId,
-      comment.body,
+      `${comment.body}\n\n[View](${comment.htmlUrl})`,
       createDriveCommentContext(comment)
     );
 

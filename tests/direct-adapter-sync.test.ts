@@ -178,7 +178,8 @@ describe("DirectAdapter baseline sync", () => {
     await adapter.syncAll();
 
     expect(driveBody).toEqual({
-      content: "Please tighten this paragraph.",
+      content:
+        "Please tighten this paragraph.\n\n[View](https://github.com/org/repo/pull/123#discussion_r1)",
       anchor: JSON.stringify({
         region: { kind: "drive#commentRegion", line: 42, rev: "head" },
         dorv: { path: "docs/rfc.md", side: "RIGHT" }
