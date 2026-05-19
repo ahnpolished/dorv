@@ -146,3 +146,15 @@ export function createStatusStore(storage: StorageArea) {
     }
   };
 }
+
+export function createSettingsStore(storage: StorageArea) {
+  const KEY = "settingsStore:autoOpenSidepanel";
+  return {
+    async getAutoOpenSidepanel(): Promise<boolean> {
+      return (await getValue<boolean>(storage, KEY)) ?? true;
+    },
+    async setAutoOpenSidepanel(value: boolean): Promise<void> {
+      await storage.set({ [KEY]: value });
+    }
+  };
+}

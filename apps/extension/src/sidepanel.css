@@ -455,3 +455,87 @@ h3 {
   stroke-linejoin: round;
   stroke-width: 2;
 }
+
+/* Neutral / past-docs view */
+
+.dorv-neutral-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.dorv-neutral-header .dorv-eyebrow {
+  margin: 0;
+}
+
+.dorv-close-btn {
+  background: none;
+  border: none;
+  color: var(--dorv-muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--dorv-radius-sm);
+  transition:
+    color 0.15s,
+    background 0.15s;
+  flex-shrink: 0;
+}
+
+.dorv-close-btn:hover {
+  color: var(--dorv-text-on-dark);
+  background: var(--dorv-muted-subtle);
+}
+
+.past-docs-heading {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dorv-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+}
+
+.past-docs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.past-docs-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--dorv-bg-elevated);
+  border: 1px solid var(--dorv-border);
+  border-radius: var(--dorv-radius-sm);
+  gap: 8px;
+}
+
+.past-docs-repo a {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dorv-text-on-dark);
+  text-decoration: none;
+}
+
+.past-docs-repo a:hover {
+  color: var(--dorv-orange);
+}
+
+.past-docs-link {
+  font-size: 12px;
+  color: var(--dorv-orange);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.past-docs-link:hover {
+  text-decoration: underline;
+}

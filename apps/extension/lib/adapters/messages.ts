@@ -31,6 +31,10 @@ export async function openSidePanelViaBackground(): Promise<void> {
   await sendBackgroundMessage<undefined>({ type: "OPEN_SIDE_PANEL" }, "Side panel open failed.");
 }
 
+export async function closeSidePanelViaBackground(): Promise<void> {
+  await sendBackgroundMessage<undefined>({ type: "CLOSE_SIDE_PANEL" }, "Side panel close failed.");
+}
+
 export async function syncNowViaBackground(): Promise<void> {
   await sendBackgroundMessage<undefined>({ type: "SYNC_NOW" }, "Manual sync failed.");
 }

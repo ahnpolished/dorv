@@ -13,7 +13,12 @@ import {
   filterMarkdownFiles
 } from "../lib/github/pr-files.js";
 import { fetchPullRequestMeta } from "../lib/github/fetch.js";
-import { createDocViaBackground, syncNowViaBackground } from "../lib/adapters/messages.js";
+import {
+  createDocViaBackground,
+  syncNowViaBackground,
+  closeSidePanelViaBackground
+} from "../lib/adapters/messages.js";
+import { buildPastDocsList } from "../lib/sidepanel/model.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
@@ -226,6 +231,7 @@ function SidePanel() {
   const [syncingNow, setSyncingNow] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>(undefined);
+  const [pastDocs, setPastDocs] = useState<DocMapping[]>([]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -306,6 +312,8 @@ function SidePanel() {
         return;
       }
 
+      const docs = await buildPastDocsList(docStore);
+      setPastDocs(docs);
       setTabKind("neutral");
       setLoading(false);
     } catch (err) {
@@ -452,8 +460,42 @@ function SidePanel() {
   if (tabKind === "neutral") {
     return (
       <div className="dorv-sidepanel">
-        <p className="dorv-eyebrow">dorv</p>
-        <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
+        <div className="dorv-neutral-header">
+          <p className="dorv-eyebrow">dorv</p>
+          <button
+            type="button"
+            className="dorv-close-btn"
+            aria-label="Close panel"
+            onClick={() => void closeSidePanelViaBackground()}
+          >
+            ›
+          </button>
+        </div>
+        {pastDocs.length === 0 ? (
+          <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
+        ) : (
+          <>
+            <h2 className="past-docs-heading">Recent reviews</h2>
+            <ul className="past-docs-list">
+              {pastDocs.map((doc) => (
+                <li key={doc.docId} className="past-docs-item">
+                  <div className="past-docs-repo">
+                    <a
+                      href={`https://github.com/${doc.repo}/pull/${doc.prNumber.toString()}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {doc.repo}#{doc.prNumber.toString()}
+                    </a>
+                  </div>
+                  <a href={doc.docUrl} target="_blank" rel="noreferrer" className="past-docs-link">
+                    Open Doc
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     );
   }
@@ -519,6 +561,14 @@ function SidePanel() {
             href={mapping.docUrl}
             disabled={!mapping.docUrl}
           />
+          <button
+            type="button"
+            className="dorv-close-btn"
+            aria-label="Close panel"
+            onClick={() => void closeSidePanelViaBackground()}
+          >
+            ›
+          </button>
           <button
             type="button"
             className="sync-now-btn"

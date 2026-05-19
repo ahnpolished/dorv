@@ -2,12 +2,13 @@ import { defineBackground } from "wxt/utils/define-background";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
-import { createStatusStore } from "../lib/storage/stores.js";
+import { createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
 const SYNC_POLL_MINUTES = 1;
 const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
+const GH_PR_URL_PATTERN = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\//;
 
 interface ChromeMessage {
   type: string;
@@ -19,6 +20,7 @@ export default defineBackground(() => {
   const storageArea = createChromeStorageArea(chrome.storage.local);
   const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
   const statusStore = createStatusStore(storageArea);
+  const settingsStore = createSettingsStore(storageArea);
 
   const startPolling = () => {
     void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: SYNC_POLL_MINUTES });
@@ -97,6 +99,15 @@ export default defineBackground(() => {
             sendResponse({ success: true, payload: status });
             break;
           }
+          case "CLOSE_SIDE_PANEL": {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabId = tabs[0]?.id;
+            if (tabId !== undefined) {
+              await chrome.sidePanel.setOptions({ tabId, enabled: false });
+            }
+            sendResponse({ success: true });
+            break;
+          }
           default:
             sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
         }
@@ -111,11 +122,16 @@ export default defineBackground(() => {
   });
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status === "complete" && tab.url?.startsWith(GDOC_URL_PREFIX)) {
-      void chrome.sidePanel.setOptions({
-        tabId,
-        path: "sidepanel.html",
-        enabled: true
+    if (changeInfo.status !== "complete" || !tab.url) return;
+    if (tab.url.startsWith(GDOC_URL_PREFIX)) {
+      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
+      return;
+    }
+    if (GH_PR_URL_PATTERN.test(tab.url)) {
+      void settingsStore.getAutoOpenSidepanel().then((auto) => {
+        if (auto) {
+          void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
+        }
       });
     }
   });
