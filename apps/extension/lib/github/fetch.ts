@@ -71,6 +71,7 @@ export async function fetchReviewComments(
     path: c.path,
     line: c.line,
     side: c.side,
+    diffHunk: c.diff_hunk,
     inReplyToId: c.in_reply_to_id,
     createdAt: c.created_at,
     updatedAt: c.updated_at,

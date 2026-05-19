@@ -1,5 +1,13 @@
 const DRIVE_COMMENT_MAX_BYTES = 4096;
 
+interface DriveCommentOptions {
+  anchor?: string;
+  quotedFileContent?: {
+    mimeType: string;
+    value: string;
+  };
+}
+
 export function truncateToDriveLimit(text: string): string {
   const encoded = new TextEncoder().encode(text);
   if (encoded.length <= DRIVE_COMMENT_MAX_BYTES) return text;
@@ -38,7 +46,8 @@ export async function pushGDocReply(
 export async function pushGDocComment(
   token: string,
   docId: string,
-  content: string
+  content: string,
+  options: DriveCommentOptions = {}
 ): Promise<{ id: string }> {
   const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments?fields=id`;
 
@@ -48,7 +57,7 @@ export async function pushGDocComment(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ content: truncateToDriveLimit(content) })
+    body: JSON.stringify({ content: truncateToDriveLimit(content), ...options })
   });
 
   if (!resp.ok) {
