@@ -69,7 +69,8 @@ describe("Reply sync — bidirectional", () => {
         source: "github"
       });
 
-      mockFetch.mockImplementation(async (url: string) => {
+      let driveReplyBody: any;
+      mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
         if (url.includes("api.github.com")) {
           return {
             ok: true,
@@ -103,6 +104,7 @@ describe("Reply sync — bidirectional", () => {
           };
         }
         if (url.includes("googleapis.com/drive") && url.includes("/replies")) {
+          driveReplyBody = JSON.parse(String(init?.body));
           return { ok: true, json: () => Promise.resolve({ id: "drive-reply-1" }) };
         }
         if (url.includes("googleapis.com/drive")) {
@@ -120,6 +122,7 @@ describe("Reply sync — bidirectional", () => {
       expect(replyMapping?.ghParentCommentId).toBe(10);
       expect(replyMapping?.docParentCommentId).toBe("doc-c-10");
       expect(replyMapping?.source).toBe("github");
+      expect(driveReplyBody).toEqual({ content: "reply text" });
     });
 
     it("skips GH reply if parent comment not yet mapped", async () => {

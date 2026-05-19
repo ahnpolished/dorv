@@ -156,8 +156,12 @@ export class DirectAdapter implements SyncAdapter {
       throw new Error("Google token missing during sync");
     }
 
-    const content = `**@${comment.user}** on ${comment.path}:${comment.line?.toString() ?? "?"} -- ${comment.body} -- [View](${comment.htmlUrl})`;
-    const result = await pushGDocComment(gToken, mapping.docId, content);
+    const result = await pushGDocComment(
+      gToken,
+      mapping.docId,
+      comment.body,
+      createDriveCommentContext(comment)
+    );
 
     const commentMapping: CommentMapping = {
       repo: mapping.repo,
@@ -278,12 +282,11 @@ export class DirectAdapter implements SyncAdapter {
             const parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
             if (!parentMapping) continue;
             try {
-              const content = `**@${reply.user}** (reply): ${reply.body} -- [View](${reply.htmlUrl})`;
               const result = await pushGDocReply(
                 gToken,
                 mapping.docId,
                 parentMapping.docCommentId,
-                content
+                reply.body
               );
               const replyMapping: ReplyMapping = {
                 repo: mapping.repo,
@@ -356,4 +359,68 @@ export class DirectAdapter implements SyncAdapter {
     const mapping = await this.identityStore.getByGoogleAuthor(googleAuthor);
     return mapping ? `@${mapping.githubLogin}` : googleAuthor;
   }
+}
+
+function createDriveCommentContext(comment: GitHubReviewComment): {
+  anchor?: string;
+  quotedFileContent?: { mimeType: string; value: string };
+} {
+  const context: {
+    anchor?: string;
+    quotedFileContent?: { mimeType: string; value: string };
+  } = {};
+
+  if (comment.line != null) {
+    context.anchor = JSON.stringify({
+      region: { kind: "drive#commentRegion", line: comment.line, rev: "head" },
+      dorv: { path: comment.path, side: comment.side ?? "RIGHT" }
+    });
+  }
+
+  const quotedLine = findQuotedLine(comment);
+  if (quotedLine) {
+    context.quotedFileContent = {
+      mimeType: "text/plain",
+      value: quotedLine
+    };
+  }
+
+  return context;
+}
+
+function findQuotedLine(comment: GitHubReviewComment): string | undefined {
+  if (!comment.diffHunk || comment.line == null) return undefined;
+
+  const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(comment.diffHunk);
+  if (!header) return undefined;
+
+  let oldLine = Number(header[1]);
+  let newLine = Number(header[2]);
+  const side = comment.side ?? "RIGHT";
+
+  for (const line of comment.diffHunk.split("\n").slice(1)) {
+    if (line.startsWith("\\ No newline")) continue;
+    const marker = line[0];
+    const text = line.slice(1);
+
+    if (marker === " ") {
+      if (comment.line === (side === "LEFT" ? oldLine : newLine)) return text;
+      oldLine++;
+      newLine++;
+      continue;
+    }
+
+    if (marker === "-") {
+      if (side === "LEFT" && comment.line === oldLine) return text;
+      oldLine++;
+      continue;
+    }
+
+    if (marker === "+") {
+      if (side === "RIGHT" && comment.line === newLine) return text;
+      newLine++;
+    }
+  }
+
+  return undefined;
 }
