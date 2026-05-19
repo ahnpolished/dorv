@@ -1,3 +1,16 @@
+const DRIVE_COMMENT_MAX_BYTES = 4096;
+
+export function truncateToDriveLimit(text: string): string {
+  const encoded = new TextEncoder().encode(text);
+  if (encoded.length <= DRIVE_COMMENT_MAX_BYTES) return text;
+  // Reserve 3 bytes for the UTF-8 ellipsis (…). Walk back from the cut
+  // point past any continuation bytes (0x80–0xBF) so we never split a
+  // multibyte sequence.
+  let end = DRIVE_COMMENT_MAX_BYTES - 3;
+  while (end > 0 && ((encoded[end] ?? 0) & 0xc0) === 0x80) end--;
+  return new TextDecoder().decode(encoded.slice(0, end)) + "…";
+}
+
 export async function pushGDocReply(
   token: string,
   docId: string,
@@ -12,7 +25,7 @@ export async function pushGDocReply(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content: truncateToDriveLimit(content) })
   });
 
   if (!resp.ok) {
@@ -35,7 +48,7 @@ export async function pushGDocComment(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content: truncateToDriveLimit(content) })
   });
 
   if (!resp.ok) {
