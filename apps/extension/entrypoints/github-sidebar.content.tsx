@@ -17,7 +17,12 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createStatusStore } from "../lib/storage/stores.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
-import { createDocViaBackground, openSidePanelViaBackground } from "../lib/adapters/messages.js";
+import {
+  createDocViaBackground,
+  openSidePanelViaBackground,
+  syncNowViaBackground
+} from "../lib/adapters/messages.js";
+import { watchForNewGHComments } from "../lib/github/comment-observer.js";
 import type { MarkdownFileRef } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 import animationsCss from "../lib/design/animations.css?inline";
@@ -238,6 +243,13 @@ export default defineContentScript({
     document.addEventListener("turbo:load", () => {
       void renderGithubSidebar(ctx);
     });
+
+    const stopWatching = watchForNewGHComments(() => {
+      void syncNowViaBackground().catch((err: unknown) => {
+        console.debug("[dorv] fast sync failed:", err);
+      });
+    });
+    ctx.onInvalidated(stopWatching);
   }
 });
 
