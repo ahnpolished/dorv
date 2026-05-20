@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createSettingsStore } from "../lib/storage/stores.js";
+import { isSidePanelSupported } from "../lib/compat.js";
 import "./options.css";
 
 const storageArea = createChromeStorageArea(chrome.storage.local);
@@ -18,6 +19,7 @@ function Options() {
   const [validating, setValidating] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [autoOpen, setAutoOpen] = useState(true);
+  const sidePanelSupported = isSidePanelSupported();
 
   useEffect(() => {
     async function load() {
@@ -115,6 +117,14 @@ function Options() {
             <p className="options-subtitle">Sync GitHub review threads with Google Docs.</p>
           </div>
         </header>
+
+        {!sidePanelSupported && (
+          <div className="compat-warning dorv-state-enter" role="alert">
+            <strong>Browser compatibility notice:</strong> The side panel is not supported in your
+            current browser. dorv works best in Chrome 114+ or Edge 114+. Comment sync will continue
+            to function, but the side panel UI will not be available.
+          </div>
+        )}
 
         {notice && <p className="save-confirmation dorv-state-enter">{notice}</p>}
 

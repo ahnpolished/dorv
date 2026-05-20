@@ -4,6 +4,7 @@ import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
+import { isSidePanelSupported } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
@@ -41,7 +42,9 @@ export default defineBackground(() => {
   };
 
   chrome.runtime.onInstalled.addListener(() => {
-    void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    if (isSidePanelSupported()) {
+      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    }
     startPolling();
     void handlePoll();
   });
@@ -64,6 +67,13 @@ export default defineBackground(() => {
 
         switch (message.type) {
           case "OPEN_SIDE_PANEL": {
+            if (!isSidePanelSupported()) {
+              sendResponse({
+                success: false,
+                error: "Side panel is not supported in this browser."
+              });
+              break;
+            }
             if (sender.tab?.id === undefined) {
               throw new Error("Cannot open side panel without a sender tab.");
             }
@@ -100,10 +110,12 @@ export default defineBackground(() => {
             break;
           }
           case "CLOSE_SIDE_PANEL": {
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-            const tabId = tabs[0]?.id;
-            if (tabId !== undefined) {
-              await chrome.sidePanel.setOptions({ tabId, enabled: false });
+            if (isSidePanelSupported()) {
+              const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+              const tabId = tabs[0]?.id;
+              if (tabId !== undefined) {
+                await chrome.sidePanel.setOptions({ tabId, enabled: false });
+              }
             }
             sendResponse({ success: true });
             break;
@@ -122,6 +134,7 @@ export default defineBackground(() => {
   });
 
   const syncTabSidePanel = (tabId: number, url?: string) => {
+    if (!isSidePanelSupported()) return;
     void syncSidePanelForTabUrl({
       tabId,
       url,

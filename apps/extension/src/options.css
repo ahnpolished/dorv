@@ -164,6 +164,17 @@ button.secondary:hover:not(:disabled) {
   width: 100%;
 }
 
+.compat-warning {
+  background: var(--dorv-warning-subtle);
+  border: 1px solid var(--dorv-warning);
+  border-radius: var(--dorv-radius-sm);
+  color: var(--dorv-text);
+  font-size: var(--dorv-text-sm);
+  line-height: 1.5;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+}
+
 .toggle-row {
   display: flex;
   align-items: center;

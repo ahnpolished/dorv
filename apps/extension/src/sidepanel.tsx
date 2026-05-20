@@ -18,6 +18,7 @@ import {
   syncNowViaBackground,
   closeSidePanelViaBackground
 } from "../lib/adapters/messages.js";
+import { checkSidePanelCompat, detectBrowserKind } from "../lib/compat.js";
 import { buildPastDocsList } from "../lib/sidepanel/model.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
@@ -430,6 +431,11 @@ function SidePanel() {
     }
   };
 
+  const compat = checkSidePanelCompat(
+    typeof chrome !== "undefined" ? chrome.sidePanel : undefined,
+    detectBrowserKind()
+  );
+
   if (onboarding === "checking")
     return (
       <div className="dorv-sidepanel">
@@ -460,6 +466,12 @@ function SidePanel() {
   if (tabKind === "neutral") {
     return (
       <div className="dorv-sidepanel">
+        {!compat.compatible && compat.warning && (
+          <div className="dorv-compat-warning" role="alert">
+            <strong>Compatibility notice</strong>
+            <p>{compat.warning}</p>
+          </div>
+        )}
         <div className="dorv-neutral-header">
           <p className="dorv-eyebrow">dorv</p>
           <button
@@ -544,6 +556,12 @@ function SidePanel() {
 
   return (
     <main className="dorv-sidepanel">
+      {!compat.compatible && compat.warning && (
+        <div className="dorv-compat-warning" role="alert">
+          <strong>Compatibility notice</strong>
+          <p>{compat.warning}</p>
+        </div>
+      )}
       <header className="dorv-header">
         <div className="dorv-header-title">
           <p className="dorv-eyebrow">dorv</p>
