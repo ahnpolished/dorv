@@ -4,7 +4,7 @@ import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { openSidePanelForTab, syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
-import { isSidePanelSupported } from "../lib/compat.js";
+import { isSidePanelSupported, detectBrowserKind } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
@@ -22,6 +22,7 @@ export default defineBackground(() => {
   const docStore = createDocStore(storageArea);
   const statusStore = createStatusStore(storageArea);
   const settingsStore = createSettingsStore(storageArea);
+  const browserKind = detectBrowserKind();
 
   const startPolling = () => {
     void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: SYNC_POLL_MINUTES });
@@ -145,7 +146,8 @@ export default defineBackground(() => {
       docStore,
       settingsStore,
       setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
-      open: chrome.sidePanel.open.bind(chrome.sidePanel)
+      open: chrome.sidePanel.open.bind(chrome.sidePanel),
+      browserKind
     }).catch((err: unknown) => {
       console.error("Side panel sync failed:", err);
     });

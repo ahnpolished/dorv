@@ -26,11 +26,11 @@ function makeDeps() {
   const setOptions =
     vi.fn<(options: { tabId: number; path?: string; enabled: boolean }) => Promise<void>>();
   const open = vi.fn<(options: { tabId: number }) => Promise<void>>();
-  return { docStore, settingsStore, setOptions, open };
+  return { docStore, settingsStore, setOptions, open, browserKind: "chrome" as const };
 }
 
 describe("syncSidePanelForTabUrl", () => {
-  it("opens the side panel for a previously synced GitHub PR", async () => {
+  it("opens the side panel for a previously synced GitHub PR in Chrome", async () => {
     const deps = makeDeps();
     await deps.docStore.upsert(mapping);
 
@@ -48,7 +48,7 @@ describe("syncSidePanelForTabUrl", () => {
     expect(deps.open).toHaveBeenCalledWith({ tabId: 7 });
   });
 
-  it("opens the side panel for a previously synced Google Doc", async () => {
+  it("opens the side panel for a previously synced Google Doc in Chrome", async () => {
     const deps = makeDeps();
     await deps.docStore.upsert(mapping);
 
@@ -75,6 +75,25 @@ describe("syncSidePanelForTabUrl", () => {
       tabId: 9,
       url: "https://github.com/org/repo/pull/12",
       ...deps
+    });
+
+    expect(deps.setOptions).toHaveBeenCalledWith({
+      tabId: 9,
+      path: "sidepanel.html",
+      enabled: true
+    });
+    expect(deps.open).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-open when the browser is not Chrome", async () => {
+    const deps = makeDeps();
+    await deps.docStore.upsert(mapping);
+
+    await syncSidePanelForTabUrl({
+      tabId: 9,
+      url: "https://github.com/org/repo/pull/12",
+      ...deps,
+      browserKind: "edge"
     });
 
     expect(deps.setOptions).toHaveBeenCalledWith({
