@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js";
 import { createDocStore, createSettingsStore } from "../apps/extension/lib/storage/stores.js";
 import {
@@ -30,6 +30,18 @@ function makeDeps() {
 }
 
 describe("syncSidePanelForTabUrl", () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      tabs: {
+        query: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockResolvedValue({ id: 123 })
+      },
+      runtime: {
+        getURL: vi.fn().mockReturnValue("chrome-extension://id/sidepanel.html")
+      }
+    };
+  });
+
   it("opens the side panel for a previously synced GitHub PR in Chrome", async () => {
     const deps = makeDeps();
     await deps.docStore.upsert(mapping);
@@ -116,6 +128,23 @@ describe("syncSidePanelForTabUrl", () => {
 
     expect(deps.setOptions).toHaveBeenCalledWith({ tabId: 10, enabled: false });
     expect(deps.open).not.toHaveBeenCalled();
+  });
+
+  it("auto-opens a background tab for Edge when auto-open is enabled", async () => {
+    const deps = makeDeps();
+    await deps.docStore.upsert(mapping);
+
+    await syncSidePanelForTabUrl({
+      tabId: 7,
+      url: "https://github.com/org/repo/pull/12",
+      ...deps,
+      browserKind: "edge"
+    });
+
+    expect(chrome.tabs.create).toHaveBeenCalledWith({
+      url: "chrome-extension://id/sidepanel.html",
+      active: false
+    });
   });
 });
 
