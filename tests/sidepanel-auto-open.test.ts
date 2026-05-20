@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js";
 import { createDocStore, createSettingsStore } from "../apps/extension/lib/storage/stores.js";
-import { syncSidePanelForTabUrl } from "../apps/extension/lib/background/sidepanel.js";
+import {
+  openSidePanelForTab,
+  syncSidePanelForTabUrl
+} from "../apps/extension/lib/background/sidepanel.js";
 import type { DocMapping } from "../apps/extension/lib/adapters/types.js";
 
 const mapping: DocMapping = {
@@ -94,5 +97,25 @@ describe("syncSidePanelForTabUrl", () => {
 
     expect(deps.setOptions).toHaveBeenCalledWith({ tabId: 10, enabled: false });
     expect(deps.open).not.toHaveBeenCalled();
+  });
+});
+
+describe("openSidePanelForTab", () => {
+  it("enables the side panel before opening it", async () => {
+    const setOptions =
+      vi.fn<(options: { tabId: number; path?: string; enabled: boolean }) => Promise<void>>();
+    const open = vi.fn<(options: { tabId: number }) => Promise<void>>();
+
+    await openSidePanelForTab({ tabId: 12, setOptions, open });
+
+    expect(setOptions).toHaveBeenCalledWith({
+      tabId: 12,
+      path: "sidepanel.html",
+      enabled: true
+    });
+    expect(open).toHaveBeenCalledWith({ tabId: 12 });
+    expect(setOptions.mock.invocationCallOrder[0] ?? 0).toBeLessThan(
+      open.mock.invocationCallOrder[0] ?? 0
+    );
   });
 });
