@@ -329,6 +329,23 @@ function SidePanel() {
     }
   }, [onboarding]);
 
+  // Fast poll: while the sidepanel is open and a doc is loaded, sync every 5s
+  // instead of waiting for the 1-minute background alarm.
+  useEffect(() => {
+    if (!mapping) return;
+    const captured = mapping;
+    const id = setInterval(() => {
+      void syncNowViaBackground()
+        .then(() => loadSyncData(captured))
+        .catch((err: unknown) => {
+          console.debug("[dorv] fast poll error:", err);
+        });
+    }, 5_000);
+    return () => {
+      clearInterval(id);
+    };
+  }, [mapping?.docId]); // loadSyncData is stable; docId change restarts the interval
+
   const handleCreateDoc = async () => {
     if (!prRef) return;
     setCreating(true);
