@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
+import { createSettingsStore } from "../lib/storage/stores.js";
 import { isSidePanelSupported } from "../lib/compat.js";
 import "./options.css";
 
-const authStore = createAuthStore(
-  createChromeStorageArea(chrome.storage.local),
-  createChromeStorageArea(chrome.storage.managed)
-);
+const storageArea = createChromeStorageArea(chrome.storage.local);
+const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
+const settingsStore = createSettingsStore(storageArea);
 
 function Options() {
   const [githubPat, setGithubPat] = useState("");
@@ -18,6 +18,7 @@ function Options() {
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
+  const [autoOpen, setAutoOpen] = useState(true);
   const sidePanelSupported = isSidePanelSupported();
 
   useEffect(() => {
@@ -38,6 +39,7 @@ function Options() {
         // No cached token — show disconnected state
       }
       setGoogleConnected(!!token);
+      setAutoOpen(await settingsStore.getAutoOpenSidepanel());
       setLoading(false);
     }
     void load();
@@ -169,6 +171,22 @@ function Options() {
             >
               {googleConnected ? "Sign Out from Google" : "Connect Google Account"}
             </button>
+          </section>
+
+          <section>
+            <h2>Behaviour</h2>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={autoOpen}
+                onChange={(e) => {
+                  const value = e.target.checked;
+                  setAutoOpen(value);
+                  void settingsStore.setAutoOpenSidepanel(value);
+                }}
+              />
+              <span>Automatically enable sidepanel on GitHub PRs</span>
+            </label>
           </section>
 
           <section>

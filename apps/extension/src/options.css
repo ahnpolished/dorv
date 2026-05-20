@@ -174,3 +174,19 @@ button.secondary:hover:not(:disabled) {
   margin-bottom: 16px;
   padding: 10px 14px;
 }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--dorv-text);
+}
+
+.toggle-row input[type="checkbox"] {
+  accent-color: var(--dorv-orange);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}

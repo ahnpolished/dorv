@@ -120,6 +120,138 @@ describe("DirectAdapter baseline sync", () => {
     expect(m.docCommentId).toBe("g-comm-1");
   });
 
+  it("pushes GH comments to GDoc with exact body and line context", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    await docStore.upsert({
+      ...ref,
+      docId: "doc-1",
+      docUrl: "url-1",
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "sha1",
+      latestSha: "sha1",
+      isStale: false
+    });
+
+    let driveBody: any;
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.includes("github.com")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1,
+                body: "Please tighten this paragraph.",
+                path: "docs/rfc.md",
+                line: 42,
+                side: "RIGHT",
+                diff_hunk: "@@ -40,3 +40,3 @@\n context\n unchanged\n+target paragraph",
+                in_reply_to_id: null,
+                user: { login: "alice" },
+                html_url: "https://github.com/org/repo/pull/123#discussion_r1",
+                created_at: "t",
+                updated_at: "t"
+              }
+            ])
+        };
+      }
+      if (
+        urlStr.includes("googleapis.com/drive/v3/files/doc-1/comments") &&
+        init?.method === "POST"
+      ) {
+        driveBody = JSON.parse(String(init?.body));
+        return { ok: true, json: () => Promise.resolve({ id: "g-comm-1" }) };
+      }
+      if (urlStr.includes("googleapis.com/drive/v3/files/doc-1/comments")) {
+        return { ok: true, json: () => Promise.resolve({ comments: [] }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.syncAll();
+
+    expect(driveBody).toEqual({
+      content:
+        "Please tighten this paragraph.\n\n[View](https://github.com/org/repo/pull/123#discussion_r1)",
+      anchor: JSON.stringify({
+        region: { kind: "drive#commentRegion", line: 42, rev: "head" },
+        dorv: { path: "docs/rfc.md", side: "RIGHT" }
+      }),
+      quotedFileContent: {
+        mimeType: "text/plain",
+        value: "target paragraph"
+      }
+    });
+  });
+
+  it("syncs 100 GH comments to distinct GDoc comments", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    await docStore.upsert({
+      ...ref,
+      docId: "doc-1",
+      docUrl: "url-1",
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "sha1",
+      latestSha: "sha1",
+      isStale: false
+    });
+
+    let nextDocId = 1;
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.includes("github.com")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve(
+              Array.from({ length: 100 }, (_, index) => ({
+                id: index + 1,
+                body: `comment ${index + 1}`,
+                path: "docs/rfc.md",
+                line: index + 1,
+                side: "RIGHT",
+                diff_hunk: `@@ -${index + 1},1 +${index + 1},1 @@\n+line ${index + 1}`,
+                in_reply_to_id: null,
+                user: { login: "alice" },
+                html_url: `https://github.com/org/repo/pull/123#discussion_r${index + 1}`,
+                created_at: "t",
+                updated_at: "t"
+              }))
+            )
+        };
+      }
+      if (
+        urlStr.includes("googleapis.com/drive/v3/files/doc-1/comments") &&
+        init?.method === "POST"
+      ) {
+        return { ok: true, json: () => Promise.resolve({ id: `g-comm-${nextDocId++}` }) };
+      }
+      if (urlStr.includes("googleapis.com/drive/v3/files/doc-1/comments")) {
+        return { ok: true, json: () => Promise.resolve({ comments: [] }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.syncAll();
+
+    const mappings = await mappingStore.listByPR(ref.repo, ref.prNumber);
+    expect(mappings).toHaveLength(100);
+    expect(await mappingStore.getByGH(100)).toMatchObject({ docCommentId: "g-comm-100" });
+  });
+
   it("creates review docs with anyone-with-link commenter access", async () => {
     await authStore.setGitHubToken("mock-gh-token");
     (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
@@ -332,7 +464,7 @@ describe("DirectAdapter baseline sync", () => {
     );
 
     expect(reviewBody).toMatchObject({
-      body: "> From Google Docs -- @humphreyahn -- Please fix this",
+      body: "> From Google Docs -- @humphreyahn -- Please fix this\n\n[View in GDoc](https://docs.google.com/document/d/doc-1/edit)",
       path: "README.md",
       line: 1
     });

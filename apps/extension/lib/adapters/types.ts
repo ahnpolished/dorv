@@ -47,6 +47,7 @@ export interface GitHubReviewComment {
   path: string;
   line?: number;
   side?: "LEFT" | "RIGHT";
+  diffHunk?: string;
   inReplyToId?: number;
   createdAt: string;
   updatedAt: string;
