@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { createDocStore, createStatusStore } from "../lib/storage/stores.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createAuthStore } from "../lib/storage/auth.js";
@@ -20,6 +21,12 @@ import {
 } from "../lib/adapters/messages.js";
 import { checkSidePanelCompat, detectBrowserKind } from "../lib/compat.js";
 import { buildPastDocsList } from "../lib/sidepanel/model.js";
+import {
+  createSidepanelQueryClient,
+  hydrateSidepanelCache,
+  persistSidepanelCacheSnapshot,
+  sidepanelQueryKeys
+} from "../lib/sidepanel/query-cache.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
@@ -87,6 +94,7 @@ const storageArea = createChromeStorageArea(chrome.storage.local);
 const docStore = createDocStore(storageArea);
 const statusStore = createStatusStore(storageArea);
 const authStore = createAuthStore(storageArea);
+const queryClient = createSidepanelQueryClient();
 
 type TabKind = "loading" | "gdoc" | "github-pr" | "neutral";
 type TabType = "github" | "gdoc" | "info";
@@ -214,6 +222,7 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
 }
 
 function SidePanel() {
+  const queryClient = useQueryClient();
   const [onboarding, setOnboarding] = useState<OnboardingView>("checking");
   const [tabKind, setTabKind] = useState<TabKind>("loading");
   const [prRef, setPrRef] = useState<GitHubPullRequestRef | undefined>(undefined);
@@ -251,18 +260,46 @@ function SidePanel() {
   }, []);
 
   const loadSyncData = async (m: DocMapping) => {
+    await hydrateSidepanelCache(storageArea, queryClient, m);
     const backendUrl = await authStore.getBackendUrl();
     const adapter = resolveAdapter({ backendUrl, authStore, storageArea });
+    const ghKey = sidepanelQueryKeys.ghComments(m);
+    const gdKey = sidepanelQueryKeys.gdocComments(m.docId);
+    const cmKey = sidepanelQueryKeys.commentMappings(m);
+    const statusKey = sidepanelQueryKeys.status(m);
+
+    const cachedGh = queryClient.getQueryData<GitHubReviewComment[]>(ghKey);
+    const cachedGd = queryClient.getQueryData<GoogleDocComment[]>(gdKey);
+    const cachedCm = queryClient.getQueryData<CommentMapping[]>(cmKey);
+    const cachedStatus = queryClient.getQueryData<SyncStatus>(statusKey);
+    if (cachedGh) setGhComments(cachedGh);
+    if (cachedGd) setGdocComments(cachedGd);
+    if (cachedCm) setCommentMappings(cachedCm);
+    if (cachedStatus) setStatus(cachedStatus);
+
     const [gh, gd, cm, s] = await Promise.all([
-      adapter.getGHComments(m),
-      adapter.getDocComments(m),
-      adapter.getCommentMappings(m),
-      statusStore.get(m.repo, m.prNumber)
+      queryClient.fetchQuery({
+        queryKey: ghKey,
+        queryFn: () => adapter.getGHComments(m)
+      }),
+      queryClient.fetchQuery({
+        queryKey: gdKey,
+        queryFn: () => adapter.getDocComments(m)
+      }),
+      queryClient.fetchQuery({
+        queryKey: cmKey,
+        queryFn: () => adapter.getCommentMappings(m)
+      }),
+      queryClient.fetchQuery({
+        queryKey: statusKey,
+        queryFn: () => statusStore.get(m.repo, m.prNumber)
+      })
     ]);
     setGhComments(gh);
     setGdocComments(gd);
     setCommentMappings(cm);
     setStatus(s);
+    await persistSidepanelCacheSnapshot(storageArea, queryClient, m);
   };
 
   const loadData = async () => {
@@ -293,27 +330,41 @@ function SidePanel() {
         setPrRef(ref);
         const pat = await authStore.getGitHubToken();
         const adapter = resolveAdapter({ authStore, storageArea });
-        const m = await adapter.getDoc({
-          repo: `${ref.owner}/${ref.repo}`,
-          prNumber: ref.prNumber
+        const docKey = sidepanelQueryKeys.doc(
+          `${ref.owner}/${ref.repo}#${ref.prNumber.toString()}`
+        );
+        const m = await queryClient.fetchQuery({
+          queryKey: docKey,
+          queryFn: () =>
+            adapter.getDoc({
+              repo: `${ref.owner}/${ref.repo}`,
+              prNumber: ref.prNumber
+            })
         });
         if (m) {
           setMapping(m);
           await loadSyncData(m);
         } else {
-          const files = filterMarkdownFiles(
-            await fetchPullRequestFiles(ref, {
-              fetch: fetch.bind(window),
-              ...(pat ? { token: pat } : {})
-            })
-          );
+          const files = await queryClient.fetchQuery({
+            queryKey: sidepanelQueryKeys.prFiles(`${ref.owner}/${ref.repo}`, ref.prNumber),
+            queryFn: async () =>
+              filterMarkdownFiles(
+                await fetchPullRequestFiles(ref, {
+                  fetch: fetch.bind(window),
+                  ...(pat ? { token: pat } : {})
+                })
+              )
+          });
           setPrFiles(files);
         }
         setLoading(false);
         return;
       }
 
-      const docs = await buildPastDocsList(docStore);
+      const docs = await queryClient.fetchQuery({
+        queryKey: sidepanelQueryKeys.activePrs(),
+        queryFn: () => buildPastDocsList(docStore)
+      });
       setPastDocs(docs);
       setTabKind("neutral");
       setLoading(false);
@@ -368,6 +419,10 @@ function SidePanel() {
         files: prFiles
       });
       setMapping(result.mapping);
+      await queryClient.invalidateQueries({
+        queryKey: ["pr", result.mapping.repo, result.mapping.prNumber]
+      });
+      await queryClient.invalidateQueries({ queryKey: sidepanelQueryKeys.activePrs() });
       await loadSyncData(result.mapping);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
@@ -387,10 +442,15 @@ function SidePanel() {
     setPushingId(comment.id);
     try {
       await pushDocComment(comment);
+      queryClient.setQueryData<GoogleDocComment[]>(
+        sidepanelQueryKeys.gdocComments(mapping.docId),
+        (current) => current?.filter((item) => item.id !== comment.id) ?? []
+      );
       setPushedId(comment.id);
       window.setTimeout(() => {
         setPushedId(undefined);
       }, 1500);
+      await invalidateSyncQueries(mapping);
       await loadData();
       alert("Comment pushed to GitHub!");
     } catch (err) {
@@ -408,6 +468,8 @@ function SidePanel() {
   };
 
   const handlePushAll = async () => {
+    if (!mapping) return;
+    const currentMapping = mapping;
     const pushable = unmappedGdocComments.filter((comment) => comment.quotedFileContent);
     if (pushable.length === 0) return;
 
@@ -419,11 +481,16 @@ function SidePanel() {
         setPushingId(comment.id);
         try {
           await pushDocComment(comment);
+          queryClient.setQueryData<GoogleDocComment[]>(
+            sidepanelQueryKeys.gdocComments(currentMapping.docId),
+            (current) => current?.filter((item) => item.id !== comment.id) ?? []
+          );
           pushed += 1;
         } catch (err) {
           failures.push(`${comment.author}: ${String(err)}`);
         }
       }
+      await invalidateSyncQueries(currentMapping);
       await loadData();
       if (failures.length > 0) {
         alert(`Pushed ${pushed.toString()} comments. ${failures.length.toString()} failed.`);
@@ -440,6 +507,7 @@ function SidePanel() {
     setSyncingNow(true);
     try {
       await syncNowViaBackground();
+      if (mapping) await invalidateSyncQueries(mapping);
       await loadData();
     } catch (err) {
       alert(`Sync failed: ${String(err)}`);
@@ -452,6 +520,15 @@ function SidePanel() {
     typeof chrome !== "undefined" ? chrome.sidePanel : undefined,
     detectBrowserKind()
   );
+
+  const invalidateSyncQueries = async (m: DocMapping) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: sidepanelQueryKeys.ghComments(m) }),
+      queryClient.invalidateQueries({ queryKey: sidepanelQueryKeys.gdocComments(m.docId) }),
+      queryClient.invalidateQueries({ queryKey: sidepanelQueryKeys.commentMappings(m) }),
+      queryClient.invalidateQueries({ queryKey: sidepanelQueryKeys.status(m) })
+    ]);
+  };
 
   if (onboarding === "checking")
     return (
@@ -752,7 +829,9 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <React.StrictMode>
-      <SidePanel />
+      <QueryClientProvider client={queryClient}>
+        <SidePanel />
+      </QueryClientProvider>
     </React.StrictMode>
   );
 }

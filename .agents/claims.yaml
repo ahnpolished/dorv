@@ -344,4 +344,13 @@ claims:
     worktree: .worktrees/feature-hum-1256
     pr: https://github.com/ahnpolished/dorv/pull/44
 
+  HUM-1257:
+    agent: other:gemini-cli
+    status: done
+    claimed_at: "2026-05-20T00:28:48Z"
+    depends_on: []
+    branch: feature/hum-1257
+    worktree: .worktrees/feature-hum-1257
+    completed_at: "2026-05-20T00:38:00Z"
+
 wait_queue: {}
