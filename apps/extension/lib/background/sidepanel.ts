@@ -46,6 +46,16 @@ export async function syncSidePanelForTabUrl({
       // We log but don't fail, as setOptions already enabled the panel for manual opening.
       console.debug("[dorv] sidePanel.open failed (expected if no gesture):", err);
     }
+  } else if (browserKind !== "chrome" && (await settingsStore.getAutoOpenSidepanel())) {
+    await ensureSidepanelTabOpen();
+  }
+}
+
+async function ensureSidepanelTabOpen() {
+  const url = chrome.runtime.getURL("sidepanel.html");
+  const tabs = await chrome.tabs.query({ url });
+  if (tabs.length === 0) {
+    await chrome.tabs.create({ url, active: false });
   }
 }
 

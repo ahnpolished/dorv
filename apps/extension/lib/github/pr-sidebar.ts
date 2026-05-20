@@ -1,4 +1,5 @@
 import type { DocMapping, MarkdownFileRef, SyncStatus } from "../adapters/types.js";
+import type { BrowserKind } from "../compat.js";
 
 export type PrSidebarMode = "loading" | "no-doc" | "linked" | "stale" | "error";
 
@@ -9,6 +10,8 @@ export interface PrSidebarInput {
   status?: SyncStatus | undefined;
   error?: string | undefined;
   hasCredentials?: boolean | undefined;
+  autoOpenEnabled?: boolean | undefined;
+  browserKind?: BrowserKind | undefined;
 }
 
 export type PrSidebarModel =
