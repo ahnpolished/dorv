@@ -20,6 +20,7 @@ function Options() {
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [autoOpen, setAutoOpen] = useState(true);
   const sidePanelSupported = isSidePanelSupported();
+  // const browserKind = detectBrowserKind();
 
   useEffect(() => {
     async function load() {
@@ -185,7 +186,7 @@ function Options() {
                   void settingsStore.setAutoOpenSidepanel(value);
                 }}
               />
-              <span>Automatically enable sidepanel on GitHub PRs</span>
+              <span>Automatically open sidepanel on linked reviews (Chrome only)</span>
             </label>
           </section>
 
