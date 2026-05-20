@@ -115,7 +115,8 @@ describe("HUM-1200 PR sidebar model", () => {
       docUrl: "https://docs.google.com/document/d/doc-1",
       lastSyncedLabel: "Last synced 2026-05-16T15:29:00Z",
       syncState: "idle",
-      syncNowLabel: "Sync now"
+      syncNowLabel: "Sync now",
+      showOpenSidepanelAction: false
     });
   });
 
@@ -137,7 +138,8 @@ describe("HUM-1200 PR sidebar model", () => {
       })
     ).toMatchObject({
       kind: "stale",
-      staleLabel: "PR changed: abcdef1 -> fedcba9"
+      staleLabel: "PR changed: abcdef1 -> fedcba9",
+      showOpenSidepanelAction: false
     });
   });
 
@@ -147,5 +149,26 @@ describe("HUM-1200 PR sidebar model", () => {
       title: "dorv",
       message: "GitHub API failed"
     });
+  });
+
+  it("shows open sidepanel action for Edge when auto-open is enabled", () => {
+    const model = build({
+      mode: "linked",
+      doc: {
+        repo: "ahnpolished/dorv",
+        prNumber: 42,
+        docId: "doc-1",
+        docUrl: "https://docs.google.com/document/d/doc-1",
+        createdAt: "2026-05-16T15:00:00Z",
+        lastSyncedAt: "2026-05-16T15:29:00Z",
+        headSha: "abcdef123456",
+        latestSha: "abcdef123456",
+        isStale: false
+      },
+      autoOpenEnabled: true,
+      browserKind: "edge"
+    });
+    if (model.kind !== "linked") throw new Error("Expected linked model");
+    expect(model.showOpenSidepanelAction).toBe(true);
   });
 });
