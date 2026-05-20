@@ -15,7 +15,7 @@ import type { PrSidebarModel, PrSidebarMode } from "../lib/github/pr-sidebar.js"
 import { fetchPullRequestMeta } from "../lib/github/fetch.js";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
-import { createStatusStore } from "../lib/storage/stores.js";
+import { createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import {
   createDocViaBackground,
@@ -23,6 +23,7 @@ import {
   syncNowViaBackground
 } from "../lib/adapters/messages.js";
 import { watchForNewGHComments } from "../lib/github/comment-observer.js";
+import { detectBrowserKind } from "../lib/compat.js";
 import type { MarkdownFileRef } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 import animationsCss from "../lib/design/animations.css?inline";
@@ -30,6 +31,8 @@ import tokensCss from "../lib/design/tokens.css?inline";
 
 const storageArea = createChromeStorageArea(chrome.storage.local);
 const authStore = createAuthStore(storageArea);
+const settingsStore = createSettingsStore(storageArea);
+const browserKind = detectBrowserKind();
 
 const ROOT_ID = "dorv-pr-sidebar-root";
 let currentUi: Awaited<ReturnType<typeof createShadowRootUi>> | null = null;
@@ -117,6 +120,14 @@ function GithubSidebar({
           </a>
           <p>{model.lastSyncedLabel}</p>
           <small>{model.syncState}</small>
+          {model.showOpenSidepanelAction && (
+            <div className="dorv-fallback-action">
+              <p className="dorv-fallback-hint">Auto-open blocked by browser</p>
+              <button type="button" onClick={handleSetup} className="secondary">
+                Open Side Panel
+              </button>
+            </div>
+          )}
           <button type="button" className="dorv-sync-button">
             {renderSyncIcon && (
               <img src={chrome.runtime.getURL("dorv-sync.svg")} alt="" className="dorv-sync-icon" />
@@ -132,6 +143,13 @@ function GithubSidebar({
             Open review doc
           </a>
           <p>{model.lastSyncedLabel}</p>
+          {model.showOpenSidepanelAction && (
+            <div className="dorv-fallback-action">
+              <button type="button" onClick={handleSetup} className="secondary">
+                Open Side Panel
+              </button>
+            </div>
+          )}
           <button type="button">{model.syncNowLabel}</button>
         </>
       )}
@@ -195,6 +213,7 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
   const status = ref
     ? await createStatusStore(storageArea).get(mapping?.repo ?? "", ref.prNumber)
     : undefined;
+  const autoOpenEnabled = await settingsStore.getAutoOpenSidepanel();
 
   if (generation !== renderGeneration) {
     return;
@@ -205,7 +224,15 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
     mode = mapping.isStale ? "stale" : "linked";
   }
 
-  const model = buildPrSidebarModel({ files, mode, hasCredentials, doc: mapping, status });
+  const model = buildPrSidebarModel({
+    files,
+    mode,
+    hasCredentials,
+    doc: mapping,
+    status,
+    autoOpenEnabled,
+    browserKind
+  });
 
   if (model.kind === "hidden") {
     return;
@@ -359,5 +386,23 @@ ${animationsCss}
 .dorv-sync-icon {
   height: 16px;
   width: 16px;
+}
+.dorv-fallback-action {
+  border-top: 1px solid var(--dorv-border-strong);
+  margin: 12px 0;
+  padding-top: 12px;
+}
+.dorv-fallback-hint {
+  color: var(--dorv-muted);
+  font-size: 11px;
+  margin: 0 0 6px;
+}
+.dorv-pr-sidebar button.secondary {
+  background: var(--dorv-light-surface);
+  border: 1px solid var(--dorv-border-strong);
+  color: var(--dorv-text);
+}
+.dorv-pr-sidebar button.secondary:hover:not(:disabled) {
+  background: var(--dorv-light-hover);
 }
 `;
