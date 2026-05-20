@@ -3,7 +3,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
-import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
+import { openSidePanelForTab, syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
 import { isSidePanelSupported } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
@@ -77,7 +77,11 @@ export default defineBackground(() => {
             if (sender.tab?.id === undefined) {
               throw new Error("Cannot open side panel without a sender tab.");
             }
-            await chrome.sidePanel.open({ tabId: sender.tab.id });
+            await openSidePanelForTab({
+              tabId: sender.tab.id,
+              setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
+              open: chrome.sidePanel.open.bind(chrome.sidePanel)
+            });
             sendResponse({ success: true });
             break;
           }

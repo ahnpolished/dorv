@@ -40,6 +40,19 @@ export async function syncSidePanelForTabUrl({
   }
 }
 
+export async function openSidePanelForTab({
+  tabId,
+  setOptions,
+  open
+}: {
+  tabId: number;
+  setOptions: SidePanelSetOptions;
+  open: SidePanelOpen;
+}): Promise<void> {
+  await setOptions({ tabId, path: "sidepanel.html", enabled: true });
+  await open({ tabId });
+}
+
 async function isLinkedReviewUrl(url: string, docStore: DocStore): Promise<boolean> {
   const docId = parseDocId(url);
   if (docId) {
