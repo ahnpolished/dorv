@@ -31,7 +31,6 @@ export type PrSidebarModel =
       lastSyncedLabel: string;
       syncState: SyncStatus["state"];
       syncNowLabel: string;
-      showOpenSidepanelAction?: boolean;
     }
   | {
       kind: "stale";
@@ -40,7 +39,6 @@ export type PrSidebarModel =
       staleLabel: string;
       lastSyncedLabel: string;
       syncNowLabel: string;
-      showOpenSidepanelAction?: boolean;
     }
   | { kind: "error"; title: string; message: string };
 
@@ -74,8 +72,6 @@ export function buildPrSidebarModel(input: PrSidebarInput): PrSidebarModel {
     return { kind: "error", title: "dorv", message: input.error ?? "Something went wrong" };
   }
 
-  const showOpenSidepanelAction = input.autoOpenEnabled === true && input.browserKind !== "chrome";
-
   if (input.doc !== undefined && input.mode === "stale") {
     return {
       kind: "stale",
@@ -83,8 +79,7 @@ export function buildPrSidebarModel(input: PrSidebarInput): PrSidebarModel {
       docUrl: input.doc.docUrl,
       staleLabel: `PR changed: ${shortSha(input.doc.headSha)} -> ${shortSha(input.doc.latestSha)}`,
       lastSyncedLabel: `Last synced ${input.doc.lastSyncedAt}`,
-      syncNowLabel: "Sync now",
-      showOpenSidepanelAction
+      syncNowLabel: "Sync now"
     };
   }
 
@@ -95,8 +90,7 @@ export function buildPrSidebarModel(input: PrSidebarInput): PrSidebarModel {
       docUrl: input.doc.docUrl,
       lastSyncedLabel: `Last synced ${input.doc.lastSyncedAt}`,
       syncState: input.status?.state ?? "idle",
-      syncNowLabel: "Sync now",
-      showOpenSidepanelAction
+      syncNowLabel: "Sync now"
     };
   }
 

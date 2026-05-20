@@ -77,8 +77,19 @@ function GithubSidebar({
   return (
     <aside className="dorv-pr-sidebar dorv-state-enter" data-dorv-surface="github-pr-sidebar">
       <style>{styles}</style>
-      <header>
+      <header
+        onClick={handleSetup}
+        style={{
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}
+      >
         <strong>{model.title}</strong>
+        <span title="Open in Panel/Tab" style={{ opacity: 0.6 }}>
+          🗂️
+        </span>
       </header>
       {model.kind === "needs-setup" && (
         <>
@@ -120,14 +131,6 @@ function GithubSidebar({
           </a>
           <p>{model.lastSyncedLabel}</p>
           <small>{model.syncState}</small>
-          {model.showOpenSidepanelAction && (
-            <div className="dorv-fallback-action">
-              <p className="dorv-fallback-hint">Auto-open blocked by browser</p>
-              <button type="button" onClick={handleSetup} className="secondary">
-                Open Side Panel
-              </button>
-            </div>
-          )}
           <button type="button" className="dorv-sync-button">
             {renderSyncIcon && (
               <img src={chrome.runtime.getURL("dorv-sync.svg")} alt="" className="dorv-sync-icon" />
@@ -143,13 +146,6 @@ function GithubSidebar({
             Open review doc
           </a>
           <p>{model.lastSyncedLabel}</p>
-          {model.showOpenSidepanelAction && (
-            <div className="dorv-fallback-action">
-              <button type="button" onClick={handleSetup} className="secondary">
-                Open Side Panel
-              </button>
-            </div>
-          )}
           <button type="button">{model.syncNowLabel}</button>
         </>
       )}
