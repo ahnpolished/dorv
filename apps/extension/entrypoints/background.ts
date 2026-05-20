@@ -2,14 +2,13 @@ import { defineBackground } from "wxt/utils/define-background";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
-import { createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
+import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
+import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
 import { isSidePanelSupported } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
 const SYNC_POLL_MINUTES = 1;
-const GDOC_URL_PREFIX = "https://docs.google.com/document/d/";
-const GH_PR_URL_PATTERN = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\//;
 
 interface ChromeMessage {
   type: string;
@@ -20,6 +19,7 @@ interface ChromeMessage {
 export default defineBackground(() => {
   const storageArea = createChromeStorageArea(chrome.storage.local);
   const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
+  const docStore = createDocStore(storageArea);
   const statusStore = createStatusStore(storageArea);
   const settingsStore = createSettingsStore(storageArea);
 
@@ -133,19 +133,29 @@ export default defineBackground(() => {
     return true;
   });
 
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status !== "complete" || !tab.url) return;
+  const syncTabSidePanel = (tabId: number, url?: string) => {
     if (!isSidePanelSupported()) return;
-    if (tab.url.startsWith(GDOC_URL_PREFIX)) {
-      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
-      return;
-    }
-    if (GH_PR_URL_PATTERN.test(tab.url)) {
-      void settingsStore.getAutoOpenSidepanel().then((auto) => {
-        if (auto) {
-          void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
-        }
-      });
-    }
+    void syncSidePanelForTabUrl({
+      tabId,
+      url,
+      docStore,
+      settingsStore,
+      setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
+      open: chrome.sidePanel.open.bind(chrome.sidePanel)
+    }).catch((err: unknown) => {
+      console.error("Side panel sync failed:", err);
+    });
+  };
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status !== "complete" && changeInfo.url === undefined) return;
+    if (!tab.active) return;
+    syncTabSidePanel(tabId, tab.url ?? changeInfo.url);
+  });
+
+  chrome.tabs.onActivated.addListener(({ tabId }) => {
+    chrome.tabs.get(tabId, (tab) => {
+      syncTabSidePanel(tabId, tab.url);
+    });
   });
 });
