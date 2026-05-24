@@ -775,6 +775,12 @@ function SidePanel() {
                         <div className="comment-meta">
                           <span className="author">@{c.user}</span>
                           <span className="line">L{c.line?.toString() ?? "?"}</span>
+                          <IconButton
+                            icon="ti-anchor"
+                            label="Open GitHub comment"
+                            href={c.htmlUrl}
+                            disabled={!c.htmlUrl}
+                          />
                         </div>
                         <div className="comment-body">{c.body}</div>
                       </div>
@@ -806,6 +812,12 @@ function SidePanel() {
                 <div key={c.id} className="comment-card gdoc dorv-comment-enter">
                   <div className="comment-meta">
                     <span className="author">{c.author}</span>
+                    <IconButton
+                      icon="ti-anchor"
+                      label="Open Google Doc comment"
+                      href={mapping.docUrl}
+                      disabled={!mapping.docUrl}
+                    />
                   </div>
                   <div className="comment-body">{c.content}</div>
                   {c.quotedFileContent && <div className="quote">"{c.quotedFileContent}"</div>}
