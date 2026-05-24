@@ -1,4 +1,3 @@
-import { marked } from "marked";
 import type { AuthStore } from "../storage/auth.js";
 import {
   createDocStore,
@@ -13,6 +12,7 @@ import {
   grantAnyoneCommentAccess,
   inferOrganizationDomain
 } from "../gdoc/drive.js";
+import { renderMarkdownToGDocHtml } from "../gdoc/markdown.js";
 import { generateGDocHtml } from "../gdoc/template.js";
 import {
   postPRComment,
@@ -81,7 +81,7 @@ export class DirectAdapter implements SyncAdapter {
           throw new Error(`Failed to fetch ${file.filename}: ${resp.status.toString()}`);
         }
         const content = await resp.text();
-        const html = await marked.parse(content);
+        const html = await renderMarkdownToGDocHtml(content);
         return { filename: file.filename, html };
       })
     );

@@ -319,6 +319,74 @@ describe("DirectAdapter baseline sync", () => {
     });
   });
 
+  it("renders mermaid fenced blocks as images in the uploaded Google Doc HTML", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    let uploadBody = "";
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+
+      if (urlStr === "https://raw.example/README.md") {
+        return {
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              [
+                "# Architecture",
+                "",
+                "```mermaid",
+                "flowchart TD",
+                "  A[GitHub] --> B[Google Docs]",
+                "```"
+              ].join("\n")
+            )
+        };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        uploadBody = String(init?.body ?? "");
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "doc-1",
+              webViewLink: "https://docs.google.com/document/d/doc-1/edit"
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/doc-1/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments")) {
+        return { ok: true, json: () => Promise.resolve({ id: 100 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 123,
+      title: "Review me",
+      author: "alice",
+      branch: "feature/docs",
+      headSha: "sha1",
+      prUrl: "https://github.com/org/repo/pull/123",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    expect(uploadBody).toContain("https://mermaid.ink/img/");
+    expect(uploadBody).toContain('alt="Mermaid diagram for Architecture"');
+    expect(uploadBody).not.toContain("language-mermaid");
+  });
+
   it("falls back to organization commenter access when public link sharing is blocked", async () => {
     await authStore.setGitHubToken("mock-gh-token");
     (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
