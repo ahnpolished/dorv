@@ -52,10 +52,20 @@ export async function syncSidePanelForTabUrl({
 }
 
 async function ensureSidepanelTabOpen() {
+  await openSidepanelTab(false);
+}
+
+async function openSidepanelTab(active: boolean) {
   const url = chrome.runtime.getURL("sidepanel.html");
   const tabs = await chrome.tabs.query({ url });
   if (tabs.length === 0) {
-    await chrome.tabs.create({ url, active: false });
+    await chrome.tabs.create({ url, active });
+    return;
+  }
+
+  const existingTabId = tabs[0]?.id;
+  if (active && existingTabId !== undefined) {
+    await chrome.tabs.update(existingTabId, { active: true });
   }
 }
 
@@ -69,7 +79,11 @@ export async function openSidePanelForTab({
   open: SidePanelOpen;
 }): Promise<void> {
   await setOptions({ tabId, path: "sidepanel.html", enabled: true });
-  await open({ tabId });
+  try {
+    await open({ tabId });
+  } catch {
+    await openSidepanelTab(true);
+  }
 }
 
 async function isLinkedReviewUrl(url: string, docStore: DocStore): Promise<boolean> {

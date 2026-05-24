@@ -25,7 +25,7 @@ export function checkSidePanelCompat(
       compatible: false,
       warning:
         "The Chrome Side Panel API is not available in this browser. " +
-        "dorv requires a Chromium-based browser with side panel support (Chrome 114+)."
+        "dorv will open its review surface in a tab instead, but Chrome 114+ offers the best experience."
     };
   }
 

@@ -3,7 +3,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
-import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
+import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/sidepanel.js";
 import { isSidePanelSupported, detectBrowserKind } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
@@ -66,18 +66,22 @@ export default defineBackground(() => {
     // await — including entering an async function — causes Chrome to reject the call.
     // Both IPC calls are fired synchronously so Chrome processes setOptions before open.
     if (message.type === "OPEN_SIDE_PANEL") {
-      if (!isSidePanelSupported()) {
-        sendResponse({ success: false, error: "Side panel is not supported in this browser." });
-        return false;
-      }
       if (sender.tab?.id === undefined) {
         sendResponse({ success: false, error: "Cannot open side panel without a sender tab." });
         return false;
       }
       const tabId = sender.tab.id;
-      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
-      chrome.sidePanel
-        .open({ tabId })
+      const setOptions = isSidePanelSupported()
+        ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
+        : () => Promise.resolve();
+      const open = isSidePanelSupported()
+        ? chrome.sidePanel.open.bind(chrome.sidePanel)
+        : () => Promise.reject(new Error("Side panel is not supported in this browser."));
+      void openSidePanelForTab({
+        tabId,
+        setOptions,
+        open
+      })
         .then(() => {
           sendResponse({ success: true });
         })

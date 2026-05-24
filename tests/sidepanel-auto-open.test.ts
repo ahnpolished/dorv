@@ -149,6 +149,19 @@ describe("syncSidePanelForTabUrl", () => {
 });
 
 describe("openSidePanelForTab", () => {
+  beforeEach(() => {
+    (globalThis as unknown as { chrome: unknown }).chrome = {
+      tabs: {
+        query: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockResolvedValue({ id: 321 }),
+        update: vi.fn().mockResolvedValue({ id: 321, active: true })
+      },
+      runtime: {
+        getURL: vi.fn().mockReturnValue("chrome-extension://id/sidepanel.html")
+      }
+    };
+  });
+
   it("enables the side panel before opening it", async () => {
     const setOptions =
       vi.fn<(options: { tabId: number; path?: string; enabled: boolean }) => Promise<void>>();
@@ -165,5 +178,20 @@ describe("openSidePanelForTab", () => {
     expect(setOptions.mock.invocationCallOrder[0] ?? 0).toBeLessThan(
       open.mock.invocationCallOrder[0] ?? 0
     );
+  });
+
+  it("falls back to opening an active sidepanel tab when native side panel open fails", async () => {
+    const setOptions =
+      vi.fn<(options: { tabId: number; path?: string; enabled: boolean }) => Promise<void>>();
+    const open = vi
+      .fn<(options: { tabId: number }) => Promise<void>>()
+      .mockRejectedValue(new Error("unsupported"));
+
+    await openSidePanelForTab({ tabId: 12, setOptions, open });
+
+    expect(chrome.tabs.create).toHaveBeenCalledWith({
+      url: "chrome-extension://id/sidepanel.html",
+      active: true
+    });
   });
 });

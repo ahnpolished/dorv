@@ -122,8 +122,8 @@ function Options() {
         {!sidePanelSupported && (
           <div className="compat-warning dorv-state-enter" role="alert">
             <strong>Browser compatibility notice:</strong> The side panel is not supported in your
-            current browser. dorv works best in Chrome 114+ or Edge 114+. Comment sync will continue
-            to function, but the side panel UI will not be available.
+            current browser. dorv will still sync comments and can open its review surface in a tab,
+            but Chrome 114+ or Edge 114+ offer the best experience.
           </div>
         )}
 
