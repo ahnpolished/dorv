@@ -26,7 +26,7 @@ function makeDeps() {
   const setOptions =
     vi.fn<(options: { tabId: number; path?: string; enabled: boolean }) => Promise<void>>();
   const open = vi.fn<(options: { tabId: number }) => Promise<void>>();
-  return { docStore, settingsStore, setOptions, open, browserKind: "chrome" as const };
+  return { docStore, settingsStore, setOptions, open, useNativeSidePanel: true };
 }
 
 describe("syncSidePanelForTabUrl", () => {
@@ -97,7 +97,7 @@ describe("syncSidePanelForTabUrl", () => {
     expect(deps.open).not.toHaveBeenCalled();
   });
 
-  it("does not auto-open when the browser is not Chrome", async () => {
+  it("does not auto-open via native sidepanel when useNativeSidePanel is false", async () => {
     const deps = makeDeps();
     await deps.docStore.upsert(mapping);
 
@@ -105,7 +105,7 @@ describe("syncSidePanelForTabUrl", () => {
       tabId: 9,
       url: "https://github.com/org/repo/pull/12",
       ...deps,
-      browserKind: "edge"
+      useNativeSidePanel: false
     });
 
     expect(deps.setOptions).toHaveBeenCalledWith({
@@ -130,7 +130,7 @@ describe("syncSidePanelForTabUrl", () => {
     expect(deps.open).not.toHaveBeenCalled();
   });
 
-  it("auto-opens a background tab for Edge when auto-open is enabled", async () => {
+  it("auto-opens a background tab for non-native-sidepanel browsers (Arc, Brave, Opera, …)", async () => {
     const deps = makeDeps();
     await deps.docStore.upsert(mapping);
 
@@ -138,7 +138,7 @@ describe("syncSidePanelForTabUrl", () => {
       tabId: 7,
       url: "https://github.com/org/repo/pull/12",
       ...deps,
-      browserKind: "edge"
+      useNativeSidePanel: false
     });
 
     expect(chrome.tabs.create).toHaveBeenCalledWith({

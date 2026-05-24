@@ -1,8 +1,6 @@
 import type { createDocStore, createSettingsStore } from "../storage/stores.js";
 import { parseDocId } from "../gdoc/urls.js";
 import { parseGitHubPullRequestUrl } from "../github/pr-files.js";
-import type { BrowserKind } from "../compat.js";
-
 type DocStore = ReturnType<typeof createDocStore>;
 type SettingsStore = ReturnType<typeof createSettingsStore>;
 type SidePanelSetOptions = (options: {
@@ -19,7 +17,7 @@ interface SyncSidePanelInput {
   settingsStore: SettingsStore;
   setOptions: SidePanelSetOptions;
   open: SidePanelOpen;
-  browserKind: BrowserKind;
+  useNativeSidePanel: boolean;
 }
 
 export async function syncSidePanelForTabUrl({
@@ -29,7 +27,7 @@ export async function syncSidePanelForTabUrl({
   settingsStore,
   setOptions,
   open,
-  browserKind
+  useNativeSidePanel
 }: SyncSidePanelInput): Promise<void> {
   const linked = url ? await isLinkedReviewUrl(url, docStore) : false;
   if (!linked) {
@@ -38,16 +36,18 @@ export async function syncSidePanelForTabUrl({
   }
 
   await setOptions({ tabId, path: "sidepanel.html", enabled: true });
-  if (browserKind === "chrome" && (await settingsStore.getAutoOpenSidepanel())) {
-    try {
-      await open({ tabId });
-    } catch (err) {
-      // sidePanel.open() often requires a user gesture.
-      // We log but don't fail, as setOptions already enabled the panel for manual opening.
-      console.debug("[dorv] sidePanel.open failed (expected if no gesture):", err);
+  if (await settingsStore.getAutoOpenSidepanel()) {
+    if (useNativeSidePanel) {
+      try {
+        await open({ tabId });
+      } catch (err) {
+        // sidePanel.open() often requires a user gesture.
+        // We log but don't fail, as setOptions already enabled the panel for manual opening.
+        console.debug("[dorv] sidePanel.open failed (expected if no gesture):", err);
+      }
+    } else {
+      await ensureSidepanelTabOpen();
     }
-  } else if (browserKind !== "chrome" && (await settingsStore.getAutoOpenSidepanel())) {
-    await ensureSidepanelTabOpen();
   }
 }
 

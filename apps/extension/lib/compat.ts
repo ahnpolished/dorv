@@ -1,3 +1,5 @@
+import Bowser from "bowser";
+
 export type BrowserKind = "chrome" | "edge" | "unknown";
 
 export interface CompatResult {
@@ -45,16 +47,20 @@ export function isSidePanelSupported(): boolean {
   return typeof chrome !== "undefined" && "sidePanel" in chrome;
 }
 
-// Arc exposes chrome.sidePanel but open() resolves silently without opening a panel.
-// Detect Arc by the absence of the "Google Chrome" brand in userAgentData — all
-// genuine Chrome builds include it; Arc (and other Chromium forks) do not.
-export function isArcBrowser(): boolean {
-  // userAgentData is not in older TS lib versions; cast to access it safely.
+// Returns true only for genuine Chrome where chrome.sidePanel actually opens a panel.
+// Arc, Brave, Opera, Vivaldi and other Chromium forks expose chrome.sidePanel but
+// sidePanel.open() either resolves silently or fails — fall back to a tab for all of them.
+export function isNativeSidePanelBrowser(): boolean {
+  // Client Hints is the most reliable signal: real Chrome always includes the
+  // "Google Chrome" brand; Chromium forks (Arc, Brave, …) omit it.
   const nav = navigator as unknown as {
     userAgentData?: { brands?: { brand: string }[] };
   };
-  const brands = nav.userAgentData?.brands ?? [];
-  return (
-    brands.some((b) => b.brand === "Chromium") && !brands.some((b) => b.brand === "Google Chrome")
-  );
+  const brands = nav.userAgentData?.brands;
+  if (brands) {
+    return brands.some((b) => b.brand === "Google Chrome");
+  }
+  // Older browsers without Client Hints: fall back to UA string parsing.
+  // Bowser reliably identifies Chrome vs Opera, Edge, Samsung, Vivaldi, etc.
+  return Bowser.getParser(navigator.userAgent).isBrowser("Chrome");
 }

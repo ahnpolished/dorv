@@ -4,7 +4,7 @@ import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/sidepanel.js";
-import { isSidePanelSupported, isArcBrowser, detectBrowserKind } from "../lib/compat.js";
+import { isSidePanelSupported, isNativeSidePanelBrowser } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
@@ -22,7 +22,7 @@ export default defineBackground(() => {
   const docStore = createDocStore(storageArea);
   const statusStore = createStatusStore(storageArea);
   const settingsStore = createSettingsStore(storageArea);
-  const browserKind = detectBrowserKind();
+  const useNativeSidePanel = isSidePanelSupported() && isNativeSidePanelBrowser();
 
   const startPolling = () => {
     void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: SYNC_POLL_MINUTES });
@@ -71,7 +71,6 @@ export default defineBackground(() => {
         return false;
       }
       const tabId = sender.tab.id;
-      const useNativeSidePanel = isSidePanelSupported() && !isArcBrowser();
       const setOptions = useNativeSidePanel
         ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
         : () => Promise.resolve();
@@ -151,15 +150,20 @@ export default defineBackground(() => {
   });
 
   const syncTabSidePanel = (tabId: number, url?: string) => {
-    if (!isSidePanelSupported()) return;
+    const setOptions = useNativeSidePanel
+      ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
+      : () => Promise.resolve();
+    const open = useNativeSidePanel
+      ? chrome.sidePanel.open.bind(chrome.sidePanel)
+      : () => Promise.resolve();
     void syncSidePanelForTabUrl({
       tabId,
       url,
       docStore,
       settingsStore,
-      setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
-      open: chrome.sidePanel.open.bind(chrome.sidePanel),
-      browserKind
+      setOptions,
+      open,
+      useNativeSidePanel
     }).catch((err: unknown) => {
       console.error("Side panel sync failed:", err);
     });
