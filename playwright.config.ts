@@ -9,5 +9,8 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     // Individual test fixtures configure the browser context with the extension loaded
+    launchOptions: {
+      args: ["--no-focus-on-start", "--no-first-run"]
+    }
   }
 });
