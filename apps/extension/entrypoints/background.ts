@@ -4,8 +4,8 @@ import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { captureExtensionException, initSentryForSurface } from "../lib/telemetry/sentry.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
-import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
-import { isSidePanelSupported, detectBrowserKind } from "../lib/compat.js";
+import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/sidepanel.js";
+import { isSidePanelSupported, isNativeSidePanelBrowser } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
@@ -24,7 +24,7 @@ export default defineBackground(() => {
   const docStore = createDocStore(storageArea);
   const statusStore = createStatusStore(storageArea);
   const settingsStore = createSettingsStore(storageArea);
-  const browserKind = detectBrowserKind();
+  const useNativeSidePanel = isSidePanelSupported() && isNativeSidePanelBrowser();
 
   const startPolling = () => {
     void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: SYNC_POLL_MINUTES });
@@ -73,18 +73,22 @@ export default defineBackground(() => {
     // await — including entering an async function — causes Chrome to reject the call.
     // Both IPC calls are fired synchronously so Chrome processes setOptions before open.
     if (message.type === "OPEN_SIDE_PANEL") {
-      if (!isSidePanelSupported()) {
-        sendResponse({ success: false, error: "Side panel is not supported in this browser." });
-        return false;
-      }
       if (sender.tab?.id === undefined) {
         sendResponse({ success: false, error: "Cannot open side panel without a sender tab." });
         return false;
       }
       const tabId = sender.tab.id;
-      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
-      chrome.sidePanel
-        .open({ tabId })
+      const setOptions = useNativeSidePanel
+        ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
+        : () => Promise.resolve();
+      const open = useNativeSidePanel
+        ? chrome.sidePanel.open.bind(chrome.sidePanel)
+        : () => Promise.reject(new Error("Side panel is not supported in this browser."));
+      void openSidePanelForTab({
+        tabId,
+        setOptions,
+        open
+      })
         .then(() => {
           sendResponse({ success: true });
         })
@@ -158,15 +162,20 @@ export default defineBackground(() => {
   });
 
   const syncTabSidePanel = (tabId: number, url?: string) => {
-    if (!isSidePanelSupported()) return;
+    const setOptions = useNativeSidePanel
+      ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
+      : () => Promise.resolve();
+    const open = useNativeSidePanel
+      ? chrome.sidePanel.open.bind(chrome.sidePanel)
+      : () => Promise.resolve();
     void syncSidePanelForTabUrl({
       tabId,
       url,
       docStore,
       settingsStore,
-      setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
-      open: chrome.sidePanel.open.bind(chrome.sidePanel),
-      browserKind
+      setOptions,
+      open,
+      useNativeSidePanel
     }).catch((err: unknown) => {
       console.error("Side panel sync failed:", err);
       captureExtensionException(err, {

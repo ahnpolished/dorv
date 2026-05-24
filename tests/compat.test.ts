@@ -2,7 +2,8 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   detectBrowserKind,
   checkSidePanelCompat,
-  isSidePanelSupported
+  isSidePanelSupported,
+  isNativeSidePanelBrowser
 } from "../apps/extension/lib/compat.js";
 
 afterEach(() => {
@@ -46,6 +47,80 @@ describe("detectBrowserKind", () => {
 
   it("returns unknown when UA is empty string", () => {
     expect(detectBrowserKind("")).toBe("unknown");
+  });
+});
+
+// Real UA strings for Bowser fallback tests (no userAgentData).
+const CHROME_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const OPERA_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 OPR/110.0.0.0";
+const EDGE_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
+const VIVALDI_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Vivaldi/6.7.3329.35";
+
+describe("isNativeSidePanelBrowser", () => {
+  describe("via userAgentData (Client Hints — primary path)", () => {
+    it("returns true for genuine Chrome (has Google Chrome brand)", () => {
+      vi.stubGlobal("navigator", {
+        userAgentData: {
+          brands: [{ brand: "Not/A)Brand" }, { brand: "Chromium" }, { brand: "Google Chrome" }]
+        },
+        userAgent: CHROME_UA
+      });
+      expect(isNativeSidePanelBrowser()).toBe(true);
+    });
+
+    it("returns false for Arc (Chromium fork — no Google Chrome brand)", () => {
+      vi.stubGlobal("navigator", {
+        userAgentData: { brands: [{ brand: "Not/A)Brand" }, { brand: "Chromium" }] },
+        userAgent: CHROME_UA
+      });
+      expect(isNativeSidePanelBrowser()).toBe(false);
+    });
+
+    it("returns false for Brave (has Brave brand, not Google Chrome)", () => {
+      vi.stubGlobal("navigator", {
+        userAgentData: {
+          brands: [{ brand: "Not/A)Brand" }, { brand: "Chromium" }, { brand: "Brave" }]
+        },
+        userAgent: CHROME_UA
+      });
+      expect(isNativeSidePanelBrowser()).toBe(false);
+    });
+
+    it("returns false for Opera (has Opera brand, not Google Chrome)", () => {
+      vi.stubGlobal("navigator", {
+        userAgentData: {
+          brands: [{ brand: "Not/A)Brand" }, { brand: "Chromium" }, { brand: "Opera" }]
+        },
+        userAgent: OPERA_UA
+      });
+      expect(isNativeSidePanelBrowser()).toBe(false);
+    });
+  });
+
+  describe("via Bowser UA fallback (no userAgentData)", () => {
+    it("returns true for Chrome UA", () => {
+      vi.stubGlobal("navigator", { userAgent: CHROME_UA });
+      expect(isNativeSidePanelBrowser()).toBe(true);
+    });
+
+    it("returns false for Opera UA (has OPR/)", () => {
+      vi.stubGlobal("navigator", { userAgent: OPERA_UA });
+      expect(isNativeSidePanelBrowser()).toBe(false);
+    });
+
+    it("returns false for Edge UA (has Edg/)", () => {
+      vi.stubGlobal("navigator", { userAgent: EDGE_UA });
+      expect(isNativeSidePanelBrowser()).toBe(false);
+    });
+
+    it("returns false for Vivaldi UA (has Vivaldi/)", () => {
+      vi.stubGlobal("navigator", { userAgent: VIVALDI_UA });
+      expect(isNativeSidePanelBrowser()).toBe(false);
+    });
   });
 });
 
