@@ -27,7 +27,7 @@ import {
   persistSidepanelCacheSnapshot,
   sidepanelQueryKeys
 } from "../lib/sidepanel/query-cache.js";
-import { initSentryForSurface } from "../lib/telemetry/sentry.js";
+import { initSentryForSurface, captureExtensionException } from "../lib/telemetry/sentry.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
@@ -419,6 +419,10 @@ function SidePanel() {
         .then(() => loadSyncData(captured))
         .catch((err: unknown) => {
           console.debug("[dorv] fast poll error:", err);
+          captureExtensionException(err, {
+            surface: "sidepanel",
+            tags: { operation: "fast_poll" }
+          });
         });
     }, 5_000);
     return () => {
@@ -455,6 +459,10 @@ function SidePanel() {
       await loadSyncData(result.mapping);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
+      captureExtensionException(err, {
+        surface: "sidepanel",
+        tags: { operation: "create_doc" }
+      });
     } finally {
       setCreating(false);
     }
@@ -484,6 +492,10 @@ function SidePanel() {
       alert("Comment pushed to GitHub!");
     } catch (err) {
       alert(`Push failed: ${String(err)}`);
+      captureExtensionException(err, {
+        surface: "sidepanel",
+        tags: { operation: "push_comment" }
+      });
     } finally {
       setPushingId(undefined);
     }
@@ -540,6 +552,10 @@ function SidePanel() {
       await loadData();
     } catch (err) {
       alert(`Sync failed: ${String(err)}`);
+      captureExtensionException(err, {
+        surface: "sidepanel",
+        tags: { operation: "manual_sync" }
+      });
     } finally {
       setSyncingNow(false);
     }
