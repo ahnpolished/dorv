@@ -29,6 +29,12 @@ export default defineConfig({
         "48": "icon-48.png",
         "128": "icon-128.png"
       }
+    },
+    commands: {
+      "open-sidepanel": {
+        suggested_key: { default: "Alt+Shift+D" },
+        description: "Open the dorv side panel"
+      }
     }
   }
 });

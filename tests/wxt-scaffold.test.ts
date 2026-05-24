@@ -47,6 +47,9 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(config).toContain("GOOGLE_CLIENT_ID");
     expect(config).toContain("side_panel");
     expect(config).toContain("sidepanel.html");
+    expect(config).toContain("commands");
+    expect(config).toContain("open-sidepanel");
+    expect(config).toContain("Alt+Shift+D");
   });
 
   it("configures extension icon assets", () => {
