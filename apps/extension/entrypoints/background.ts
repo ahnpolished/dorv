@@ -188,4 +188,15 @@ export default defineBackground(() => {
       syncTabSidePanel(tabId, tab.url);
     });
   });
+
+  chrome.commands.onCommand.addListener((command, tab) => {
+    if (command !== "open-sidepanel") return;
+    if (!isSidePanelSupported()) return;
+    const tabId = tab?.id;
+    if (tabId === undefined) return;
+    void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
+    chrome.sidePanel.open({ tabId }).catch((err: unknown) => {
+      console.error("[dorv] keyboard shortcut sidePanel.open failed:", err);
+    });
+  });
 });
