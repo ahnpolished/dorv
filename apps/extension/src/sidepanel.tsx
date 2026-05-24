@@ -112,6 +112,16 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [animKey, setAnimKey] = useState(0);
+  const [isPlaywright, setIsPlaywright] = useState(false);
+
+  useEffect(() => {
+    // Disable autofocus in E2E tests to avoid annoying jumps and potential flakiness
+    void storageArea.get(["is_playwright"]).then((vals) => {
+      if (vals.is_playwright === true) {
+        setIsPlaywright(true);
+      }
+    });
+  }, []);
 
   const advance = (nextStep: "github" | "google" | "done") => {
     setAnimKey((k) => k + 1);
@@ -171,7 +181,7 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
             onKeyDown={(e) => {
               if (e.key === "Enter") void handleSavePat();
             }}
-            autoFocus
+            autoFocus={!isPlaywright}
           />
           {error && <p className="onboarding-error">{error}</p>}
           <button

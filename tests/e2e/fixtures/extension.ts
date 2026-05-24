@@ -50,6 +50,25 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           `--load-extension=${EXTENSION_PATH}`
         ]
       });
+
+      // Signal to the extension that we are running in an E2E test
+      const [worker] = ctx.serviceWorkers();
+      if (worker) {
+        await worker.evaluate(() => {
+          return new Promise<void>((resolve) => {
+            chrome.storage.local.set({ is_playwright: true }, resolve);
+          });
+        });
+      } else {
+        ctx.on("serviceworker", (sw) => {
+          void sw.evaluate(() => {
+            return new Promise<void>((resolve) => {
+              chrome.storage.local.set({ is_playwright: true }, resolve);
+            });
+          });
+        });
+      }
+
       await use(ctx);
       await ctx.close();
       fs.rmSync(userDataDir, { recursive: true, force: true });
