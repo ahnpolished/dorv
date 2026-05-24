@@ -20,6 +20,21 @@ pnpm --filter @dorv/extension zip
 
 `GOOGLE_CLIENT_ID` is read at build time for the OAuth manifest entry. Copy `.env.example` to `.env` and fill in your value before building.
 
+## Sentry error collection
+
+dorv initializes Sentry in every extension surface: background worker, GitHub sidebar content script, side panel, and options page.
+
+Add these build-time environment variables to `apps/extension/.env`:
+
+```bash
+WXT_SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
+WXT_SENTRY_ENVIRONMENT=development
+```
+
+- If `WXT_SENTRY_DSN` is unset, telemetry stays disabled.
+- `WXT_SENTRY_ENVIRONMENT` is optional and defaults to the current build mode.
+- Releases are tagged automatically as `dorv-extension@<extension-version>`.
+
 ## Load unpacked (local development)
 
 1. Run `pnpm --filter @dorv/extension dev` — builds to `.output/chrome-mv3-dev/`.

@@ -17,6 +17,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
+import { captureExtensionException, initSentryForSurface } from "../lib/telemetry/sentry.js";
 import {
   createDocViaBackground,
   openSidePanelViaBackground,
@@ -33,6 +34,8 @@ const storageArea = createChromeStorageArea(chrome.storage.local);
 const authStore = createAuthStore(storageArea);
 const settingsStore = createSettingsStore(storageArea);
 const browserKind = detectBrowserKind();
+
+initSentryForSurface("github-sidebar");
 
 const ROOT_ID = "dorv-pr-sidebar-root";
 let currentUi: Awaited<ReturnType<typeof createShadowRootUi>> | null = null;
@@ -289,6 +292,11 @@ export default defineContentScript({
     const stopWatching = watchForNewGHComments(() => {
       void syncNowViaBackground().catch((err: unknown) => {
         console.debug("[dorv] fast sync failed:", err);
+        captureExtensionException(err, {
+          extra: { url: window.location.href },
+          surface: "github-sidebar",
+          tags: { operation: "fast_sync" }
+        });
       });
     });
     ctx.onInvalidated(stopWatching);

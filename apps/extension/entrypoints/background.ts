@@ -2,6 +2,7 @@ import { defineBackground } from "wxt/utils/define-background";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
+import { captureExtensionException, initSentryForSurface } from "../lib/telemetry/sentry.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
 import { isSidePanelSupported, detectBrowserKind } from "../lib/compat.js";
@@ -17,6 +18,7 @@ interface ChromeMessage {
 }
 
 export default defineBackground(() => {
+  initSentryForSurface("background");
   const storageArea = createChromeStorageArea(chrome.storage.local);
   const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
   const docStore = createDocStore(storageArea);
@@ -39,6 +41,11 @@ export default defineBackground(() => {
       await adapter.syncAll();
     } catch (err) {
       console.error("Background poll failed:", err);
+      captureExtensionException(err, {
+        extra: { alarm: SYNC_POLL_ALARM },
+        surface: "background",
+        tags: { operation: "poll" }
+      });
     }
   };
 
@@ -137,6 +144,11 @@ export default defineBackground(() => {
         }
       } catch (err) {
         console.error("Message handler failed:", err);
+        captureExtensionException(err, {
+          extra: { messageType: message.type },
+          surface: "background",
+          tags: { operation: "runtime_message" }
+        });
         sendResponse({ success: false, error: String(err) });
       }
     };
@@ -157,6 +169,11 @@ export default defineBackground(() => {
       browserKind
     }).catch((err: unknown) => {
       console.error("Side panel sync failed:", err);
+      captureExtensionException(err, {
+        extra: { tabId, url },
+        surface: "background",
+        tags: { operation: "sidepanel_sync" }
+      });
     });
   };
 
