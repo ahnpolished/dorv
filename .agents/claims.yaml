@@ -363,6 +363,16 @@ claims:
     worktree: .worktrees/feature-hum-1267
     pr: https://github.com/ahnpolished/dorv/pull/49
 
+  HUM-1271:
+    agent: claude-code
+    status: done
+    claimed_at: "2026-05-24T17:43:22Z"
+    completed_at: "2026-05-24T17:52:00Z"
+    depends_on: []
+    branch: feature/hum-1271
+    worktree: .worktrees/feature-hum-1271
+    pr: https://github.com/ahnpolished/dorv/pull/52
+
   HUM-1273:
     agent: codex
     status: done

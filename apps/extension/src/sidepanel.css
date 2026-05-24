@@ -404,6 +404,89 @@ h3 {
   margin: 0;
 }
 
+.pat-scope-details {
+  border: 1px solid var(--dorv-border-subtle);
+  border-radius: var(--dorv-radius-sm);
+  padding: 0;
+  overflow: hidden;
+}
+
+.pat-scope-summary {
+  font-size: 12px;
+  color: var(--dorv-muted);
+  cursor: pointer;
+  padding: 6px 10px;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pat-scope-summary::-webkit-details-marker {
+  display: none;
+}
+
+.pat-scope-summary::before {
+  content: "▸";
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.pat-scope-details[open] .pat-scope-summary::before {
+  transform: rotate(90deg);
+}
+
+.pat-scope-body {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pat-scope-kind {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dorv-text);
+  margin: 6px 0 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pat-scope-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pat-scope-list li {
+  font-size: 12px;
+  color: var(--dorv-muted);
+}
+
+.pat-scope-list code {
+  font-family: var(--dorv-font-mono);
+  background: var(--dorv-bg-elevated);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--dorv-orange);
+}
+
+.pat-scope-link {
+  font-size: 12px;
+  color: var(--dorv-orange);
+  text-decoration: none;
+  margin-top: 6px;
+}
+
+.pat-scope-link:hover {
+  text-decoration: underline;
+}
+
 .done-icon {
   width: 48px;
   height: 48px;
