@@ -3,12 +3,15 @@ import { createRoot } from "react-dom/client";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createSettingsStore } from "../lib/storage/stores.js";
+import { initSentryForSurface } from "../lib/telemetry/sentry.js";
 import { isSidePanelSupported } from "../lib/compat.js";
 import "./options.css";
 
 const storageArea = createChromeStorageArea(chrome.storage.local);
 const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
 const settingsStore = createSettingsStore(storageArea);
+
+initSentryForSurface("options");
 
 function Options() {
   const [githubPat, setGithubPat] = useState("");

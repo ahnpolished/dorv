@@ -24,6 +24,7 @@ import { pushGDocComment, pushGDocReply } from "../gdoc/comments.js";
 import { fetchGDocComments } from "../gdoc/fetch.js";
 import { findLineMatch } from "../gdoc/matching.js";
 import { fetchPullRequestFiles, filterMarkdownFiles } from "../github/pr-files.js";
+import { captureExtensionException } from "../telemetry/sentry.js";
 import type {
   CommentMapping,
   CreateDocInput,
@@ -300,6 +301,15 @@ export class DirectAdapter implements SyncAdapter {
               await this.replyMappingStore.upsert(replyMapping);
             } catch (err) {
               console.error(`GH reply ${reply.id.toString()} sync failed:`, err);
+              captureExtensionException(err, {
+                extra: {
+                  prNumber: mapping.prNumber,
+                  repo: mapping.repo,
+                  replyId: reply.id
+                },
+                surface: "background",
+                tags: { operation: "github_reply_sync" }
+              });
             }
           }
 
@@ -331,6 +341,15 @@ export class DirectAdapter implements SyncAdapter {
                 await this.replyMappingStore.upsert(replyMapping);
               } catch (err) {
                 console.error(`Doc reply ${reply.id} push failed:`, err);
+                captureExtensionException(err, {
+                  extra: {
+                    docReplyId: reply.id,
+                    prNumber: mapping.prNumber,
+                    repo: mapping.repo
+                  },
+                  surface: "background",
+                  tags: { operation: "gdoc_reply_push" }
+                });
               }
             }
           }
@@ -345,6 +364,14 @@ export class DirectAdapter implements SyncAdapter {
         });
       } catch (err) {
         console.error(`Sync failed for ${ref.repo}#${ref.prNumber.toString()}:`, err);
+        captureExtensionException(err, {
+          extra: {
+            prNumber: ref.prNumber,
+            repo: ref.repo
+          },
+          surface: "background",
+          tags: { operation: "sync_all" }
+        });
         await this.statusStore.set({
           ...ref,
           state: "error",

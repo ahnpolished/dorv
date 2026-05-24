@@ -27,6 +27,7 @@ import {
   persistSidepanelCacheSnapshot,
   sidepanelQueryKeys
 } from "../lib/sidepanel/query-cache.js";
+import { initSentryForSurface } from "../lib/telemetry/sentry.js";
 import type { AuthStore } from "../lib/storage/auth.js";
 import type {
   DocMapping,
@@ -95,6 +96,8 @@ const docStore = createDocStore(storageArea);
 const statusStore = createStatusStore(storageArea);
 const authStore = createAuthStore(storageArea);
 const queryClient = createSidepanelQueryClient();
+
+initSentryForSurface("sidepanel");
 
 type TabKind = "loading" | "gdoc" | "github-pr" | "neutral";
 type TabType = "github" | "gdoc" | "info";
