@@ -363,4 +363,12 @@ claims:
     worktree: .worktrees/feature-hum-1267
     pr: https://github.com/ahnpolished/dorv/pull/49
 
+  HUM-1273:
+    agent: codex
+    status: in_progress
+    claimed_at: "2026-05-24T17:43:51Z"
+    depends_on: []
+    branch: feature/hum-1273
+    worktree: .worktrees/feature-hum-1273
+
 wait_queue: {}
