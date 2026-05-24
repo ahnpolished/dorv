@@ -205,7 +205,9 @@ async function renderGithubSidebar(ctx: ContentScriptContext) {
         );
 
   const adapter = resolveAdapter({ authStore, storageArea });
-  const mapping = ref ? await adapter.getDoc(ref) : undefined;
+  const mapping = ref
+    ? await adapter.getDoc({ repo: `${ref.owner}/${ref.repo}`, prNumber: ref.prNumber })
+    : undefined;
   const status = ref
     ? await createStatusStore(storageArea).get(mapping?.repo ?? "", ref.prNumber)
     : undefined;
@@ -265,6 +267,23 @@ export default defineContentScript({
     void renderGithubSidebar(ctx);
     document.addEventListener("turbo:load", () => {
       void renderGithubSidebar(ctx);
+    });
+
+    // Re-render when credentials or doc mappings change in storage so the sidebar
+    // reflects the current state without requiring a page reload (e.g. after onboarding).
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string
+    ) => {
+      if (area !== "local") return;
+      const relevant = Object.keys(changes).some(
+        (k) => k === "github_pat" || k.startsWith("docStore:") || k.startsWith("statusStore:")
+      );
+      if (relevant) void renderGithubSidebar(ctx);
+    };
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    ctx.onInvalidated(() => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
     });
 
     const stopWatching = watchForNewGHComments(() => {

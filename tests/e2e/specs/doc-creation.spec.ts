@@ -83,5 +83,14 @@ test("clicking Create Google Doc calls Drive API and shows linked state", async 
   // Secondary: sidebar may re-render to "linked" state (best-effort; renderGeneration timing)
   void shadowQuery(page, "a");
 
+  // Clean up doc mapping so it doesn't bleed into subsequent tests
+  await extensionWorker.evaluate(
+    (key: string) =>
+      new Promise<void>((resolve) => {
+        chrome.storage.local.remove([key], resolve);
+      }),
+    docMappingKey
+  );
+
   await page.close();
 });
