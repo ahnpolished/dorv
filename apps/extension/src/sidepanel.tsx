@@ -157,8 +157,7 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
           <div className="step-indicator">Step 1 of 2</div>
           <h1>Connect GitHub</h1>
           <p className="onboarding-desc">
-            Paste a GitHub PAT that can read PR markdown and write PR comments. Org repos may need
-            an org-approved fine-grained token.
+            Paste a GitHub personal access token so dorv can read PR files and post review comments.
           </p>
           <input
             className="pat-input"
@@ -173,6 +172,33 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
             }}
             autoFocus
           />
+          <details className="pat-scope-details">
+            <summary className="pat-scope-summary">Required scopes</summary>
+            <div className="pat-scope-body">
+              <p className="pat-scope-kind">Classic PAT</p>
+              <ul className="pat-scope-list">
+                <li>
+                  <code>repo</code> — full repo access (private repos)
+                </li>
+                <li>
+                  <code>public_repo</code> — public repos only
+                </li>
+              </ul>
+              <p className="pat-scope-kind">Fine-grained PAT</p>
+              <ul className="pat-scope-list">
+                <li>Pull requests — Read and write</li>
+                <li>Contents — Read-only</li>
+              </ul>
+              <a
+                className="pat-scope-link"
+                href="https://github.com/settings/tokens/new"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Create a token on GitHub →
+              </a>
+            </div>
+          </details>
           {error && <p className="onboarding-error">{error}</p>}
           <button
             type="button"
