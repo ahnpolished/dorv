@@ -3,7 +3,7 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
-import { openSidePanelForTab, syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
+import { syncSidePanelForTabUrl } from "../lib/background/sidepanel.js";
 import { isSidePanelSupported, detectBrowserKind } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
@@ -61,31 +61,38 @@ export default defineBackground(() => {
   });
 
   chrome.runtime.onMessage.addListener((message: ChromeMessage, sender, sendResponse) => {
+    // OPEN_SIDE_PANEL is handled here, outside the async wrapper below.
+    // chrome.sidePanel.open() requires an unbroken user-gesture context; any prior
+    // await — including entering an async function — causes Chrome to reject the call.
+    // Both IPC calls are fired synchronously so Chrome processes setOptions before open.
+    if (message.type === "OPEN_SIDE_PANEL") {
+      if (!isSidePanelSupported()) {
+        sendResponse({ success: false, error: "Side panel is not supported in this browser." });
+        return false;
+      }
+      if (sender.tab?.id === undefined) {
+        sendResponse({ success: false, error: "Cannot open side panel without a sender tab." });
+        return false;
+      }
+      const tabId = sender.tab.id;
+      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
+      chrome.sidePanel
+        .open({ tabId })
+        .then(() => {
+          sendResponse({ success: true });
+        })
+        .catch((err: unknown) => {
+          sendResponse({ success: false, error: String(err) });
+        });
+      return true;
+    }
+
     const run = async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const payload = message.payload;
 
         switch (message.type) {
-          case "OPEN_SIDE_PANEL": {
-            if (!isSidePanelSupported()) {
-              sendResponse({
-                success: false,
-                error: "Side panel is not supported in this browser."
-              });
-              break;
-            }
-            if (sender.tab?.id === undefined) {
-              throw new Error("Cannot open side panel without a sender tab.");
-            }
-            await openSidePanelForTab({
-              tabId: sender.tab.id,
-              setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
-              open: chrome.sidePanel.open.bind(chrome.sidePanel)
-            });
-            sendResponse({ success: true });
-            break;
-          }
           case "CREATE_DOC": {
             const backendUrl = await authStore.getBackendUrl();
             const adapter = resolveAdapter({
