@@ -2,7 +2,8 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   detectBrowserKind,
   checkSidePanelCompat,
-  isSidePanelSupported
+  isSidePanelSupported,
+  isArcBrowser
 } from "../apps/extension/lib/compat.js";
 
 afterEach(() => {
@@ -46,6 +47,29 @@ describe("detectBrowserKind", () => {
 
   it("returns unknown when UA is empty string", () => {
     expect(detectBrowserKind("")).toBe("unknown");
+  });
+});
+
+describe("isArcBrowser", () => {
+  it("returns true when Chromium brand is present but Google Chrome is absent", () => {
+    vi.stubGlobal("navigator", {
+      userAgentData: { brands: [{ brand: "Not/A)Brand" }, { brand: "Chromium" }] }
+    });
+    expect(isArcBrowser()).toBe(true);
+  });
+
+  it("returns false for real Chrome (includes Google Chrome brand)", () => {
+    vi.stubGlobal("navigator", {
+      userAgentData: {
+        brands: [{ brand: "Not/A)Brand" }, { brand: "Chromium" }, { brand: "Google Chrome" }]
+      }
+    });
+    expect(isArcBrowser()).toBe(false);
+  });
+
+  it("returns false when userAgentData is absent", () => {
+    vi.stubGlobal("navigator", {});
+    expect(isArcBrowser()).toBe(false);
   });
 });
 

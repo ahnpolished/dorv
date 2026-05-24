@@ -44,3 +44,17 @@ export function checkSidePanelCompat(
 export function isSidePanelSupported(): boolean {
   return typeof chrome !== "undefined" && "sidePanel" in chrome;
 }
+
+// Arc exposes chrome.sidePanel but open() resolves silently without opening a panel.
+// Detect Arc by the absence of the "Google Chrome" brand in userAgentData — all
+// genuine Chrome builds include it; Arc (and other Chromium forks) do not.
+export function isArcBrowser(): boolean {
+  // userAgentData is not in older TS lib versions; cast to access it safely.
+  const nav = navigator as unknown as {
+    userAgentData?: { brands?: { brand: string }[] };
+  };
+  const brands = nav.userAgentData?.brands ?? [];
+  return (
+    brands.some((b) => b.brand === "Chromium") && !brands.some((b) => b.brand === "Google Chrome")
+  );
+}

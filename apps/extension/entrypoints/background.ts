@@ -4,7 +4,7 @@ import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
 import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/sidepanel.js";
-import { isSidePanelSupported, detectBrowserKind } from "../lib/compat.js";
+import { isSidePanelSupported, isArcBrowser, detectBrowserKind } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
 const SYNC_POLL_ALARM = "sync_poll";
@@ -71,10 +71,11 @@ export default defineBackground(() => {
         return false;
       }
       const tabId = sender.tab.id;
-      const setOptions = isSidePanelSupported()
+      const useNativeSidePanel = isSidePanelSupported() && !isArcBrowser();
+      const setOptions = useNativeSidePanel
         ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
         : () => Promise.resolve();
-      const open = isSidePanelSupported()
+      const open = useNativeSidePanel
         ? chrome.sidePanel.open.bind(chrome.sidePanel)
         : () => Promise.reject(new Error("Side panel is not supported in this browser."));
       void openSidePanelForTab({
