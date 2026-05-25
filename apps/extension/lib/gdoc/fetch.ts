@@ -6,7 +6,7 @@ import type { GoogleDocComment } from "../adapters/types.js";
 
 export async function fetchGDocComments(token: string, docId: string): Promise<GoogleDocComment[]> {
   const fields =
-    "comments(id,content,quotedFileContent,author,createdTime,replies(id,content,author,createdTime))";
+    "comments(id,content,quotedFileContent,author,createdTime,resolved,replies(id,content,author,createdTime))";
   const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments?fields=${fields}`;
 
   const resp = await fetch(url, {
@@ -25,6 +25,7 @@ export async function fetchGDocComments(token: string, docId: string): Promise<G
     author: c.author?.displayName ?? "Unknown",
     createdAt: c.createdTime,
     updatedAt: c.createdTime,
+    resolved: c.resolved ?? false,
     replies: (c.replies ?? []).map((r: any) => ({
       id: r.id,
       content: r.content,

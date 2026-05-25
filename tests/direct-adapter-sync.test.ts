@@ -609,7 +609,8 @@ describe("DirectAdapter baseline sync", () => {
         quotedFileContent: "selected text",
         createdAt: "t",
         updatedAt: "t",
-        author: "Sangtae Ahn"
+        author: "Sangtae Ahn",
+        resolved: false
       },
       {
         repo: "org/repo",

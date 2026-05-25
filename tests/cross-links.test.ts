@@ -72,8 +72,9 @@ describe("HUM-1254 cross-links", () => {
         user: "alice",
         htmlUrl: GH_COMMENT_URL,
         createdAt: "t",
-        updatedAt: "t"
-      },
+        updatedAt: "t",
+        resolved: false
+      } as any,
       BASE_MAPPING
     );
 
@@ -120,8 +121,9 @@ describe("HUM-1254 cross-links", () => {
         quotedFileContent: "highlighted text",
         author: "Bob Smith",
         createdAt: "t",
-        updatedAt: "t"
-      },
+        updatedAt: "t",
+        resolved: false
+      } as any,
       BASE_MAPPING
     );
 
