@@ -2,13 +2,17 @@ import type {
   CommentMapping,
   DocMapping,
   IdentityMapping,
+  NewSyncedActivity,
   PullRequestRef,
   ReplyMapping,
+  SyncedActivity,
   SyncStatus
 } from "../adapters/types.js";
 import type { StorageArea } from "./area.js";
 
 const activePrsKey = "active_prs";
+const activityStoreKey = "activityStore:events";
+const activityStoreLimit = 1000;
 
 function prKey(prefix: string, ref: PullRequestRef): string {
   return `${prefix}:${ref.repo}#${ref.prNumber.toString()}`;
@@ -28,6 +32,44 @@ function replyParentKey(ghParentCommentId: number): string {
 
 function identityKey(googleAuthor: string): string {
   return `identityStore:google:${googleAuthor}`;
+}
+
+function activityId(activity: NewSyncedActivity): string {
+  return (
+    activity.id ??
+    [
+      activity.kind,
+      activity.direction,
+      activity.repo,
+      activity.prNumber.toString(),
+      activity.ghCommentId?.toString() ?? "no-gh",
+      activity.docCommentId ?? "no-doc"
+    ].join(":")
+  );
+}
+
+function activitySortNewestFirst(a: SyncedActivity, b: SyncedActivity): number {
+  const byCreatedAt = b.createdAt.localeCompare(a.createdAt);
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return b.id.localeCompare(a.id);
+}
+
+function trimActivities(activities: SyncedActivity[]): SyncedActivity[] {
+  return [...activities]
+    .sort((a, b) => {
+      const byCreatedAt = a.createdAt.localeCompare(b.createdAt);
+      if (byCreatedAt !== 0) return byCreatedAt;
+      return a.id.localeCompare(b.id);
+    })
+    .slice(-activityStoreLimit)
+    .sort(activitySortNewestFirst);
+}
+
+function snippetForMapping(mapping: CommentMapping): string {
+  if (mapping.source === "github") {
+    return `GitHub comment ${mapping.ghCommentId.toString()} synced to GDoc comment ${mapping.docCommentId}`;
+  }
+  return `GDoc comment ${mapping.docCommentId} synced to GitHub comment ${mapping.ghCommentId.toString()}`;
 }
 
 async function getValue<T>(storage: StorageArea, key: string): Promise<T | undefined> {
@@ -188,6 +230,58 @@ export function createIdentityStore(storage: StorageArea) {
     },
     async getByGoogleAuthor(googleAuthor: string): Promise<IdentityMapping | undefined> {
       return getValue<IdentityMapping>(storage, identityKey(googleAuthor));
+    }
+  };
+}
+
+export function createActivityStore(storage: StorageArea) {
+  return {
+    async append(activity: NewSyncedActivity): Promise<SyncedActivity> {
+      const existing = await getArray<SyncedActivity>(storage, activityStoreKey);
+      const nextActivity: SyncedActivity = {
+        ...activity,
+        id: activityId(activity)
+      };
+      const withoutDuplicate = existing.filter((item) => item.id !== nextActivity.id);
+      const next = trimActivities([...withoutDuplicate, nextActivity]);
+      await storage.set({ [activityStoreKey]: next });
+      return nextActivity;
+    },
+    async listAll(): Promise<SyncedActivity[]> {
+      return trimActivities(await getArray<SyncedActivity>(storage, activityStoreKey));
+    },
+    async listByPR(repo: string, prNumber: number): Promise<SyncedActivity[]> {
+      const activities = await this.listAll();
+      return activities.filter(
+        (activity) => activity.repo === repo && activity.prNumber === prNumber
+      );
+    },
+    async bootstrapFromMappings(
+      repo: string,
+      prNumber: number,
+      mappings: CommentMapping[],
+      createdAt: string
+    ): Promise<SyncedActivity[]> {
+      const bootstrapped: SyncedActivity[] = [];
+      const existingIds = new Set((await this.listAll()).map((activity) => activity.id));
+      for (const mapping of mappings) {
+        if (mapping.repo !== repo || mapping.prNumber !== prNumber) continue;
+        const activity: NewSyncedActivity = {
+          repo,
+          prNumber,
+          direction: mapping.source === "github" ? "github_to_gdoc" : "gdoc_to_github",
+          kind: "comment_synced",
+          ghCommentId: mapping.ghCommentId,
+          docCommentId: mapping.docCommentId,
+          snippet: snippetForMapping(mapping),
+          createdAt
+        };
+        if (existingIds.has(activityId(activity))) continue;
+        const appended = await this.append(activity);
+        existingIds.add(appended.id);
+        bootstrapped.push(appended);
+      }
+      return bootstrapped;
     }
   };
 }

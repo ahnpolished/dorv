@@ -5,6 +5,7 @@ import { createMemoryStorageArea } from "../apps/extension/lib/storage/memory.js
 import { createAuthStore, type AuthStore } from "../apps/extension/lib/storage/auth.js";
 import {
   createDocStore,
+  createActivityStore,
   createIdentityStore,
   createMappingStore
 } from "../apps/extension/lib/storage/stores.js";
@@ -20,12 +21,14 @@ describe("DirectAdapter baseline sync", () => {
   let authStore: AuthStore;
   let docStore: any;
   let mappingStore: any;
+  let activityStore: any;
 
   beforeEach(() => {
     storage = createMemoryStorageArea();
     authStore = createAuthStore(storage);
     docStore = createDocStore(storage);
     mappingStore = createMappingStore(storage);
+    activityStore = createActivityStore(storage);
     adapter = new DirectAdapter(authStore, storage);
 
     mockFetch.mockReset();
@@ -118,6 +121,17 @@ describe("DirectAdapter baseline sync", () => {
     const m = await mappingStore.getByGH(1);
     expect(m).toBeDefined();
     expect(m.docCommentId).toBe("g-comm-1");
+    await expect(activityStore.listByPR("org/repo", 123)).resolves.toMatchObject([
+      {
+        direction: "github_to_gdoc",
+        kind: "comment_synced",
+        ghCommentId: 1,
+        docCommentId: "g-comm-1",
+        path: "f.ts",
+        line: 10,
+        snippet: "new comment"
+      }
+    ]);
   });
 
   it("pushes GH comments to GDoc with exact body and line context", async () => {
