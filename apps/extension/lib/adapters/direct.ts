@@ -442,7 +442,7 @@ export class DirectAdapter implements SyncAdapter {
             try {
               const meta = await fetchPullRequestMeta(
                 { owner: repoOwner, repo: repoName, prNumber: ref.prNumber },
-                { fetch, token: ghToken }
+                { fetch: fetch.bind(globalThis), token: ghToken }
               );
               if (meta.headSha !== mapping.headSha) {
                 mapping.isStale = true;
