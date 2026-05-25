@@ -52,6 +52,9 @@ export class DirectAdapter implements SyncAdapter {
   private identityStore;
   private activityStore;
 
+  private activeSyncAllPromise: Promise<void> | undefined;
+  private prLocks = new Map<string, Promise<void>>();
+
   constructor(
     private authStore: AuthStore,
     storageArea: StorageArea
@@ -248,6 +251,7 @@ export class DirectAdapter implements SyncAdapter {
     gToken: string
   ): Promise<void> {
     for (const reply of thread.replies) {
+      if (await this.replyMappingStore.hasByGH(reply.id)) continue;
       if (reply.inReplyToId == null) continue;
       const result = await pushGDocReply(
         gToken,
@@ -310,9 +314,6 @@ export class DirectAdapter implements SyncAdapter {
       return "handled";
     }
 
-    // Reopening resolved GitHub threads is intentionally out of scope for
-    // HUM-1278. Leave the mirrored Google Docs root resolved until a later
-    // lifecycle pass defines reopen semantics.
     if (existing.resolvedAt) return "handled";
 
     if (!existing.threadSnapshot) {
@@ -417,33 +418,40 @@ export class DirectAdapter implements SyncAdapter {
   }
 
   async syncAll(): Promise<void> {
-    if (activeSyncAllPromise) {
-      await activeSyncAllPromise;
+    if (this.activeSyncAllPromise) {
+      await this.activeSyncAllPromise;
       return;
     }
 
-    activeSyncAllPromise = this.runSyncAll();
+    this.activeSyncAllPromise = this.runSyncAll();
     try {
-      await activeSyncAllPromise;
+      await this.activeSyncAllPromise;
     } finally {
-      activeSyncAllPromise = undefined;
+      this.activeSyncAllPromise = undefined;
     }
   }
 
-  private async runSyncAll(): Promise<void> {
-    const ghToken = await this.authStore.getGitHubToken();
-    if (!ghToken) return;
+  private async syncPRWithLock(
+    ref: PullRequestRef,
+    ghToken: string,
+    gToken: string | undefined
+  ): Promise<void> {
+    const lockKey = `${ref.repo}#${ref.prNumber.toString()}`;
+    const existingLock = this.prLocks.get(lockKey);
+    if (existingLock) {
+      await existingLock;
+      return;
+    }
 
-    const gToken = await this.authStore.getGoogleToken(false);
-
-    const active = await this.docStore.listActive();
-    for (const ref of active) {
+    const syncPromise = (async () => {
       const mapping = await this.docStore.get(ref.repo, ref.prNumber);
-      if (!mapping) continue;
 
       try {
-        await this.statusStore.set({
-          ...ref,
+        if (!mapping) {
+          throw new Error("PR not linked to a Google Doc.");
+        }
+
+        await this.statusStore.update(ref.repo, ref.prNumber, {
           state: "syncing",
           updatedAt: new Date().toISOString()
         });
@@ -569,29 +577,41 @@ export class DirectAdapter implements SyncAdapter {
 
         mapping.lastSyncedAt = new Date().toISOString();
         await this.docStore.upsert(mapping);
-        await this.statusStore.set({
-          ...ref,
+        await this.statusStore.update(ref.repo, ref.prNumber, {
           state: "idle",
           updatedAt: new Date().toISOString()
         });
       } catch (err) {
-        console.error(`Sync failed for ${ref.repo}#${ref.prNumber.toString()}:`, err);
+        console.error(`Sync failed for ${lockKey}:`, err);
         captureExtensionException(err, {
-          extra: {
-            prNumber: ref.prNumber,
-            repo: ref.repo
-          },
+          extra: { prNumber: ref.prNumber, repo: ref.repo },
           surface: "background",
-          tags: { operation: "sync_all" }
+          tags: { operation: "sync_all_pr" }
         });
-        await this.statusStore.set({
-          ...ref,
+        await this.statusStore.update(ref.repo, ref.prNumber, {
           state: "error",
           updatedAt: new Date().toISOString(),
           message: String(err)
         });
       }
+    })();
+
+    this.prLocks.set(lockKey, syncPromise);
+    try {
+      await syncPromise;
+    } finally {
+      this.prLocks.delete(lockKey);
     }
+  }
+
+  private async runSyncAll(): Promise<void> {
+    const ghToken = await this.authStore.getGitHubToken();
+    if (!ghToken) return;
+
+    const gToken = await this.authStore.getGoogleToken(false);
+
+    const active = await this.docStore.listActive();
+    await Promise.all(active.map((ref) => this.syncPRWithLock(ref, ghToken, gToken)));
   }
 
   private async formatGDocAuthor(googleAuthor: string): Promise<string> {
@@ -599,8 +619,6 @@ export class DirectAdapter implements SyncAdapter {
     return mapping ? `@${mapping.githubLogin}` : googleAuthor;
   }
 }
-
-let activeSyncAllPromise: Promise<void> | undefined;
 
 function createDriveCommentContextFromComment(comment: GitHubReviewComment): {
   anchor?: string;
