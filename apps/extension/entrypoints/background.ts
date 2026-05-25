@@ -221,6 +221,10 @@ export default defineBackground(() => {
       void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
       chrome.sidePanel.open({ tabId }).catch((err: unknown) => {
         console.error("[dorv] sidepanel toggle open failed:", err);
+        captureExtensionException(err, {
+          surface: "background",
+          tags: { operation: "keyboard_shortcut_toggle" }
+        });
       });
     }
   });

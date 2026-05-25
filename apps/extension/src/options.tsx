@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createSettingsStore } from "../lib/storage/stores.js";
-import { initSentryForSurface } from "../lib/telemetry/sentry.js";
+import { initSentryForSurface, captureExtensionException } from "../lib/telemetry/sentry.js";
 import { isSidePanelSupported } from "../lib/compat.js";
 import "./options.css";
 
@@ -76,6 +76,10 @@ function Options() {
       }
     } catch (err) {
       setNotice(`Validation error: ${String(err)}`);
+      captureExtensionException(err, {
+        surface: "options",
+        tags: { operation: "github_pat_validation" }
+      });
     } finally {
       setValidating(false);
     }

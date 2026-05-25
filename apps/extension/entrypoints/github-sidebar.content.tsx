@@ -65,6 +65,10 @@ function GithubSidebar({
     onCreate().catch((err: unknown) => {
       setCreateError(String(err));
       setIsCreating(false);
+      captureExtensionException(err, {
+        surface: "github-sidebar",
+        tags: { operation: "create_doc" }
+      });
     });
   };
 
@@ -72,6 +76,10 @@ function GithubSidebar({
     setCreateError(undefined);
     onSetup?.().catch((err: unknown) => {
       setCreateError(String(err));
+      captureExtensionException(err, {
+        surface: "github-sidebar",
+        tags: { operation: "open_sidepanel" }
+      });
     });
   };
 
