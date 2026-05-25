@@ -417,6 +417,20 @@ export class DirectAdapter implements SyncAdapter {
   }
 
   async syncAll(): Promise<void> {
+    if (activeSyncAllPromise) {
+      await activeSyncAllPromise;
+      return;
+    }
+
+    activeSyncAllPromise = this.runSyncAll();
+    try {
+      await activeSyncAllPromise;
+    } finally {
+      activeSyncAllPromise = undefined;
+    }
+  }
+
+  private async runSyncAll(): Promise<void> {
     const ghToken = await this.authStore.getGitHubToken();
     if (!ghToken) return;
 
@@ -585,6 +599,8 @@ export class DirectAdapter implements SyncAdapter {
     return mapping ? `@${mapping.githubLogin}` : googleAuthor;
   }
 }
+
+let activeSyncAllPromise: Promise<void> | undefined;
 
 function createDriveCommentContextFromComment(comment: GitHubReviewComment): {
   anchor?: string;
