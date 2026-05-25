@@ -2,6 +2,8 @@
 
 **Document review** — sync GitHub PR comments with Google Docs.
 
+
+
 Chrome extension that bridges GitHub PR inline review and Google Docs comments for markdown-heavy PRs (RFCs, design docs, ADRs, READMEs). Reviewers work in Google Docs; authors merge in GitHub as usual.
 
 | Resource | Link |
