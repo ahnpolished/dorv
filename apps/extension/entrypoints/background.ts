@@ -20,6 +20,10 @@ interface ChromeMessage {
 export default defineBackground(() => {
   initSentryForSurface("background");
   const storageArea = createChromeStorageArea(chrome.storage.local);
+  // Tracks which tabs currently have the side panel open so Alt+Shift+D can toggle.
+  // State is best-effort: Chrome's sidePanel API has no "is open" query, so closing
+  // via the browser's own X button won't update this set (next press re-opens).
+  const panelOpenTabs = new Set<number>();
   const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
   const docStore = createDocStore(storageArea);
   const statusStore = createStatusStore(storageArea);
@@ -90,6 +94,7 @@ export default defineBackground(() => {
         open
       })
         .then(() => {
+          panelOpenTabs.add(tabId);
           sendResponse({ success: true });
         })
         .catch((err: unknown) => {
@@ -137,6 +142,7 @@ export default defineBackground(() => {
               const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
               const tabId = tabs[0]?.id;
               if (tabId !== undefined) {
+                panelOpenTabs.delete(tabId);
                 await chrome.sidePanel.setOptions({ tabId, enabled: false });
               }
             }
@@ -198,18 +204,28 @@ export default defineBackground(() => {
     });
   });
 
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    panelOpenTabs.delete(tabId);
+  });
+
   chrome.commands.onCommand.addListener((command, tab) => {
-    if (command !== "open-sidepanel") return;
+    if (command !== "toggle-sidepanel") return;
     if (!isSidePanelSupported()) return;
     const tabId = tab?.id;
     if (tabId === undefined) return;
-    void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
-    chrome.sidePanel.open({ tabId }).catch((err: unknown) => {
-      console.error("[dorv] keyboard shortcut sidePanel.open failed:", err);
-      captureExtensionException(err, {
-        surface: "background",
-        tags: { operation: "keyboard_shortcut_open" }
+    if (panelOpenTabs.has(tabId)) {
+      panelOpenTabs.delete(tabId);
+      void chrome.sidePanel.setOptions({ tabId, enabled: false });
+    } else {
+      panelOpenTabs.add(tabId);
+      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
+      chrome.sidePanel.open({ tabId }).catch((err: unknown) => {
+        console.error("[dorv] sidepanel toggle open failed:", err);
+        captureExtensionException(err, {
+          surface: "background",
+          tags: { operation: "keyboard_shortcut_toggle" }
+        });
       });
-    });
+    }
   });
 });

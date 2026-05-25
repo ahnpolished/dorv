@@ -48,7 +48,7 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(config).toContain("side_panel");
     expect(config).toContain("sidepanel.html");
     expect(config).toContain("commands");
-    expect(config).toContain("open-sidepanel");
+    expect(config).toContain("toggle-sidepanel");
     expect(config).toContain("Alt+Shift+D");
   });
 

@@ -31,9 +31,9 @@ export default defineConfig({
       }
     },
     commands: {
-      "open-sidepanel": {
+      "toggle-sidepanel": {
         suggested_key: { default: "Alt+Shift+D" },
-        description: "Open the dorv side panel"
+        description: "Toggle the dorv side panel"
       }
     }
   }
