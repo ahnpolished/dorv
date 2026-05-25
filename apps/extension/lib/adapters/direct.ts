@@ -1,5 +1,6 @@
 import type { AuthStore } from "../storage/auth.js";
 import {
+  createActivityStore,
   createDocStore,
   createIdentityStore,
   createStatusStore,
@@ -49,6 +50,7 @@ export class DirectAdapter implements SyncAdapter {
   private mappingStore;
   private replyMappingStore;
   private identityStore;
+  private activityStore;
 
   constructor(
     private authStore: AuthStore,
@@ -59,6 +61,7 @@ export class DirectAdapter implements SyncAdapter {
     this.mappingStore = createMappingStore(storageArea);
     this.replyMappingStore = createReplyMappingStore(storageArea);
     this.identityStore = createIdentityStore(storageArea);
+    this.activityStore = createActivityStore(storageArea);
   }
 
   async getDoc(ref: PullRequestRef): Promise<DocMapping | undefined> {
@@ -179,6 +182,18 @@ export class DirectAdapter implements SyncAdapter {
     };
 
     await this.mappingStore.upsert(commentMapping);
+    await this.activityStore.append({
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      direction: "github_to_gdoc",
+      kind: "comment_synced",
+      ghCommentId: comment.id,
+      docCommentId: result.id,
+      path: comment.path,
+      ...(comment.line != null ? { line: comment.line } : {}),
+      snippet: activitySnippet(comment.body),
+      createdAt: new Date().toISOString()
+    });
     return commentMapping;
   }
 
@@ -211,6 +226,18 @@ export class DirectAdapter implements SyncAdapter {
     };
 
     await this.mappingStore.upsert(commentMapping);
+    await this.activityStore.append({
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      direction: "github_to_gdoc",
+      kind: "comment_synced",
+      ghCommentId: comment.id,
+      docCommentId: result.id,
+      path: thread.path,
+      line: thread.line,
+      snippet: activitySnippet(comment.body),
+      createdAt: new Date().toISOString()
+    });
     return commentMapping;
   }
 
@@ -374,6 +401,18 @@ export class DirectAdapter implements SyncAdapter {
     };
 
     await this.mappingStore.upsert(commentMapping);
+    await this.activityStore.append({
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      direction: "gdoc_to_github",
+      kind: "comment_synced",
+      ghCommentId: result.id,
+      docCommentId: comment.id,
+      path: bestMatch.path,
+      line: bestMatch.line,
+      snippet: activitySnippet(comment.content),
+      createdAt: new Date().toISOString()
+    });
     return commentMapping;
   }
 
@@ -582,6 +621,11 @@ function formatGitHubMirroredBody(comment: GitHubReviewComment): string {
   const author = comment.user ? `@${comment.user}` : "unknown";
   const link = comment.htmlUrl ? `\n\n[View on GitHub](${comment.htmlUrl})` : "";
   return `[GitHub: ${author}]\n\n${comment.body}${link}`;
+}
+
+function activitySnippet(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
 }
 
 function buildGitHubThreadSnapshot(thread: GitHubReviewThread): string {

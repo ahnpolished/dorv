@@ -41,6 +41,23 @@ export interface ReplyMapping extends PullRequestRef {
   ghUpdatedAt?: string;
 }
 
+export type SyncedActivityDirection = "github_to_gdoc" | "gdoc_to_github";
+export type SyncedActivityKind = "comment_synced" | "reply_synced" | "thread_resolved";
+
+export interface SyncedActivity extends PullRequestRef {
+  id: string;
+  direction: SyncedActivityDirection;
+  kind: SyncedActivityKind;
+  ghCommentId?: number;
+  docCommentId?: string;
+  path?: string;
+  line?: number;
+  snippet: string;
+  createdAt: string;
+}
+
+export type NewSyncedActivity = Omit<SyncedActivity, "id"> & { id?: string };
+
 export interface IdentityMapping {
   googleAuthor: string;
   githubLogin: string;
