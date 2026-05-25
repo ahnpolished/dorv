@@ -19,7 +19,7 @@ import {
   createReviewComment,
   createReviewCommentReply
 } from "../github/comments.js";
-import { fetchReviewComments } from "../github/fetch.js";
+import { fetchReviewComments, fetchReviewThreads } from "../github/fetch.js";
 import { pushGDocComment, pushGDocReply } from "../gdoc/comments.js";
 import { fetchGDocComments } from "../gdoc/fetch.js";
 import { findLineMatch } from "../gdoc/matching.js";
@@ -31,6 +31,7 @@ import type {
   CreateDocResult,
   DocMapping,
   GitHubReviewComment,
+  GitHubReviewThread,
   GoogleDocComment,
   PullRequestRef,
   ReplyMapping,
@@ -161,7 +162,36 @@ export class DirectAdapter implements SyncAdapter {
       gToken,
       mapping.docId,
       `${comment.body}\n\n[View](${comment.htmlUrl})`,
-      createDriveCommentContext(comment)
+      createDriveCommentContextFromComment(comment)
+    );
+
+    const commentMapping: CommentMapping = {
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      ghCommentId: comment.id,
+      docCommentId: result.id,
+      source: "github"
+    };
+
+    await this.mappingStore.upsert(commentMapping);
+    return commentMapping;
+  }
+
+  private async pushGHThreadToDoc(
+    thread: GitHubReviewThread,
+    mapping: DocMapping
+  ): Promise<CommentMapping> {
+    const gToken = await this.authStore.getGoogleToken(false);
+    if (!gToken) {
+      throw new Error("Google token missing during sync");
+    }
+
+    const comment = thread.rootComment;
+    const result = await pushGDocComment(
+      gToken,
+      mapping.docId,
+      `${comment.body}\n\n[View](${comment.htmlUrl})`,
+      createDriveCommentContextFromThread(thread)
     );
 
     const commentMapping: CommentMapping = {
@@ -265,51 +295,52 @@ export class DirectAdapter implements SyncAdapter {
           updatedAt: new Date().toISOString()
         });
 
-        const comments = await fetchReviewComments(ghToken, ref.repo, ref.prNumber);
+        const threads = await fetchReviewThreads(ghToken, ref.repo, ref.prNumber);
 
         // GH top-level comments → Doc
-        for (const comment of comments.filter((c) => !c.inReplyToId)) {
-          if (!(await this.mappingStore.hasByGH(comment.id))) {
-            await this.pushGHCommentToDoc(comment, mapping);
+        for (const thread of threads) {
+          if (!(await this.mappingStore.hasByGH(thread.rootComment.id))) {
+            await this.pushGHThreadToDoc(thread, mapping);
           }
         }
 
         if (gToken) {
           // GH replies → Doc
-          type GHReply = GitHubReviewComment & { inReplyToId: number };
-          const ghReplies = comments.filter((c): c is GHReply => c.inReplyToId != null);
-          for (const reply of ghReplies) {
-            if (await this.replyMappingStore.hasByGH(reply.id)) continue;
-            const parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
-            if (!parentMapping) continue;
-            try {
-              const result = await pushGDocReply(
-                gToken,
-                mapping.docId,
-                parentMapping.docCommentId,
-                reply.body
-              );
-              const replyMapping: ReplyMapping = {
-                repo: mapping.repo,
-                prNumber: mapping.prNumber,
-                ghReplyId: reply.id,
-                docReplyId: result.id,
-                ghParentCommentId: reply.inReplyToId,
-                docParentCommentId: parentMapping.docCommentId,
-                source: "github"
-              };
-              await this.replyMappingStore.upsert(replyMapping);
-            } catch (err) {
-              console.error(`GH reply ${reply.id.toString()} sync failed:`, err);
-              captureExtensionException(err, {
-                extra: {
-                  prNumber: mapping.prNumber,
+          for (const thread of threads) {
+            for (const reply of thread.replies) {
+              if (await this.replyMappingStore.hasByGH(reply.id)) continue;
+              if (reply.inReplyToId == null) continue;
+              const parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
+              if (!parentMapping) continue;
+              try {
+                const result = await pushGDocReply(
+                  gToken,
+                  mapping.docId,
+                  parentMapping.docCommentId,
+                  reply.body
+                );
+                const replyMapping: ReplyMapping = {
                   repo: mapping.repo,
-                  replyId: reply.id
-                },
-                surface: "background",
-                tags: { operation: "github_reply_sync" }
-              });
+                  prNumber: mapping.prNumber,
+                  ghReplyId: reply.id,
+                  docReplyId: result.id,
+                  ghParentCommentId: reply.inReplyToId,
+                  docParentCommentId: parentMapping.docCommentId,
+                  source: "github"
+                };
+                await this.replyMappingStore.upsert(replyMapping);
+              } catch (err) {
+                console.error(`GH reply ${reply.id.toString()} sync failed:`, err);
+                captureExtensionException(err, {
+                  extra: {
+                    prNumber: mapping.prNumber,
+                    repo: mapping.repo,
+                    replyId: reply.id
+                  },
+                  surface: "background",
+                  tags: { operation: "github_reply_sync" }
+                });
+              }
             }
           }
 
@@ -388,7 +419,7 @@ export class DirectAdapter implements SyncAdapter {
   }
 }
 
-function createDriveCommentContext(comment: GitHubReviewComment): {
+function createDriveCommentContextFromComment(comment: GitHubReviewComment): {
   anchor?: string;
   quotedFileContent?: { mimeType: string; value: string };
 } {
@@ -404,7 +435,7 @@ function createDriveCommentContext(comment: GitHubReviewComment): {
     });
   }
 
-  const quotedLine = findQuotedLine(comment);
+  const quotedLine = findQuotedLineFromComment(comment);
   if (quotedLine) {
     context.quotedFileContent = {
       mimeType: "text/plain",
@@ -415,7 +446,31 @@ function createDriveCommentContext(comment: GitHubReviewComment): {
   return context;
 }
 
-function findQuotedLine(comment: GitHubReviewComment): string | undefined {
+function createDriveCommentContextFromThread(thread: GitHubReviewThread): {
+  anchor?: string;
+  quotedFileContent?: { mimeType: string; value: string };
+} {
+  const context: {
+    anchor?: string;
+    quotedFileContent?: { mimeType: string; value: string };
+  } = {};
+
+  context.anchor = JSON.stringify({
+    region: { kind: "drive#commentRegion", line: thread.line, rev: "head" },
+    dorv: { path: thread.path, side: thread.side }
+  });
+
+  if (thread.quotedLine) {
+    context.quotedFileContent = {
+      mimeType: "text/plain",
+      value: thread.quotedLine
+    };
+  }
+
+  return context;
+}
+
+function findQuotedLineFromComment(comment: GitHubReviewComment): string | undefined {
   if (!comment.diffHunk || comment.line == null) return undefined;
 
   const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(comment.diffHunk);
