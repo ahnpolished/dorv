@@ -20,7 +20,7 @@ import {
   createReviewComment,
   createReviewCommentReply
 } from "../github/comments.js";
-import { fetchReviewComments, fetchReviewThreads } from "../github/fetch.js";
+import { fetchPullRequestMeta, fetchReviewComments, fetchReviewThreads } from "../github/fetch.js";
 import {
   deleteGDocComment,
   pushGDocComment,
@@ -433,6 +433,26 @@ export class DirectAdapter implements SyncAdapter {
           state: "syncing",
           updatedAt: new Date().toISOString()
         });
+
+        // Stale detection: check if new commits have landed since doc creation
+        if (!mapping.isStale) {
+          const repoParts = mapping.repo.split("/");
+          const [repoOwner, repoName] = repoParts;
+          if (repoOwner && repoName) {
+            try {
+              const meta = await fetchPullRequestMeta(
+                { owner: repoOwner, repo: repoName, prNumber: ref.prNumber },
+                { fetch, token: ghToken }
+              );
+              if (meta.headSha !== mapping.headSha) {
+                mapping.isStale = true;
+                mapping.latestSha = meta.headSha;
+              }
+            } catch {
+              // Non-fatal: stale check failure should not block sync
+            }
+          }
+        }
 
         const threads = await fetchReviewThreads(ghToken, ref.repo, ref.prNumber);
 
