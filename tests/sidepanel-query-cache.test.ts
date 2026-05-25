@@ -72,7 +72,14 @@ describe("sidepanel cache storage snapshot", () => {
       }
     ];
     const gdocComments: GoogleDocComment[] = [
-      { id: "gdoc-1", content: "clarify", author: "Bob", createdAt: "t", updatedAt: "t" }
+      {
+        id: "gdoc-1",
+        content: "clarify",
+        author: "Bob",
+        createdAt: "t",
+        updatedAt: "t",
+        resolved: false
+      }
     ];
     const commentMappings: CommentMapping[] = [
       { repo: "org/repo", prNumber: 12, ghCommentId: 1, docCommentId: "gdoc-1", source: "github" }

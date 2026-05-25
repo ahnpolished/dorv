@@ -103,6 +103,7 @@ export interface GoogleDocComment {
   createdAt: string;
   updatedAt: string;
   author: string;
+  resolved: boolean;
   replies?: GoogleDocReply[];
 }
 
