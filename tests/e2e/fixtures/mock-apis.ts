@@ -261,6 +261,12 @@ export async function setupPageRoutes(
 
   const { owner, repo, prNumber } = TEST_PR;
 
+  // GitHub GraphQL — fetchReviewThreads tries this before REST fallback.
+  // Return 500 so the extension falls back to the REST pulls/comments endpoint.
+  await context.route("https://api.github.com/graphql", (route: Route) => {
+    void route.fulfill({ status: 500, body: "GraphQL not mocked" });
+  });
+
   // Fake GitHub PR page HTML (matched by URL so the content script runs)
   await context.route(
     `https://github.com/${owner}/${repo}/pull/${prNumber.toString()}`,
