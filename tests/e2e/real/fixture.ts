@@ -449,7 +449,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           "--no-sandbox",
           "--disable-setuid-sandbox",
           `--disable-extensions-except=${EXTENSION_PATH}`,
-          `--load-extension=${EXTENSION_PATH}`
+          `--load-extension=${EXTENSION_PATH}`,
+          ...(process.env.PW_HEADED === "true" ? [] : ["--headless=new"])
         ]
       });
       await use(ctx);

@@ -303,6 +303,15 @@ export function createStatusStore(storage: StorageArea) {
     },
     async set(status: SyncStatus): Promise<void> {
       await storage.set({ [prKey("statusStore", status)]: status });
+    },
+    async update(repo: string, prNumber: number, update: Partial<SyncStatus>): Promise<void> {
+      const existing = (await this.get(repo, prNumber)) ?? {
+        repo,
+        prNumber,
+        state: "idle",
+        updatedAt: new Date().toISOString()
+      };
+      await this.set({ ...existing, ...update });
     }
   };
 }
