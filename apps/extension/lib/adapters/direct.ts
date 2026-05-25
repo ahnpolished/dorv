@@ -20,7 +20,12 @@ import {
   createReviewCommentReply
 } from "../github/comments.js";
 import { fetchReviewComments, fetchReviewThreads } from "../github/fetch.js";
-import { pushGDocComment, pushGDocReply } from "../gdoc/comments.js";
+import {
+  deleteGDocComment,
+  pushGDocComment,
+  pushGDocReply,
+  resolveGDocComment
+} from "../gdoc/comments.js";
 import { fetchGDocComments } from "../gdoc/fetch.js";
 import { findLineMatch } from "../gdoc/matching.js";
 import { fetchPullRequestFiles, filterMarkdownFiles } from "../github/pr-files.js";
@@ -199,11 +204,106 @@ export class DirectAdapter implements SyncAdapter {
       prNumber: mapping.prNumber,
       ghCommentId: comment.id,
       docCommentId: result.id,
-      source: "github"
+      source: "github",
+      ghThreadId: thread.id,
+      ghUpdatedAt: comment.updatedAt,
+      threadSnapshot: buildGitHubThreadSnapshot(thread)
     };
 
     await this.mappingStore.upsert(commentMapping);
     return commentMapping;
+  }
+
+  private async pushGHThreadRepliesToDoc(
+    thread: GitHubReviewThread,
+    mapping: DocMapping,
+    parentMapping: CommentMapping,
+    gToken: string
+  ): Promise<void> {
+    for (const reply of thread.replies) {
+      if (reply.inReplyToId == null) continue;
+      const result = await pushGDocReply(
+        gToken,
+        mapping.docId,
+        parentMapping.docCommentId,
+        formatGitHubMirroredBody(reply)
+      );
+      const replyMapping: ReplyMapping = {
+        repo: mapping.repo,
+        prNumber: mapping.prNumber,
+        ghReplyId: reply.id,
+        docReplyId: result.id,
+        ghParentCommentId: reply.inReplyToId,
+        docParentCommentId: parentMapping.docCommentId,
+        source: "github",
+        ghUpdatedAt: reply.updatedAt
+      };
+      await this.replyMappingStore.upsert(replyMapping);
+    }
+  }
+
+  private async recreateGHThreadInDoc(
+    thread: GitHubReviewThread,
+    mapping: DocMapping,
+    existing: CommentMapping,
+    gToken: string
+  ): Promise<void> {
+    const previousReplyMappings = await this.replyMappingStore.listByParentGH(
+      thread.rootComment.id
+    );
+    await deleteGDocComment(gToken, mapping.docId, existing.docCommentId);
+    for (const replyMapping of previousReplyMappings) {
+      await this.replyMappingStore.removeByGH(replyMapping.ghReplyId);
+    }
+    const recreatedMapping = await this.pushGHThreadToDoc(thread, mapping);
+    await this.pushGHThreadRepliesToDoc(thread, mapping, recreatedMapping, gToken);
+  }
+
+  private async syncGHThreadLifecycle(
+    thread: GitHubReviewThread,
+    mapping: DocMapping,
+    existing: CommentMapping,
+    gToken: string
+  ): Promise<"handled" | "continue"> {
+    if (existing.source !== "github") return "continue";
+
+    const snapshot = buildGitHubThreadSnapshot(thread);
+
+    if (thread.isResolved) {
+      if (!existing.resolvedAt) {
+        await resolveGDocComment(gToken, mapping.docId, existing.docCommentId);
+        await this.mappingStore.upsert({
+          ...existing,
+          ghThreadId: thread.id,
+          ghUpdatedAt: thread.rootComment.updatedAt,
+          threadSnapshot: snapshot,
+          resolvedAt: new Date().toISOString()
+        });
+      }
+      return "handled";
+    }
+
+    // Reopening resolved GitHub threads is intentionally out of scope for
+    // HUM-1278. Leave the mirrored Google Docs root resolved until a later
+    // lifecycle pass defines reopen semantics.
+    if (existing.resolvedAt) return "handled";
+
+    if (!existing.threadSnapshot) {
+      await this.mappingStore.upsert({
+        ...existing,
+        ghThreadId: thread.id,
+        ghUpdatedAt: thread.rootComment.updatedAt,
+        threadSnapshot: snapshot
+      });
+      return "continue";
+    }
+
+    if (existing.threadSnapshot !== snapshot) {
+      await this.recreateGHThreadInDoc(thread, mapping, existing, gToken);
+      return "handled";
+    }
+
+    return "continue";
   }
 
   async pushDocCommentToGH(
@@ -297,21 +397,28 @@ export class DirectAdapter implements SyncAdapter {
 
         const threads = await fetchReviewThreads(ghToken, ref.repo, ref.prNumber);
 
-        // GH top-level comments → Doc
+        // GH top-level comments → Doc, plus first-pass lifecycle for mapped GH threads.
         for (const thread of threads) {
-          if (!(await this.mappingStore.hasByGH(thread.rootComment.id))) {
+          const existingRootMapping = await this.mappingStore.getByGH(thread.rootComment.id);
+          if (!existingRootMapping) {
             await this.pushGHThreadToDoc(thread, mapping);
+            continue;
           }
+          if (!gToken) continue;
+          await this.syncGHThreadLifecycle(thread, mapping, existingRootMapping, gToken);
         }
 
         if (gToken) {
           // GH replies → Doc
           for (const thread of threads) {
+            if (thread.isResolved) continue;
+            const rootMapping = await this.mappingStore.getByGH(thread.rootComment.id);
+            if (rootMapping?.resolvedAt) continue;
             for (const reply of thread.replies) {
               if (await this.replyMappingStore.hasByGH(reply.id)) continue;
               if (reply.inReplyToId == null) continue;
               const parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
-              if (!parentMapping) continue;
+              if (!parentMapping || parentMapping.resolvedAt) continue;
               try {
                 const result = await pushGDocReply(
                   gToken,
@@ -326,7 +433,8 @@ export class DirectAdapter implements SyncAdapter {
                   docReplyId: result.id,
                   ghParentCommentId: reply.inReplyToId,
                   docParentCommentId: parentMapping.docCommentId,
-                  source: "github"
+                  source: "github",
+                  ghUpdatedAt: reply.updatedAt
                 };
                 await this.replyMappingStore.upsert(replyMapping);
               } catch (err) {
@@ -474,6 +582,24 @@ function formatGitHubMirroredBody(comment: GitHubReviewComment): string {
   const author = comment.user ? `@${comment.user}` : "unknown";
   const link = comment.htmlUrl ? `\n\n[View on GitHub](${comment.htmlUrl})` : "";
   return `[GitHub: ${author}]\n\n${comment.body}${link}`;
+}
+
+function buildGitHubThreadSnapshot(thread: GitHubReviewThread): string {
+  return JSON.stringify({
+    root: {
+      id: thread.rootComment.id,
+      body: thread.rootComment.body,
+      updatedAt: thread.rootComment.updatedAt
+    },
+    replies: thread.replies
+      .map((reply) => ({
+        id: reply.id,
+        body: reply.body,
+        inReplyToId: reply.inReplyToId,
+        updatedAt: reply.updatedAt
+      }))
+      .sort((a, b) => a.id - b.id)
+  });
 }
 
 function findQuotedLineFromComment(comment: GitHubReviewComment): string | undefined {

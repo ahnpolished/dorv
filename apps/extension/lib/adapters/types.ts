@@ -26,6 +26,10 @@ export interface CommentMapping extends PullRequestRef {
   ghCommentId: number;
   docCommentId: string;
   source: SyncSource;
+  ghThreadId?: string;
+  ghUpdatedAt?: string;
+  threadSnapshot?: string;
+  resolvedAt?: string;
 }
 
 export interface ReplyMapping extends PullRequestRef {
@@ -34,6 +38,7 @@ export interface ReplyMapping extends PullRequestRef {
   ghParentCommentId: number;
   docParentCommentId: string;
   source: SyncSource;
+  ghUpdatedAt?: string;
 }
 
 export interface IdentityMapping {
