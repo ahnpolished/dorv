@@ -179,7 +179,7 @@ describe("DirectAdapter baseline sync", () => {
 
     expect(driveBody).toEqual({
       content:
-        "Please tighten this paragraph.\n\n[View](https://github.com/org/repo/pull/123#discussion_r1)",
+        "[GitHub: @alice]\n\nPlease tighten this paragraph.\n\n[View on GitHub](https://github.com/org/repo/pull/123#discussion_r1)",
       anchor: JSON.stringify({
         region: { kind: "drive#commentRegion", line: 42, rev: "head" },
         dorv: { path: "docs/rfc.md", side: "RIGHT" }
@@ -189,6 +189,85 @@ describe("DirectAdapter baseline sync", () => {
         value: "target paragraph"
       }
     });
+  });
+
+  it("skips LEFT-side GitHub review threads without creating GDoc comments", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    await docStore.upsert({
+      ...ref,
+      docId: "doc-1",
+      docUrl: "url-1",
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "sha1",
+      latestSha: "sha1",
+      isStale: false
+    });
+
+    const driveCommentPosts: unknown[] = [];
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.includes("/graphql")) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              repository: {
+                pullRequest: {
+                  reviewThreads: {
+                    nodes: [
+                      {
+                        id: "thread-left",
+                        isResolved: false,
+                        path: "docs/rfc.md",
+                        line: 9,
+                        diffSide: "LEFT",
+                        comments: {
+                          nodes: [
+                            {
+                              databaseId: 9,
+                              body: "deleted line comment",
+                              path: "docs/rfc.md",
+                              line: 9,
+                              diffHunk: "@@ -9,1 +0,0 @@\n-deleted line",
+                              createdAt: "t",
+                              updatedAt: "t",
+                              url: "https://github.com/org/repo/pull/123#discussion_r9",
+                              author: { login: "alice" },
+                              replyTo: null
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    pageInfo: { hasNextPage: false, endCursor: null }
+                  }
+                }
+              }
+            }
+          })
+        };
+      }
+
+      if (urlStr.includes("googleapis.com/drive/v3/files/doc-1/comments")) {
+        if (init?.method === "POST") {
+          driveCommentPosts.push(JSON.parse(String(init.body)));
+        }
+        return { ok: true, json: () => Promise.resolve({ comments: [] }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.syncAll();
+
+    expect(driveCommentPosts).toHaveLength(0);
+    expect(await mappingStore.getByGH(9)).toBeUndefined();
   });
 
   it("syncs 100 GH comments to distinct GDoc comments", async () => {

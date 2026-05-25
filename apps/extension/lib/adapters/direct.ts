@@ -161,7 +161,7 @@ export class DirectAdapter implements SyncAdapter {
     const result = await pushGDocComment(
       gToken,
       mapping.docId,
-      `${comment.body}\n\n[View](${comment.htmlUrl})`,
+      formatGitHubMirroredBody(comment),
       createDriveCommentContextFromComment(comment)
     );
 
@@ -190,7 +190,7 @@ export class DirectAdapter implements SyncAdapter {
     const result = await pushGDocComment(
       gToken,
       mapping.docId,
-      `${comment.body}\n\n[View](${comment.htmlUrl})`,
+      formatGitHubMirroredBody(comment),
       createDriveCommentContextFromThread(thread)
     );
 
@@ -317,7 +317,7 @@ export class DirectAdapter implements SyncAdapter {
                   gToken,
                   mapping.docId,
                   parentMapping.docCommentId,
-                  reply.body
+                  formatGitHubMirroredBody(reply)
                 );
                 const replyMapping: ReplyMapping = {
                   repo: mapping.repo,
@@ -468,6 +468,12 @@ function createDriveCommentContextFromThread(thread: GitHubReviewThread): {
   }
 
   return context;
+}
+
+function formatGitHubMirroredBody(comment: GitHubReviewComment): string {
+  const author = comment.user ? `@${comment.user}` : "unknown";
+  const link = comment.htmlUrl ? `\n\n[View on GitHub](${comment.htmlUrl})` : "";
+  return `[GitHub: ${author}]\n\n${comment.body}${link}`;
 }
 
 function findQuotedLineFromComment(comment: GitHubReviewComment): string | undefined {
