@@ -22,6 +22,10 @@ function docKey(prefix: string, id: string): string {
   return `${prefix}:doc:${id}`;
 }
 
+function replyParentKey(ghParentCommentId: number): string {
+  return `replyMappingStore:parent-gh:${ghParentCommentId.toString()}`;
+}
+
 function identityKey(googleAuthor: string): string {
   return `identityStore:google:${googleAuthor}`;
 }
@@ -74,9 +78,14 @@ export function createMappingStore(storage: StorageArea) {
       const dk = docKey("mappingStore", mapping.docCommentId);
       const prk = prKey("mappingStore:pr", mapping);
 
+      const existingByGH = await getValue<CommentMapping>(storage, ghk);
       const prMappings = await getArray<CommentMapping>(storage, prk);
       const updated = prMappings.filter((m) => m.ghCommentId !== mapping.ghCommentId);
       updated.push(mapping);
+
+      if (existingByGH && existingByGH.docCommentId !== mapping.docCommentId) {
+        await storage.remove([docKey("mappingStore", existingByGH.docCommentId)]);
+      }
 
       await storage.set({
         [ghk]: mapping,
@@ -98,6 +107,19 @@ export function createMappingStore(storage: StorageArea) {
     },
     async listByPR(repo: string, prNumber: number): Promise<CommentMapping[]> {
       return getArray<CommentMapping>(storage, prKey("mappingStore:pr", { repo, prNumber }));
+    },
+    async removeByGH(ghCommentId: number): Promise<void> {
+      const mapping = await this.getByGH(ghCommentId);
+      if (!mapping) return;
+      const prk = prKey("mappingStore:pr", mapping);
+      const prMappings = await getArray<CommentMapping>(storage, prk);
+      await storage.set({
+        [prk]: prMappings.filter((m) => m.ghCommentId !== ghCommentId)
+      });
+      await storage.remove([
+        ghKey("mappingStore", ghCommentId),
+        docKey("mappingStore", mapping.docCommentId)
+      ]);
     }
   };
 }
@@ -105,9 +127,27 @@ export function createMappingStore(storage: StorageArea) {
 export function createReplyMappingStore(storage: StorageArea) {
   return {
     async upsert(mapping: ReplyMapping): Promise<void> {
+      const ghk = ghKey("replyMappingStore", mapping.ghReplyId);
+      const dk = docKey("replyMappingStore", mapping.docReplyId);
+      const pk = replyParentKey(mapping.ghParentCommentId);
+      const existingByGH = await getValue<ReplyMapping>(storage, ghk);
+      if (existingByGH && existingByGH.docReplyId !== mapping.docReplyId) {
+        await storage.remove([docKey("replyMappingStore", existingByGH.docReplyId)]);
+      }
+      if (existingByGH && existingByGH.ghParentCommentId !== mapping.ghParentCommentId) {
+        const oldPk = replyParentKey(existingByGH.ghParentCommentId);
+        const oldParentMappings = await getArray<ReplyMapping>(storage, oldPk);
+        await storage.set({
+          [oldPk]: oldParentMappings.filter((m) => m.ghReplyId !== mapping.ghReplyId)
+        });
+      }
+      const parentMappings = await getArray<ReplyMapping>(storage, pk);
+      const updatedParentMappings = parentMappings.filter((m) => m.ghReplyId !== mapping.ghReplyId);
+      updatedParentMappings.push(mapping);
       await storage.set({
-        [ghKey("replyMappingStore", mapping.ghReplyId)]: mapping,
-        [docKey("replyMappingStore", mapping.docReplyId)]: mapping
+        [ghk]: mapping,
+        [dk]: mapping,
+        [pk]: updatedParentMappings
       });
     },
     async getByGH(ghReplyId: number): Promise<ReplyMapping | undefined> {
@@ -121,6 +161,22 @@ export function createReplyMappingStore(storage: StorageArea) {
     },
     async hasByDoc(docReplyId: string): Promise<boolean> {
       return (await this.getByDoc(docReplyId)) !== undefined;
+    },
+    async listByParentGH(ghParentCommentId: number): Promise<ReplyMapping[]> {
+      return getArray<ReplyMapping>(storage, replyParentKey(ghParentCommentId));
+    },
+    async removeByGH(ghReplyId: number): Promise<void> {
+      const mapping = await this.getByGH(ghReplyId);
+      if (!mapping) return;
+      const pk = replyParentKey(mapping.ghParentCommentId);
+      const parentMappings = await getArray<ReplyMapping>(storage, pk);
+      await storage.set({
+        [pk]: parentMappings.filter((m) => m.ghReplyId !== ghReplyId)
+      });
+      await storage.remove([
+        ghKey("replyMappingStore", ghReplyId),
+        docKey("replyMappingStore", mapping.docReplyId)
+      ]);
     }
   };
 }

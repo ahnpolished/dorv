@@ -66,3 +66,43 @@ export async function pushGDocComment(
 
   return (await resp.json()) as { id: string };
 }
+
+export async function deleteGDocComment(
+  token: string,
+  docId: string,
+  commentId: string
+): Promise<void> {
+  const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments/${commentId}`;
+
+  const resp = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Drive comment delete failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+}
+
+export async function resolveGDocComment(
+  token: string,
+  docId: string,
+  commentId: string
+): Promise<void> {
+  const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments/${commentId}?fields=id,resolved`;
+
+  const resp = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ resolved: true })
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Drive comment resolve failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+}
