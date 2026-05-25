@@ -35,8 +35,9 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Run on pushes to main or manual dispatch; skip for PRs to keep review cycles fast
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Run on PRs, pushes to main, and manual dispatch.
+    # All tests use mocked APIs so no real credentials are required.
+    if: github.event_name == 'pull_request' || github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: checks
     steps:
       - name: Checkout
