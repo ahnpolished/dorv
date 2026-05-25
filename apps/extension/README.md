@@ -49,7 +49,7 @@ After code changes WXT auto-reloads the extension; no manual reload needed.
 Open the extension options (right-click the extension icon → **Options**, or visit `chrome-extension://<id>/options.html`):
 
 1. **GitHub PAT** — paste a token that can read PR markdown and write PR comments, click **Validate & Save**. For GitHub Organization repositories, see [GitHub authentication](../../docs/GITHUB_AUTH.md).
-2. **Google Account** — click **Connect Google Account** and approve the OAuth consent screen (`documents` + `drive.file` scopes only).
+2. **Google Account** — click **Connect Google Account** and approve the OAuth consent screen (`drive.file` scope only).
 3. **Backend URL** — leave blank to use DirectAdapter (PAT + `chrome.identity`, no server). Set to your backend endpoint to switch to BackendAdapter (future).
 
 ## Enterprise / admin deployment

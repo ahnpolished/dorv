@@ -44,6 +44,8 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(config).toContain("https://docs.google.com/*");
     expect(config).toContain("https://api.github.com/*");
     expect(config).toContain("https://www.googleapis.com/*");
+    expect(config).toContain("https://www.googleapis.com/auth/drive.file");
+    expect(config).not.toContain("https://www.googleapis.com/auth/documents");
     expect(config).toContain("GOOGLE_CLIENT_ID");
     expect(config).toContain("side_panel");
     expect(config).toContain("sidepanel.html");
