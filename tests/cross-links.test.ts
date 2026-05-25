@@ -78,7 +78,8 @@ describe("HUM-1254 cross-links", () => {
     );
 
     expect(capturedBody).toContain("Looks good");
-    expect(capturedBody).toContain(`[View](${GH_COMMENT_URL})`);
+    expect(capturedBody).toContain("[GitHub: @alice]");
+    expect(capturedBody).toContain(`[View on GitHub](${GH_COMMENT_URL})`);
   });
 
   it("GDoc → GH: pushed comment includes link back to Google Doc", async () => {

@@ -409,4 +409,12 @@ claims:
     pr: https://github.com/ahnpolished/dorv/pull/54
     completed_at: "2026-05-24T18:24:52Z"
 
+  HUM-1277:
+    agent: codex
+    status: in_progress
+    claimed_at: "2026-05-25T00:23:51Z"
+    depends_on: [HUM-1274, HUM-1276]
+    branch: feature/hum-1277
+    worktree: .worktrees/feature-hum-1277
+
 wait_queue: {}

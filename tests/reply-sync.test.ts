@@ -122,7 +122,9 @@ describe("Reply sync — bidirectional", () => {
       expect(replyMapping?.ghParentCommentId).toBe(10);
       expect(replyMapping?.docParentCommentId).toBe("doc-c-10");
       expect(replyMapping?.source).toBe("github");
-      expect(driveReplyBody).toEqual({ content: "reply text" });
+      expect(driveReplyBody).toEqual({
+        content: "[GitHub: @bob]\n\nreply text\n\n[View on GitHub](https://github.com/r)"
+      });
     });
 
     it("skips GH reply if parent comment not yet mapped", async () => {
