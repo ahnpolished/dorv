@@ -55,6 +55,18 @@ export interface GitHubReviewComment {
   htmlUrl: string;
 }
 
+export interface GitHubReviewThread {
+  id: string;
+  path: string;
+  line: number;
+  side: "RIGHT";
+  diffHunk?: string;
+  quotedLine?: string;
+  isResolved: boolean;
+  rootComment: GitHubReviewComment;
+  replies: GitHubReviewComment[];
+}
+
 export interface GoogleDocReply {
   id: string;
   content: string;
