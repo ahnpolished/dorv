@@ -268,6 +268,7 @@ function SidePanel() {
   const [pushedId, setPushedId] = useState<string | undefined>(undefined);
   const [pushingAll, setPushingAll] = useState(false);
   const [syncingNow, setSyncingNow] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>(undefined);
   const [pastDocs, setPastDocs] = useState<DocMapping[]>([]);
@@ -309,19 +310,23 @@ function SidePanel() {
     const [gh, gd, cm, s] = await Promise.all([
       queryClient.fetchQuery({
         queryKey: ghKey,
-        queryFn: () => adapter.getGHComments(m)
+        queryFn: () => adapter.getGHComments(m),
+        staleTime: 0
       }),
       queryClient.fetchQuery({
         queryKey: gdKey,
-        queryFn: () => adapter.getDocComments(m)
+        queryFn: () => adapter.getDocComments(m),
+        staleTime: 0
       }),
       queryClient.fetchQuery({
         queryKey: cmKey,
-        queryFn: () => adapter.getCommentMappings(m)
+        queryFn: () => adapter.getCommentMappings(m),
+        staleTime: 0
       }),
       queryClient.fetchQuery({
         queryKey: statusKey,
-        queryFn: () => statusStore.get(m.repo, m.prNumber)
+        queryFn: () => statusStore.get(m.repo, m.prNumber),
+        staleTime: 0
       })
     ]);
     setGhComments(gh);
@@ -409,8 +414,8 @@ function SidePanel() {
     }
   }, [onboarding]);
 
-  // Fast poll: while the sidepanel is open and a doc is loaded, sync every 5s
-  // instead of waiting for the 1-minute background alarm.
+  // Auto-refresh: while the sidepanel is open and a doc is loaded, sync every 30s.
+  // lastSyncAt in the dep array restarts the timer whenever Sync now is clicked.
   useEffect(() => {
     if (!mapping) return;
     const captured = mapping;
@@ -418,17 +423,17 @@ function SidePanel() {
       void syncNowViaBackground()
         .then(() => loadSyncData(captured))
         .catch((err: unknown) => {
-          console.debug("[dorv] fast poll error:", err);
+          console.debug("[dorv] auto-refresh error:", err);
           captureExtensionException(err, {
             surface: "sidepanel",
-            tags: { operation: "fast_poll" }
+            tags: { operation: "auto_refresh" }
           });
         });
-    }, 5_000);
+    }, 30_000);
     return () => {
       clearInterval(id);
     };
-  }, [mapping?.docId]); // loadSyncData is stable; docId change restarts the interval
+  }, [mapping?.docId, lastSyncAt]);
 
   const handleCreateDoc = async () => {
     if (!prRef) return;
@@ -471,7 +476,11 @@ function SidePanel() {
   const groupedGhComments = useMemo(() => groupCommentsByPath(ghComments), [ghComments]);
 
   const unmappedGdocComments = useMemo(() => {
-    return gdocComments.filter((gd) => !commentMappings.some((cm) => cm.docCommentId === gd.id));
+    return gdocComments.filter(
+      (gd) =>
+        !commentMappings.some((cm) => cm.docCommentId === gd.id) &&
+        !gd.content.startsWith("[GitHub: ")
+    );
   }, [gdocComments, commentMappings]);
 
   const handlePush = async (comment: GoogleDocComment) => {
@@ -550,6 +559,7 @@ function SidePanel() {
       await syncNowViaBackground();
       if (mapping) await invalidateSyncQueries(mapping);
       await loadData();
+      setLastSyncAt(Date.now());
     } catch (err) {
       alert(`Sync failed: ${String(err)}`);
       captureExtensionException(err, {
