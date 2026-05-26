@@ -218,8 +218,11 @@ export default defineBackground(() => {
       void chrome.sidePanel.setOptions({ tabId, enabled: false });
     } else {
       panelOpenTabs.add(tabId);
-      void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled: true });
-      chrome.sidePanel.open({ tabId }).catch((err: unknown) => {
+      void openSidePanelForTab({
+        tabId,
+        setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
+        open: chrome.sidePanel.open.bind(chrome.sidePanel)
+      }).catch((err: unknown) => {
         console.error("[dorv] sidepanel toggle open failed:", err);
         captureExtensionException(err, {
           surface: "background",

@@ -46,6 +46,47 @@ const disabledDefaultIntegrations = new Set([
 const initializedSurfaces = new Set<SentrySurface>();
 const surfaceScopes = new Map<SentrySurface, Scope>();
 
+const THROTTLE_WINDOW_MS = 60_000;
+const THROTTLE_MAP_MAX = 200;
+// fingerprint → timestamp of last sent event
+const errorThrottle = new Map<string, number>();
+
+function buildFingerprint(
+  error: unknown,
+  surface: SentrySurface,
+  tags?: Record<string, string>
+): string {
+  const name = error instanceof Error ? error.name : "UnknownError";
+  const message =
+    error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200);
+  const operation = tags?.operation ?? "";
+  return `${surface}::${name}::${message}::${operation}`;
+}
+
+function isThrottled(fingerprint: string, now: number): boolean {
+  const last = errorThrottle.get(fingerprint);
+  if (last !== undefined && now - last < THROTTLE_WINDOW_MS) {
+    return true;
+  }
+
+  // Sweep stale entries when map is at capacity
+  if (errorThrottle.size >= THROTTLE_MAP_MAX) {
+    for (const [key, ts] of errorThrottle) {
+      if (now - ts >= THROTTLE_WINDOW_MS) {
+        errorThrottle.delete(key);
+      }
+    }
+    // Evict oldest if still at capacity
+    if (errorThrottle.size >= THROTTLE_MAP_MAX) {
+      const oldest = [...errorThrottle.entries()].sort((a, b) => a[1] - b[1])[0];
+      if (oldest) errorThrottle.delete(oldest[0]);
+    }
+  }
+
+  errorThrottle.set(fingerprint, now);
+  return false;
+}
+
 function resolveManifestVersion(explicitManifestVersion?: string): string {
   if (explicitManifestVersion) {
     return explicitManifestVersion;
@@ -153,6 +194,11 @@ export function captureExtensionException(
     return;
   }
 
+  const fingerprint = buildFingerprint(error, surface, tags);
+  if (isThrottled(fingerprint, Date.now())) {
+    return;
+  }
+
   const captureScope = baseScope.clone();
   captureScope.setTag("surface", surface);
 
@@ -170,4 +216,5 @@ export function captureExtensionException(
 export function resetSentryForTests(): void {
   initializedSurfaces.clear();
   surfaceScopes.clear();
+  errorThrottle.clear();
 }

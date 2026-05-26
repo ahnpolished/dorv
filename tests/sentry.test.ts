@@ -182,4 +182,35 @@ describe("Sentry telemetry", () => {
     expect(captureScope?.setExtras).toHaveBeenCalledWith({ repo: "ahnpolished/dorv" });
     expect(hoisted.captureExceptionMock).toHaveBeenCalledWith(error);
   });
+
+  it("throttles duplicate errors within the window", () => {
+    const error = new Error("rate limited error");
+
+    initSentryForSurface("background", {
+      env: {
+        MODE: "production",
+        WXT_SENTRY_DSN: "https://examplePublicKey@o0.ingest.sentry.io/0"
+      }
+    });
+
+    captureExtensionException(error, { surface: "background", tags: { operation: "poll" } });
+    captureExtensionException(error, { surface: "background", tags: { operation: "poll" } });
+    captureExtensionException(error, { surface: "background", tags: { operation: "poll" } });
+
+    expect(hoisted.captureExceptionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throttle the same error from different surfaces or operations", () => {
+    const error = new Error("multi-surface error");
+    const dsn = "https://examplePublicKey@o0.ingest.sentry.io/0";
+
+    initSentryForSurface("background", { env: { MODE: "production", WXT_SENTRY_DSN: dsn } });
+    initSentryForSurface("sidepanel", { env: { MODE: "production", WXT_SENTRY_DSN: dsn } });
+
+    captureExtensionException(error, { surface: "background", tags: { operation: "a" } });
+    captureExtensionException(error, { surface: "sidepanel", tags: { operation: "a" } });
+    captureExtensionException(error, { surface: "background", tags: { operation: "b" } });
+
+    expect(hoisted.captureExceptionMock).toHaveBeenCalledTimes(3);
+  });
 });

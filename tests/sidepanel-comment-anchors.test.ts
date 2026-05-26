@@ -12,7 +12,7 @@ const sidepanelSource = readFileSync(
 describe("HUM-1273 sidepanel comment anchors", () => {
   it("renders an icon button on GitHub comment cards that links to the native GitHub comment", () => {
     expect(sidepanelSource).toContain('label="Open GitHub comment"');
-    expect(sidepanelSource).toContain("href={c.htmlUrl}");
+    expect(sidepanelSource).toContain("href={thread.root.htmlUrl}");
   });
 
   it("renders an icon button on Google Doc comment cards that links back to the doc", () => {

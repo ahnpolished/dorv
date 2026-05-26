@@ -384,19 +384,24 @@ export async function exportDriveDocAsText(fileId: string): Promise<string> {
 // ── Sidepanel helper ──────────────────────────────────────────────────────────
 
 /**
- * Open sidepanel.html and inject chrome API patches before React mounts:
- * - chrome.tabs.query  → returns the real PR page URL
- * - chrome.identity.getAuthToken → returns the real Google token
+ * Navigate to the real PR URL, press Alt+Shift+D to trigger the extension's
+ * toggle-sidepanel command, and wait for the sidepanel page to appear.
+ *
+ * In headed Chrome the native sidepanel opens; in --headless=new the
+ * openSidePanelForTab fallback opens sidepanel.html as a tab instead.
+ * Either way chrome.tabs.query and chrome.identity are patched via an init
+ * script so the sidepanel can resolve the PR URL and Google token in tests.
  */
 export async function openSidepanelOnRealPr(
   extensionContext: BrowserContext,
   extensionId: string
 ): Promise<import("@playwright/test").Page> {
-  const panel = await extensionContext.newPage();
-  await panel.addInitScript(
-    ({ prUrl, tabId, googleToken }) => {
-      const fakeTab = [{ url: prUrl, id: tabId }];
-
+  // Patch chrome APIs in every new extension page (including the sidepanel).
+  // addInitScript accumulates per-call but the patches are idempotent.
+  await extensionContext.addInitScript(
+    ({ prUrl, googleToken }: { prUrl: string; googleToken: string }) => {
+      if (typeof chrome === "undefined") return;
+      const fakeTab = [{ url: prUrl, id: 1 }];
       (chrome.tabs as any).query = (
         _filter: unknown,
         callback?: (tabs: { url: string; id: number }[]) => void
@@ -407,20 +412,34 @@ export async function openSidepanelOnRealPr(
         }
         return Promise.resolve(fakeTab);
       };
-
-      (chrome.identity as any).getAuthToken = (
-        _opts: unknown,
-        callback: (token: string) => void
-      ) => {
-        callback(googleToken);
-      };
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (chrome.identity) {
+        (chrome.identity as any).getAuthToken = (
+          _opts: unknown,
+          callback: (token: string) => void
+        ) => {
+          callback(googleToken);
+        };
+      }
     },
-    { prUrl: REAL_PR_URL, tabId: 1, googleToken: GOOGLE_TOKEN }
+    { prUrl: REAL_PR_URL, googleToken: GOOGLE_TOKEN }
   );
-  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-    waitUntil: "domcontentloaded"
-  });
-  return panel;
+
+  const prPage = await extensionContext.newPage();
+
+  const [sidepanel] = await Promise.all([
+    extensionContext.waitForEvent("page", {
+      predicate: (p) => p.url().includes(`${extensionId}/sidepanel`),
+      timeout: 15_000
+    }),
+    (async () => {
+      await prPage.goto(REAL_PR_URL, { waitUntil: "domcontentloaded" });
+      await prPage.keyboard.press("Alt+Shift+D");
+    })()
+  ]);
+
+  await sidepanel.waitForLoadState("domcontentloaded");
+  return sidepanel;
 }
 
 // ── Playwright fixture definition ─────────────────────────────────────────────

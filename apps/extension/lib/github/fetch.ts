@@ -84,21 +84,34 @@ export async function fetchReviewComments(
   prNumber: number
 ): Promise<GitHubReviewComment[]> {
   const { owner, name } = parseRepo(repo);
-  const url = `https://api.github.com/repos/${owner}/${name}/pulls/${prNumber.toString()}/comments`;
+  const base = `https://api.github.com/repos/${owner}/${name}/pulls/${prNumber.toString()}/comments?per_page=100`;
+  const all: any[] = [];
+  let page = 1;
 
-  const resp = await fetch(url, {
-    headers: {
-      Authorization: `token ${token}`,
-      Accept: "application/vnd.github.v3+json"
+  for (;;) {
+    const resp = await fetch(`${base}&page=${page.toString()}`, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json"
+      }
+    });
+
+    if (!resp.ok) {
+      throw new Error(`GitHub fetch failed: ${resp.status.toString()} ${await resp.text()}`);
     }
-  });
 
-  if (!resp.ok) {
-    throw new Error(`GitHub fetch failed: ${resp.status.toString()} ${await resp.text()}`);
+    const data = await resp.json();
+    if (!Array.isArray(data)) break;
+    for (const c of data) all.push(c);
+    if (data.length < 100) break;
+    // GitHub signals more pages via Link header; no header means this is the last page
+    const link: string =
+      (resp.headers as { get?(k: string): string | null } | undefined)?.get?.("link") ?? "";
+    if (!link.includes('rel="next"')) break;
+    page++;
   }
 
-  const data = (await resp.json()) as any[];
-  return data.map(normalizeRestComment);
+  return all.map(normalizeRestComment);
 }
 
 export async function fetchReviewThreads(

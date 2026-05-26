@@ -272,6 +272,7 @@ function SidePanel() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>(undefined);
   const [pastDocs, setPastDocs] = useState<DocMapping[]>([]);
+  const [expandedThreads, setExpandedThreads] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -474,6 +475,15 @@ function SidePanel() {
   };
 
   const groupedGhComments = useMemo(() => groupCommentsByPath(ghComments), [ghComments]);
+
+  const toggleThread = (rootId: number) => {
+    setExpandedThreads((prev) => {
+      const next = new Set(prev);
+      if (next.has(rootId)) next.delete(rootId);
+      else next.add(rootId);
+      return next;
+    });
+  };
 
   const unmappedGdocComments = useMemo(() => {
     return gdocComments.filter(
@@ -799,19 +809,55 @@ function SidePanel() {
                 <details key={group.path} open className="file-section">
                   <summary>{group.path}</summary>
                   <div className="comments">
-                    {group.comments.map((c) => (
-                      <div key={c.id} className="comment-card dorv-comment-enter">
+                    {group.threads.map((thread) => (
+                      <div key={thread.root.id} className="comment-card dorv-comment-enter">
                         <div className="comment-meta">
-                          <span className="author">@{c.user}</span>
-                          <span className="line">L{c.line?.toString() ?? "?"}</span>
+                          <span className="author">@{thread.root.user}</span>
+                          <span className="line">L{thread.root.line?.toString() ?? "?"}</span>
                           <IconButton
                             icon="ti-anchor"
                             label="Open GitHub comment"
-                            href={c.htmlUrl}
-                            disabled={!c.htmlUrl}
+                            href={thread.root.htmlUrl}
+                            disabled={!thread.root.htmlUrl}
                           />
                         </div>
-                        <div className="comment-body">{c.body}</div>
+                        <div className="comment-body">{thread.root.body}</div>
+                        {thread.replies.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              className="thread-toggle"
+                              onClick={() => {
+                                toggleThread(thread.root.id);
+                              }}
+                            >
+                              <i
+                                className={`ti ${expandedThreads.has(thread.root.id) ? "ti-chevron-down" : "ti-chevron-right"}`}
+                                aria-hidden="true"
+                              />
+                              {thread.replies.length}{" "}
+                              {thread.replies.length === 1 ? "reply" : "replies"}
+                            </button>
+                            {expandedThreads.has(thread.root.id) && (
+                              <div className="thread-replies">
+                                {thread.replies.map((reply) => (
+                                  <div key={reply.id} className="reply-card">
+                                    <div className="comment-meta">
+                                      <span className="author">@{reply.user}</span>
+                                      <IconButton
+                                        icon="ti-anchor"
+                                        label="Open GitHub comment"
+                                        href={reply.htmlUrl}
+                                        disabled={!reply.htmlUrl}
+                                      />
+                                    </div>
+                                    <div className="comment-body">{reply.body}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
