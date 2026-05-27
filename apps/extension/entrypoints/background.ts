@@ -62,6 +62,9 @@ export default defineBackground(() => {
   });
 
   chrome.runtime.onStartup.addListener(() => {
+    if (isSidePanelSupported()) {
+      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    }
     startPolling();
   });
 
