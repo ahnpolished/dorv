@@ -348,7 +348,13 @@ function SidePanel() {
       }),
       queryClient.fetchQuery({
         queryKey: statusKey,
-        queryFn: () => statusStore.get(m.repo, m.prNumber),
+        queryFn: async (): Promise<SyncStatus> =>
+          (await statusStore.get(m.repo, m.prNumber)) ?? {
+            repo: m.repo,
+            prNumber: m.prNumber,
+            state: "idle",
+            updatedAt: m.lastSyncedAt
+          },
         staleTime: 0
       })
     ]);

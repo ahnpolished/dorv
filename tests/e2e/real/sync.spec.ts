@@ -11,15 +11,30 @@ import {
   createGhCommentReply,
   deleteGhReviewComment,
   GOOGLE_TOKEN,
-  hasRequiredGoogleScopes
+  hasRequiredGoogleScopes,
+  GITHUB_PAT
 } from "./fixture.js";
-import { readState, writeState, type RealE2EState } from "./state.js";
+import {
+  readState,
+  readStateForPr,
+  writeState,
+  writeStateForPr,
+  type RealE2EState
+} from "./state.js";
 
 interface ExtensionWorker {
   evaluate: <R, Arg>(pageFunction: (arg: Arg) => R | Promise<R>, arg: Arg) => Promise<R>;
 }
 
 const TEST_COMMENT_TAG = "[dorv-real-test]";
+
+function isGitHubRateLimitMessage(message: string): boolean {
+  return (
+    message.includes("rate limit") ||
+    message.includes("API rate limit exceeded") ||
+    message.includes("403")
+  );
+}
 
 /** Seed the extension storage from the shared state file. */
 async function seedDocMapping(extensionWorker: ExtensionWorker): Promise<RealE2EState> {
@@ -28,14 +43,17 @@ async function seedDocMapping(extensionWorker: ExtensionWorker): Promise<RealE2E
     "DORV_GOOGLE_TOKEN must include Google Docs + Drive file scopes to sync live docs"
   );
 
-  const state = readState();
+  const state = readStateForPr("ahnpolished/dorv", 6);
   if (!state.docMapping || !state.docStoreKey) {
     test.skip(true, "State file missing — run doc-lifecycle.spec.ts first");
     throw new Error("State file missing — run doc-lifecycle.spec.ts first");
   }
 
-  // Restore the full storage snapshot if available
-  const storageSnapshot = (state as any).storageSnapshot || {
+  // Restore the full storage snapshot if available, but always force the
+  // current auth + mapping keys because prior test snapshots may be partial.
+  const storageSnapshot = {
+    ...((state as any).storageSnapshot || {}),
+    github_pat: GITHUB_PAT,
     active_prs: [
       { repo: (state.docMapping as any).repo, prNumber: (state.docMapping as any).prNumber }
     ],
@@ -45,9 +63,18 @@ async function seedDocMapping(extensionWorker: ExtensionWorker): Promise<RealE2E
 
   await extensionWorker.evaluate((data: any) => {
     return new Promise<void>((resolve) => {
-      chrome.storage.local.set(data, resolve);
+      chrome.storage.local.clear(() => {
+        chrome.storage.local.set(data, () => {
+          chrome.storage.local.set({ github_pat: data.github_pat }, resolve);
+        });
+      });
     });
   }, storageSnapshot);
+  await extensionWorker.evaluate((token: string) => {
+    (chrome.identity as any).getAuthToken = (_opts: unknown, callback: (t: string) => void) => {
+      callback(token);
+    };
+  }, GOOGLE_TOKEN);
   return state;
 }
 
@@ -58,7 +85,7 @@ async function persistStorage(extensionWorker: ExtensionWorker) {
       chrome.storage.local.get(null, resolve);
     });
   }, undefined);
-  writeState({ storageSnapshot: snapshot } as any);
+  writeStateForPr("ahnpolished/dorv", 6, { storageSnapshot: snapshot } as any);
 }
 
 /** List Drive comments on the doc, returns raw comment objects. */
@@ -88,6 +115,21 @@ async function cleanDriveComments(docId: string): Promise<void> {
   }
 }
 
+async function waitForDriveComment(docId: string, needle: string, timeout = 90_000): Promise<any> {
+  await expect
+    .poll(
+      async () => {
+        const comments = await listDriveComments(docId);
+        return comments.find((c) => typeof c.content === "string" && c.content.includes(needle));
+      },
+      { timeout, intervals: [2_000, 3_000, 5_000] }
+    )
+    .toBeDefined();
+
+  const comments = await listDriveComments(docId);
+  return comments.find((c) => typeof c.content === "string" && c.content.includes(needle));
+}
+
 const createdGhCommentIds: number[] = [];
 
 test.afterAll(async () => {
@@ -97,7 +139,7 @@ test.afterAll(async () => {
   }
   writeState({ ghCommentIds: [] });
 
-  const { docId } = readState();
+  const { docId } = readStateForPr("ahnpolished/dorv", 6);
   if (docId) {
     await cleanDriveComments(docId);
   }
@@ -108,10 +150,21 @@ test.describe("sync", () => {
     extensionWorker,
     triggerSync
   }) => {
+    test.setTimeout(180_000);
     await seedDocMapping(extensionWorker);
-    const state = readState();
+    const state = readStateForPr("ahnpolished/dorv", 6);
 
-    const target = await fetchCommentTarget();
+    let target;
+    try {
+      target = await fetchCommentTarget();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isGitHubRateLimitMessage(msg)) {
+        test.skip(true, `GitHub rate limited: ${msg}`);
+        return;
+      }
+      throw err;
+    }
     if (!target) return;
 
     const body = `${TEST_COMMENT_TAG} TC-002 basic threading test`;
@@ -120,20 +173,26 @@ test.describe("sync", () => {
     createdGhCommentIds.push(commentId);
 
     await triggerSync();
-    await extensionWorker.evaluate(() => new Promise((r) => setTimeout(r, 20_000)), undefined);
+    const synced = await waitForDriveComment(state.docId!, "TC-002", 120_000);
     await persistStorage(extensionWorker);
-
-    const driveComments = await listDriveComments(state.docId!);
-    const synced = driveComments.find(
-      (c) => typeof c.content === "string" && c.content.includes("TC-002")
-    );
     expect(synced, "GH comment must appear in GDoc").toBeDefined();
   });
 
   test("TC-003: GH reply syncs as GDoc thread reply", async ({ extensionWorker, triggerSync }) => {
+    test.setTimeout(180_000);
     await seedDocMapping(extensionWorker);
-    const state = readState();
-    const target = await fetchCommentTarget();
+    const state = readStateForPr("ahnpolished/dorv", 6);
+    let target;
+    try {
+      target = await fetchCommentTarget();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isGitHubRateLimitMessage(msg)) {
+        test.skip(true, `GitHub rate limited: ${msg}`);
+        return;
+      }
+      throw err;
+    }
     if (!target) return;
 
     const parentBody = `${TEST_COMMENT_TAG} TC-003 parent`;
@@ -147,7 +206,7 @@ test.describe("sync", () => {
     createdGhCommentIds.push(parentId);
 
     await triggerSync();
-    await extensionWorker.evaluate(() => new Promise((r) => setTimeout(r, 20_000)), undefined);
+    await waitForDriveComment(state.docId!, "TC-003 parent", 120_000);
 
     const replyBody = `${TEST_COMMENT_TAG} TC-003 reply`;
     const replyId = await createGhCommentReply(parentId, replyBody);
@@ -155,7 +214,20 @@ test.describe("sync", () => {
     createdGhCommentIds.push(replyId);
 
     await triggerSync();
-    await extensionWorker.evaluate(() => new Promise((r) => setTimeout(r, 20_000)), undefined);
+    await expect
+      .poll(
+        async () => {
+          const driveComments = await listDriveComments(state.docId!);
+          const parentComment = driveComments.find((c: any) =>
+            c.content?.includes("TC-003 parent")
+          );
+          return (
+            parentComment?.replies?.some((r: any) => r.content?.includes("TC-003 reply")) ?? false
+          );
+        },
+        { timeout: 120_000, intervals: [2_000, 3_000, 5_000] }
+      )
+      .toBe(true);
     await persistStorage(extensionWorker);
 
     const driveComments = await listDriveComments(state.docId!);
@@ -170,9 +242,20 @@ test.describe("sync", () => {
     extensionWorker,
     triggerSync
   }) => {
+    test.setTimeout(180_000);
     await seedDocMapping(extensionWorker);
-    const state = readState();
-    const target = await fetchCommentTarget();
+    const state = readStateForPr("ahnpolished/dorv", 6);
+    let target;
+    try {
+      target = await fetchCommentTarget();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isGitHubRateLimitMessage(msg)) {
+        test.skip(true, `GitHub rate limited: ${msg}`);
+        return;
+      }
+      throw err;
+    }
     if (!target) return;
 
     const body = `${TEST_COMMENT_TAG} TC-012 idempotency`;
@@ -182,12 +265,20 @@ test.describe("sync", () => {
 
     // First sync
     await triggerSync();
-    await extensionWorker.evaluate(() => new Promise((r) => setTimeout(r, 20_000)), undefined);
+    await waitForDriveComment(state.docId!, "TC-012", 120_000);
     await persistStorage(extensionWorker);
 
     // Second sync
     await triggerSync();
-    await extensionWorker.evaluate(() => new Promise((r) => setTimeout(r, 20_000)), undefined);
+    await expect
+      .poll(
+        async () => {
+          const driveComments = await listDriveComments(state.docId!);
+          return driveComments.filter((c: any) => c.content?.includes("TC-012")).length;
+        },
+        { timeout: 120_000, intervals: [2_000, 3_000, 5_000] }
+      )
+      .toBe(1);
     await persistStorage(extensionWorker);
 
     const driveComments = await listDriveComments(state.docId!);
@@ -200,17 +291,29 @@ test.describe("sync", () => {
     extensionId,
     extensionWorker
   }) => {
+    test.setTimeout(180_000);
     await seedDocMapping(extensionWorker);
     const panel = await openSidepanelOnRealPr(extensionContext, extensionId);
 
-    await panel.waitForTimeout(3000);
-    const syncBtn = panel.locator("button.sync-now-btn");
+    const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
+    const errorPanel = panel.locator("[data-testid='dorv-error']");
+    await expect(mainPanel.or(errorPanel)).toBeVisible({ timeout: 30_000 });
+    if (await errorPanel.isVisible().catch(() => false)) {
+      const message = (await errorPanel.textContent()) ?? "unknown sidepanel error";
+      if (message.includes("rate limit") || message.includes("API rate limit exceeded")) {
+        test.skip(true, `GitHub rate limited: ${message}`);
+        return;
+      }
+      throw new Error(`Sidepanel failed before sync button rendered: ${message}`);
+    }
+
+    const syncBtn = panel.locator("[data-testid='dorv-sync-now-btn']");
     await expect(syncBtn).toBeVisible({ timeout: 30_000 });
 
     await syncBtn.click();
-    const spinner = panel.locator("i.ti-refresh");
+    const spinner = panel.locator("[data-testid='dorv-refresh-icon']");
     await expect(spinner).toHaveClass(/dorv-spinning/, { timeout: 10_000 });
-    await expect(spinner).not.toHaveClass(/dorv-spinning/, { timeout: 40_000 });
+    await expect(spinner).not.toHaveClass(/dorv-spinning/, { timeout: 120_000 });
     await panel.close();
   });
 });
