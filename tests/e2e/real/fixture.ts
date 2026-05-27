@@ -21,6 +21,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { chromium, test as base, expect } from "@playwright/test";
 import type { BrowserContext, Worker } from "@playwright/test";
 import type {
@@ -265,6 +268,40 @@ export async function fetchCommentTarget(): Promise<GhCommentTarget | undefined>
   return _cachedTarget;
 }
 
+// ── Rate limit helpers ───────────────────────────────────────────────────────
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Fetch with retry/backoff for GitHub API rate limits */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  maxRetries = 3,
+  baseDelayMs = 2000
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(url, init);
+    if (resp.ok) return resp;
+    if (resp.status !== 403 && resp.status !== 429) return resp;
+
+    const retryAfter = (resp as any).headers?.get?.("retry-after");
+    const waitMs = retryAfter
+      ? parseInt(retryAfter, 10) * 1000
+      : baseDelayMs * Math.pow(2, attempt);
+
+    console.log(
+      `[rate-limit] ${resp.status} — retry in ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${maxRetries})`
+    );
+
+    if (attempt < maxRetries) {
+      await delay(waitMs);
+    }
+  }
+  return fetch(url, init);
+}
+
 /**
  * Create a GH review comment. Returns the comment id, or null on failure.
  * Failures are expected if the line is not in the diff for modified files.
@@ -273,39 +310,40 @@ export async function createGhReviewComment(
   headSha: string,
   filePath: string,
   line: number,
-  body: string
+  body: string,
+  prNumber: number = REAL_PR_NUMBER
 ): Promise<number | null> {
-  const resp = await fetch(
-    `https://api.github.com/repos/${REAL_REPO}/pulls/${REAL_PR_NUMBER.toString()}/comments`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GITHUB_PAT}`,
-        "Content-Type": "application/json",
-        Accept: "application/vnd.github+json"
-      },
-      body: JSON.stringify({ body, commit_id: headSha, path: filePath, line, side: "RIGHT" })
-    }
-  );
+  const url = `https://api.github.com/repos/${REAL_REPO}/pulls/${prNumber.toString()}/comments`;
+  const resp = await fetchWithRetry(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GITHUB_PAT}`,
+      "Content-Type": "application/json",
+      Accept: "application/vnd.github+json"
+    },
+    body: JSON.stringify({ body, commit_id: headSha, path: filePath, line, side: "RIGHT" })
+  });
   if (!resp.ok) return null;
   const data = await resp.json();
   return data.id as number;
 }
 
 /** Create a reply to a review comment thread. */
-export async function createGhCommentReply(parentId: number, body: string): Promise<number | null> {
-  const resp = await fetch(
-    `https://api.github.com/repos/${REAL_REPO}/pulls/${REAL_PR_NUMBER.toString()}/comments`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GITHUB_PAT}`,
-        "Content-Type": "application/json",
-        Accept: "application/vnd.github+json"
-      },
-      body: JSON.stringify({ body, in_reply_to: parentId })
-    }
-  );
+export async function createGhCommentReply(
+  parentId: number,
+  body: string,
+  prNumber: number = REAL_PR_NUMBER
+): Promise<number | null> {
+  const url = `https://api.github.com/repos/${REAL_REPO}/pulls/${prNumber.toString()}/comments`;
+  const resp = await fetchWithRetry(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GITHUB_PAT}`,
+      "Content-Type": "application/json",
+      Accept: "application/vnd.github+json"
+    },
+    body: JSON.stringify({ body, in_reply_to: parentId })
+  });
   if (!resp.ok) return null;
   const data = await resp.json();
   return data.id as number;
