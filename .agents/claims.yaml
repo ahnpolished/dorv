@@ -449,4 +449,14 @@ HUM-1280:
   pr: https://github.com/ahnpolished/dorv/pull/71
   completed_at: "2026-05-27T00:54:00Z"
 
+HUM-1281:
+  agent: codex
+  status: done
+  claimed_at: "2026-05-27T19:44:25Z"
+  depends_on: []
+  branch: feature/hum-1281-real-e2e-fixes
+  worktree: .worktrees/feature-hum-1281-real-e2e-fixes
+  pr: https://github.com/ahnpolished/dorv/pull/75
+  completed_at: "2026-05-27T20:47:07Z"
+
 wait_queue: {}
