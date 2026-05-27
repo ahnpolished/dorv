@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { createDocStore, createStatusStore } from "../lib/storage/stores.js";
+import { createDocStore, createStatusStore, createActivityStore } from "../lib/storage/stores.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
@@ -35,7 +35,8 @@ import type {
   GoogleDocComment,
   SyncStatus,
   CommentMapping,
-  MarkdownFileRef
+  MarkdownFileRef,
+  SyncedActivity
 } from "../lib/adapters/types.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
 import "./sidepanel.css";
@@ -95,12 +96,13 @@ const storageArea = createChromeStorageArea(chrome.storage.local);
 const docStore = createDocStore(storageArea);
 const statusStore = createStatusStore(storageArea);
 const authStore = createAuthStore(storageArea);
+const activityStore = createActivityStore(storageArea);
 const queryClient = createSidepanelQueryClient();
 
 initSentryForSurface("sidepanel");
 
 type TabKind = "loading" | "gdoc" | "github-pr" | "neutral";
-type TabType = "github" | "gdoc" | "info";
+type TabType = "github" | "gdoc" | "activities";
 type OnboardingView = "checking" | "github" | "google" | "done" | "complete";
 
 interface OnboardingFlowProps {
@@ -273,6 +275,7 @@ function SidePanel() {
   const [createError, setCreateError] = useState<string | undefined>(undefined);
   const [pastDocs, setPastDocs] = useState<DocMapping[]>([]);
   const [expandedThreads, setExpandedThreads] = useState<Set<number>>(new Set());
+  const [activities, setActivities] = useState<SyncedActivity[]>([]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -334,6 +337,8 @@ function SidePanel() {
     setGdocComments(gd);
     setCommentMappings(cm);
     setStatus(s);
+    const prActivities = await activityStore.listByPR(m.repo, m.prNumber);
+    setActivities(prActivities);
     await persistSidepanelCacheSnapshot(storageArea, queryClient, m);
   };
 
@@ -790,12 +795,12 @@ function SidePanel() {
         </button>
         <button
           type="button"
-          className={activeTab === "info" ? "active" : ""}
+          className={activeTab === "activities" ? "active" : ""}
           onClick={() => {
-            setActiveTab("info");
+            setActiveTab("activities");
           }}
         >
-          PR Info
+          Activities
         </button>
       </div>
 
@@ -917,20 +922,33 @@ function SidePanel() {
           </div>
         )}
 
-        {activeTab === "info" && (
-          <div className="pr-info">
-            <div className="info-row">
-              <label>Repository</label>
-              <span>{mapping.repo}</span>
-            </div>
-            <div className="info-row">
-              <label>Pull Request</label>
-              <span>#{mapping.prNumber.toString()}</span>
-            </div>
-            <div className="info-row">
-              <label>Target Branch</label>
-              <span>{mapping.headSha.slice(0, 7)}</span>
-            </div>
+        {activeTab === "activities" && (
+          <div className="activities-feed">
+            {activities.length === 0 ? (
+              <p className="empty-msg">No synced activities yet.</p>
+            ) : (
+              activities.map((act) => (
+                <div key={act.id} className="activity-card dorv-comment-enter">
+                  <div className="activity-header">
+                    <span
+                      className={`activity-direction ${act.direction === "github_to_gdoc" ? "dir-gh-gdoc" : "dir-gdoc-gh"}`}
+                    >
+                      {act.direction === "github_to_gdoc" ? "GH → GDoc" : "GDoc → GH"}
+                    </span>
+                    <span className="activity-time">
+                      {new Date(act.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="activity-snippet">{act.snippet}</div>
+                  {act.path && (
+                    <div className="activity-location">
+                      {act.path}
+                      {act.line !== undefined && <span> L{act.line.toString()}</span>}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

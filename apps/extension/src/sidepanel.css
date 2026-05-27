@@ -679,3 +679,63 @@ h3 {
 .past-docs-link:hover {
   text-decoration: underline;
 }
+
+/* Activities feed */
+
+.activities-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-card {
+  padding: 10px 12px;
+  background: var(--dorv-bg-elevated);
+  border: 1px solid var(--dorv-border);
+  border-radius: var(--dorv-radius-sm);
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.activity-direction {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.activity-direction.dir-gh-gdoc {
+  background: var(--dorv-success-subtle);
+  color: var(--dorv-success);
+}
+
+.activity-direction.dir-gdoc-gh {
+  background: var(--dorv-orange-subtle);
+  color: var(--dorv-orange);
+}
+
+.activity-time {
+  font-size: 10px;
+  color: var(--dorv-muted);
+  white-space: nowrap;
+}
+
+.activity-snippet {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dorv-text-on-dark);
+  word-break: break-word;
+}
+
+.activity-location {
+  font-size: 11px;
+  color: var(--dorv-muted);
+  margin-top: 4px;
+}
