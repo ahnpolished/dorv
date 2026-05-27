@@ -229,4 +229,21 @@ describe("fetchReviewThreads", () => {
       replies: [{ id: 302, inReplyToId: 301 }]
     });
   });
+
+  it("does not fall back to REST when GraphQL is rate limited", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("/graphql")) {
+        return {
+          ok: false,
+          status: 403,
+          text: async () => "API rate limit exceeded"
+        };
+      }
+
+      throw new Error(`REST fallback should not run for rate limits: ${url}`);
+    });
+
+    await expect(fetchReviewThreads("gh-token", "org/repo", 123)).rejects.toThrow(/rate limit/i);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });

@@ -174,10 +174,27 @@ export async function fetchReviewThreads(
     }
 
     return threads;
-  } catch {
+  } catch (error) {
+    if (isGitHubRateLimitError(error)) {
+      throw error;
+    }
+
     const comments = await fetchReviewComments(token, repo, prNumber);
     return normalizeRestThreads(comments);
   }
+}
+
+function isGitHubRateLimitError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("rate limit") ||
+    message.includes("secondary rate limit") ||
+    message.includes("abuse detection")
+  );
 }
 
 function parseRepo(repo: string): { owner: string; name: string } {

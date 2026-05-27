@@ -10,6 +10,7 @@ import {
   createGhReviewComment,
   createGhCommentReply,
   deleteGhReviewComment,
+  resolveGhThread,
   GOOGLE_TOKEN,
   hasRequiredGoogleScopes,
   GITHUB_PAT
@@ -130,6 +131,25 @@ async function waitForDriveComment(docId: string, needle: string, timeout = 90_0
   return comments.find((c) => typeof c.content === "string" && c.content.includes(needle));
 }
 
+async function findStoredThreadId(
+  extensionWorker: ExtensionWorker,
+  ghCommentId: number
+): Promise<string | undefined> {
+  const snapshot = await extensionWorker.evaluate<Record<string, any>, undefined>(() => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(null, resolve);
+    });
+  }, undefined);
+
+  for (const value of Object.values(snapshot)) {
+    if (value && typeof value === "object" && value.ghCommentId === ghCommentId) {
+      return typeof value.ghThreadId === "string" ? value.ghThreadId : undefined;
+    }
+  }
+
+  return undefined;
+}
+
 const createdGhCommentIds: number[] = [];
 
 test.afterAll(async () => {
@@ -236,6 +256,53 @@ test.describe("sync", () => {
       r.content?.includes("TC-003 reply")
     );
     expect(syncedReply, "GH reply must appear as a GDoc thread reply").toBeDefined();
+  });
+
+  test("TC-005: resolving a GH thread resolves the mapped GDoc comment", async ({
+    extensionWorker,
+    triggerSync
+  }) => {
+    test.setTimeout(180_000);
+    await seedDocMapping(extensionWorker);
+    const state = readStateForPr("ahnpolished/dorv", 6);
+    let target;
+    try {
+      target = await fetchCommentTarget();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isGitHubRateLimitMessage(msg)) {
+        test.skip(true, `GitHub rate limited: ${msg}`);
+        return;
+      }
+      throw err;
+    }
+    if (!target) return;
+
+    const body = `${TEST_COMMENT_TAG} TC-005 resolution`;
+    const commentId = await createGhReviewComment(target.headSha, target.path, target.line, body);
+    if (!commentId) return;
+    createdGhCommentIds.push(commentId);
+
+    await triggerSync();
+    const synced = await waitForDriveComment(state.docId!, "TC-005", 120_000);
+    const threadId = await findStoredThreadId(extensionWorker, commentId);
+    expect(threadId, "synced root comment should persist its GitHub thread id").toBeTruthy();
+
+    const resolved = await resolveGhThread(threadId!);
+    expect(resolved, "GitHub thread should resolve successfully").toBe(true);
+
+    await triggerSync();
+    await expect
+      .poll(
+        async () => {
+          const latest = await waitForDriveComment(state.docId!, "TC-005", 30_000);
+          return latest?.resolved ?? false;
+        },
+        { timeout: 120_000, intervals: [2_000, 3_000, 5_000] }
+      )
+      .toBe(true);
+    await persistStorage(extensionWorker);
+    expect(synced, "resolved GH thread must have an existing GDoc root comment").toBeDefined();
   });
 
   test("TC-012: running sync twice produces no duplicate GDoc comments", async ({
