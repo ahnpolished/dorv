@@ -78,16 +78,10 @@ export async function openSidePanelForTab({
   setOptions: SidePanelSetOptions;
   open: SidePanelOpen;
 }): Promise<void> {
-  // Fire setOptions and open without an await between them.
-  // Chrome's IPC channel processes messages in order, so setOptions
-  // completes before open resolves. The key constraint: no await may
-  // occur between the two calls — doing so would consume the user-gesture
-  // context that chrome.sidePanel.open() requires.
-  const enablePanel = setOptions({ tabId, path: "sidepanel.html", enabled: true });
+  await setOptions({ tabId, path: "sidepanel.html", enabled: true });
   try {
     await open({ tabId });
   } catch {
-    await enablePanel;
     await openSidepanelTab(true);
   }
 }
