@@ -28,3 +28,25 @@ describe("HUM-1257 sidepanel query integration", () => {
     expect(sidepanelSource).toContain("queryClient.setQueryData<GoogleDocComment[]>");
   });
 });
+
+describe("HUM-1280 Activities tab replaces PR Info", () => {
+  it("defines an Activities tab type", () => {
+    expect(sidepanelSource).toContain('"activities"');
+    expect(sidepanelSource).not.toContain('"info"');
+  });
+
+  it("renders an Activities tab button", () => {
+    expect(sidepanelSource).toContain("Activities");
+    expect(sidepanelSource).not.toContain("PR Info");
+  });
+
+  it("imports createActivityStore from stores", () => {
+    expect(sidepanelSource).toContain("createActivityStore");
+    expect(sidepanelSource).toContain("SyncedActivity");
+  });
+
+  it("read a SyncedActivity, create activityStore, and load activities in loadSyncData", () => {
+    expect(sidepanelSource).toContain("activityStore");
+    expect(sidepanelSource).toContain("activityStore.listByPR");
+  });
+});
