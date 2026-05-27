@@ -15,12 +15,18 @@ import {
 } from "../gdoc/drive.js";
 import { renderMarkdownToGDocHtml } from "../gdoc/markdown.js";
 import { generateGDocHtml } from "../gdoc/template.js";
+import { extractDocFromBotComment } from "../gdoc/urls.js";
 import {
   postPRComment,
   createReviewComment,
   createReviewCommentReply
 } from "../github/comments.js";
-import { fetchPullRequestMeta, fetchReviewComments, fetchReviewThreads } from "../github/fetch.js";
+import {
+  fetchPullRequestMeta,
+  fetchReviewComments,
+  fetchReviewThreads,
+  fetchIssueComments
+} from "../github/fetch.js";
 import {
   deleteGDocComment,
   pushGDocComment,
@@ -77,6 +83,27 @@ export class DirectAdapter implements SyncAdapter {
       throw new Error("GitHub PAT not configured. Please set it in extension options.");
     }
 
+    // Check if a dorv bot comment already links a GDoc for this PR
+    const issueComments = await fetchIssueComments(ghToken, input.repo, input.prNumber);
+    for (const comment of issueComments) {
+      const existing = extractDocFromBotComment(comment.body);
+      if (existing) {
+        const mapping: DocMapping = {
+          repo: input.repo,
+          prNumber: input.prNumber,
+          docId: existing.docId,
+          docUrl: existing.docUrl,
+          createdAt: new Date().toISOString(),
+          lastSyncedAt: new Date().toISOString(),
+          headSha: input.headSha,
+          latestSha: input.headSha,
+          isStale: false
+        };
+        await this.docStore.upsert(mapping);
+        return { mapping };
+      }
+    }
+
     const gToken = await this.authStore.getGoogleToken(false);
     if (!gToken) {
       throw new Error("Google account not connected. Please sign in in extension options.");
@@ -113,7 +140,7 @@ export class DirectAdapter implements SyncAdapter {
     await grantAnyoneCommentAccess(gToken, driveFile.id, inferOrganizationDomain(driveFile));
 
     // 4. Post bot comment on PR
-    const botCommentBody = `🤖 **dorv** has created a linked Google Doc for review:\n\n[${docName}](${driveFile.webViewLink})`;
+    const botCommentBody = `<!-- dorv-doc-id=${driveFile.id} -->\n🤖 **dorv** has created a linked Google Doc for review:\n\n[${docName}](${driveFile.webViewLink})`;
     await postPRComment(ghToken, input.repo, input.prNumber, botCommentBody);
 
     // 5. Persist mapping

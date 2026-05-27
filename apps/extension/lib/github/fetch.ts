@@ -180,6 +180,27 @@ export async function fetchReviewThreads(
   }
 }
 
+export async function fetchIssueComments(
+  token: string,
+  repo: string,
+  prNumber: number
+): Promise<{ body: string }[]> {
+  const { owner, name } = parseRepo(repo);
+  const resp = await fetch(
+    `https://api.github.com/repos/${owner}/${name}/issues/${prNumber.toString()}/comments?per_page=100`,
+    {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json"
+      }
+    }
+  );
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  if (!Array.isArray(data)) return [];
+  return data as { body: string }[];
+}
+
 function parseRepo(repo: string): { owner: string; name: string } {
   const parts = repo.split("/");
   const owner = parts[0];

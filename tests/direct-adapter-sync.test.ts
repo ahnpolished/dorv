@@ -632,3 +632,205 @@ describe("DirectAdapter baseline sync", () => {
     });
   });
 });
+
+describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
+  let storage: StorageArea;
+  let adapter: DirectAdapter;
+  let authStore: AuthStore;
+  let docStore: any;
+
+  beforeEach(() => {
+    storage = createMemoryStorageArea();
+    authStore = createAuthStore(storage);
+    docStore = createDocStore(storage);
+    adapter = new DirectAdapter(authStore, storage);
+    mockFetch.mockReset();
+    (global as any).chrome = {
+      runtime: { lastError: null },
+      identity: {
+        getAuthToken: vi.fn((_opts: any, cb: any) => cb(undefined)),
+        removeCachedAuthToken: vi.fn()
+      }
+    };
+  });
+
+  it("reuses existing GDoc when dorv bot comment (new marker format) is in PR comments", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    const calls: string[] = [];
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      calls.push(urlStr);
+
+      if (urlStr.includes("/issues/42/comments") && (!init?.method || init.method === "GET")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                body: "<!-- dorv-doc-id=existing-doc-id -->\n🤖 **dorv** has created a linked Google Doc for review:\n\n[PR #42 - My PR](https://docs.google.com/document/d/existing-doc-id/edit)"
+              }
+            ])
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const result = await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 42,
+      title: "My PR",
+      author: "alice",
+      branch: "feature/x",
+      headSha: "sha-abc",
+      prUrl: "https://github.com/org/repo/pull/42",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    expect(result.mapping.docId).toBe("existing-doc-id");
+    expect(result.mapping.docUrl).toBe("https://docs.google.com/document/d/existing-doc-id/edit");
+    expect(result.mapping.headSha).toBe("sha-abc");
+
+    const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
+    expect(driveUpload).toBeUndefined();
+
+    const mapping = await docStore.get("org/repo", 42);
+    expect(mapping?.docId).toBe("existing-doc-id");
+  });
+
+  it("reuses existing GDoc when dorv bot comment (legacy format, no marker) is in PR comments", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    const calls: string[] = [];
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      calls.push(urlStr);
+
+      if (urlStr.includes("/issues/42/comments") && (!init?.method || init.method === "GET")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                body: "🤖 **dorv** has created a linked Google Doc for review:\n\n[PR #42 - My PR](https://docs.google.com/document/d/legacy-doc-id/edit)"
+              }
+            ])
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const result = await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 42,
+      title: "My PR",
+      author: "alice",
+      branch: "feature/x",
+      headSha: "sha-abc",
+      prUrl: "https://github.com/org/repo/pull/42",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    expect(result.mapping.docId).toBe("legacy-doc-id");
+    expect(result.mapping.docUrl).toBe("https://docs.google.com/document/d/legacy-doc-id/edit");
+
+    const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
+    expect(driveUpload).toBeUndefined();
+  });
+
+  it("does not post a new bot comment when picking up an existing GDoc", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    const postCalls: string[] = [];
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (init?.method === "POST" && urlStr.includes("/issues/")) {
+        postCalls.push(urlStr);
+      }
+
+      if (urlStr.includes("/issues/42/comments") && (!init?.method || init.method === "GET")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                body: "🤖 **dorv** has created a linked Google Doc for review:\n\n[PR #42](https://docs.google.com/document/d/picked-doc-id/edit)"
+              }
+            ])
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 42,
+      title: "My PR",
+      author: "alice",
+      branch: "feature/x",
+      headSha: "sha-abc",
+      prUrl: "https://github.com/org/repo/pull/42",
+      files: []
+    });
+
+    expect(postCalls).toHaveLength(0);
+  });
+
+  it("falls through to creation when no bot comment is found", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+    const calls: string[] = [];
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      calls.push(`${init?.method ?? "GET"} ${urlStr}`);
+
+      if (urlStr.includes("/issues/42/comments") && (!init?.method || init.method === "GET")) {
+        return { ok: true, json: () => Promise.resolve([]) };
+      }
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# RFC") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "new-doc-id",
+              webViewLink: "https://docs.google.com/document/d/new-doc-id/edit"
+            })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const result = await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 42,
+      title: "My PR",
+      author: "alice",
+      branch: "feature/x",
+      headSha: "sha-abc",
+      prUrl: "https://github.com/org/repo/pull/42",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    expect(result.mapping.docId).toBe("new-doc-id");
+    const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
+    expect(driveUpload).toBeDefined();
+  });
+});
