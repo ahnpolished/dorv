@@ -39,7 +39,7 @@ import {
   GOOGLE_TOKEN,
   REAL_REPO
 } from "./fixture.js";
-import { readState, writeState } from "./state.js";
+import { readState, readStateForPr, writeState, writeStateForPr } from "./state.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -354,7 +354,9 @@ async function seedForPr(
   }
   await extensionWorker.evaluate((d: any) => {
     return new Promise<void>((resolve) => {
-      chrome.storage.local.set(d, resolve);
+      chrome.storage.local.clear(() => {
+        chrome.storage.local.set(d, resolve);
+      });
     });
   }, data);
 }
@@ -483,7 +485,7 @@ test.describe("TC-028: create GDoc from medium/large PRs", () => {
       );
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
       if (existingState.docId && existingState.docStoreKey === docStoreKey) {
         console.log(`[TC-028-${pr.label}] Reusing existing doc: ${existingState.docId}`);
         return;
@@ -554,7 +556,7 @@ test.describe("TC-028: create GDoc from medium/large PRs", () => {
       expect(mapping?.docId).toBeTruthy();
       expect(mapping?.docUrl).toMatch(/docs\.google\.com/);
 
-      writeState({
+      writeStateForPr(REAL_REPO, pr.prNumber, {
         docId: mapping?.docId ?? "",
         docUrl: mapping?.docUrl ?? "",
         docStoreKey,
@@ -582,7 +584,7 @@ test.describe("TC-029: GH comment rendering in medium/large PR sidepanel", () =>
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
 
       if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
         await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
@@ -681,7 +683,7 @@ test.describe("TC-030: tab switching across PRs", () => {
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
 
       if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
         await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
@@ -748,7 +750,7 @@ test.describe("TC-031: thread expand/collapse across PRs", () => {
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
 
       if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
         await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
@@ -895,7 +897,7 @@ test.describe("TC-033: GDoc comment push from medium/large PRs", () => {
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
 
       if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
         await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
@@ -947,7 +949,7 @@ test.describe("TC-034: status bar states across PRs", () => {
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
 
       if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
         await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
@@ -1001,7 +1003,7 @@ test.describe("TC-035: header renders correctly across all PRs", () => {
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
       const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readState();
+      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
 
       if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
         await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);

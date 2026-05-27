@@ -11,9 +11,6 @@
  *
  * Run:  DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-00[189]"
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   test,
   expect,
@@ -25,7 +22,7 @@ import {
   REAL_REPO,
   REAL_PR_NUMBER
 } from "./fixture.js";
-import { readState, writeState } from "./state.js";
+import { readStateForPr, writeStateForPr } from "./state.js";
 
 const DOC_STORE_KEY = `docStore:${REAL_REPO}#${REAL_PR_NUMBER.toString()}`;
 
@@ -41,26 +38,11 @@ test.describe("doc lifecycle", () => {
     );
 
     // Idempotency: if a doc was already created in a prior run, reuse it
-    const existingState = readState();
+    const existingState = readStateForPr(REAL_REPO, REAL_PR_NUMBER);
     if (existingState.docId) {
       if (!existingState.docStoreKey || !existingState.docMapping) {
         throw new Error("State file has docId but is missing doc mapping metadata");
       }
-      // Re-seed storage so this browser context knows about the doc
-      await extensionWorker.evaluate(
-        ([key, mapping]) => {
-          return new Promise<void>((resolve) => {
-            chrome.storage.local.set(
-              {
-                active_prs: [{ repo: (mapping as any).repo, prNumber: (mapping as any).prNumber }],
-                [key]: mapping
-              },
-              resolve
-            );
-          });
-        },
-        [existingState.docStoreKey, existingState.docMapping] as const
-      );
       console.log(`[TC-001] Reusing existing doc: ${existingState.docId}`);
       return;
     }
@@ -104,7 +86,7 @@ test.describe("doc lifecycle", () => {
     }
 
     // Persist for downstream spec files
-    writeState({
+    writeStateForPr(REAL_REPO, REAL_PR_NUMBER, {
       docId,
       docUrl,
       docStoreKey: DOC_STORE_KEY,
@@ -122,7 +104,7 @@ test.describe("doc lifecycle", () => {
       "DORV_GOOGLE_TOKEN must include Google Docs + Drive file scopes to read live docs"
     );
 
-    const state = readState();
+    const state = readStateForPr(REAL_REPO, REAL_PR_NUMBER);
     if (!state.docId) {
       test.skip(true, "Run TC-001 first to create the doc");
       return;

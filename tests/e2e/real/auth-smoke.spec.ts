@@ -17,6 +17,14 @@ import {
   REAL_PR_NUMBER
 } from "./fixture.js";
 
+function isGitHubRateLimitMessage(message: string): boolean {
+  return (
+    message.includes("rate limit") ||
+    message.includes("API rate limit exceeded") ||
+    message.includes("403")
+  );
+}
+
 test.describe("auth smoke", () => {
   test("TC-013: sidepanel has no horizontal overflow at narrow widths", async ({
     extensionContext,
@@ -49,7 +57,17 @@ test.describe("auth smoke", () => {
   }) => {
     const repo = REAL_REPO;
     const prNumber = REAL_PR_NUMBER;
-    const meta = await fetchRealPrMeta();
+    let meta;
+    try {
+      meta = await fetchRealPrMeta();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isGitHubRateLimitMessage(msg)) {
+        test.skip(true, `GitHub rate limited: ${msg}`);
+        return;
+      }
+      throw err;
+    }
     const docStoreKey = `docStore:${repo}#${prNumber.toString()}`;
 
     // Seed active_prs plus a real-shaped doc mapping so syncAll attempts Drive/Docs access.
