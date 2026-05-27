@@ -45,12 +45,14 @@ function IconButton({
   icon,
   label,
   href,
-  disabled
+  disabled,
+  testId
 }: {
   icon: string;
   label: string;
   href?: string;
   disabled?: boolean;
+  testId?: string;
 }) {
   return (
     <a
@@ -60,6 +62,7 @@ function IconButton({
       aria-label={label}
       className="dorv-icon-btn"
       aria-disabled={disabled ? "true" : undefined}
+      data-testid={testId}
       onClick={
         disabled
           ? (e) => {
@@ -75,7 +78,7 @@ function IconButton({
 
 function SkeletonRows({ variant = "default" }: { variant?: "default" | "compact" }) {
   return (
-    <div className={`dorv-skeleton-stack ${variant}`}>
+    <div className={`dorv-skeleton-stack ${variant}`} data-testid="dorv-skeleton">
       <div className="dorv-skeleton skeleton-title" />
       <div className="dorv-skeleton skeleton-line" />
       <div className="dorv-skeleton skeleton-short" />
@@ -154,7 +157,7 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
   };
 
   return (
-    <div className="dorv-sidepanel onboarding">
+    <div className="dorv-sidepanel onboarding" data-testid="dorv-onboarding">
       <p className="dorv-eyebrow">dorv</p>
 
       {step === "github" && (
@@ -176,6 +179,7 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
               if (e.key === "Enter") void handleSavePat();
             }}
             autoFocus
+            data-testid="dorv-pat-input"
           />
           <details className="pat-scope-details">
             <summary className="pat-scope-summary">Required scopes</summary>
@@ -204,12 +208,17 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
               </a>
             </div>
           </details>
-          {error && <p className="onboarding-error">{error}</p>}
+          {error && (
+            <p className="onboarding-error" data-testid="dorv-onboarding-error">
+              {error}
+            </p>
+          )}
           <button
             type="button"
             className="onboarding-btn"
             disabled={saving}
             onClick={() => void handleSavePat()}
+            data-testid="dorv-onboarding-continue"
           >
             {saving ? "Saving..." : "Continue"}
           </button>
@@ -223,12 +232,17 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
           <p className="onboarding-desc">
             Sign in with the Google account that has access to your review Google Docs.
           </p>
-          {error && <p className="onboarding-error">{error}</p>}
+          {error && (
+            <p className="onboarding-error" data-testid="dorv-onboarding-error">
+              {error}
+            </p>
+          )}
           <button
             type="button"
             className="onboarding-btn"
             disabled={saving}
             onClick={() => void handleGoogleAuth()}
+            data-testid="dorv-onboarding-google"
           >
             {saving ? "Signing in..." : "Sign in with Google"}
           </button>
@@ -243,7 +257,12 @@ function OnboardingFlow({ initialStep, authStore, onComplete }: OnboardingFlowPr
             Open a Google Doc linked to a GitHub PR and dorv will sync review comments
             automatically.
           </p>
-          <button type="button" className="onboarding-btn" onClick={onComplete}>
+          <button
+            type="button"
+            className="onboarding-btn"
+            onClick={onComplete}
+            data-testid="dorv-onboarding-get-started"
+          >
             Get started
           </button>
         </div>
@@ -373,14 +392,19 @@ function SidePanel() {
         const docKey = sidepanelQueryKeys.doc(
           `${ref.owner}/${ref.repo}#${ref.prNumber.toString()}`
         );
-        const m = await queryClient.fetchQuery({
-          queryKey: docKey,
-          queryFn: () =>
-            adapter.getDoc({
-              repo: `${ref.owner}/${ref.repo}`,
-              prNumber: ref.prNumber
-            })
-        });
+        const cached = queryClient.getQueryData<DocMapping | null>(docKey);
+        const m =
+          cached ??
+          (await queryClient.fetchQuery({
+            queryKey: docKey,
+            queryFn: () =>
+              adapter
+                .getDoc({
+                  repo: `${ref.owner}/${ref.repo}`,
+                  prNumber: ref.prNumber
+                })
+                .then((d) => d ?? null)
+          }));
         if (m) {
           setMapping(m);
           await loadSyncData(m);
@@ -602,34 +626,41 @@ function SidePanel() {
 
   if (onboarding === "checking")
     return (
-      <div className="dorv-sidepanel">
+      <div className="dorv-sidepanel" data-testid="dorv-checking">
         <SkeletonRows variant="compact" />
       </div>
     );
 
   if (onboarding === "github" || onboarding === "google") {
     return (
-      <OnboardingFlow
-        initialStep={onboarding}
-        authStore={authStore}
-        onComplete={() => {
-          setOnboarding("complete");
-        }}
-      />
+      <div className="dorv-sidepanel" data-testid="dorv-onboarding-container">
+        <OnboardingFlow
+          initialStep={onboarding}
+          authStore={authStore}
+          onComplete={() => {
+            setOnboarding("complete");
+          }}
+        />
+      </div>
     );
   }
 
   if (loading)
     return (
-      <div className="dorv-sidepanel">
+      <div className="dorv-sidepanel" data-testid="dorv-loading">
         <SkeletonRows />
       </div>
     );
-  if (error) return <div className="dorv-sidepanel error">{error}</div>;
+  if (error)
+    return (
+      <div className="dorv-sidepanel error" data-testid="dorv-error">
+        {error}
+      </div>
+    );
 
   if (tabKind === "neutral") {
     return (
-      <div className="dorv-sidepanel">
+      <div className="dorv-sidepanel" data-testid="dorv-neutral">
         {!compat.compatible && compat.warning && (
           <div className="dorv-compat-warning" role="alert">
             <strong>Compatibility notice</strong>
@@ -648,13 +679,21 @@ function SidePanel() {
           </button>
         </div>
         {pastDocs.length === 0 ? (
-          <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
+          <p className="neutral-msg" data-testid="dorv-neutral-msg">
+            Open a GitHub PR or linked Google Doc to get started.
+          </p>
         ) : (
           <>
-            <h2 className="past-docs-heading">Recent reviews</h2>
-            <ul className="past-docs-list">
+            <h2 className="past-docs-heading" data-testid="dorv-past-docs-heading">
+              Recent reviews
+            </h2>
+            <ul className="past-docs-list" data-testid="dorv-past-docs-list">
               {pastDocs.map((doc) => (
-                <li key={doc.docId} className="past-docs-item">
+                <li
+                  key={doc.docId}
+                  className="past-docs-item"
+                  data-testid={`dorv-past-doc-${doc.docId}`}
+                >
                   <div className="past-docs-repo">
                     <a
                       href={`https://github.com/${doc.repo}/pull/${doc.prNumber.toString()}`}
@@ -678,26 +717,37 @@ function SidePanel() {
 
   if (tabKind === "github-pr" && !mapping) {
     return (
-      <div className="dorv-sidepanel">
+      <div className="dorv-sidepanel" data-testid="dorv-unlinked-pr">
         <p className="dorv-eyebrow">dorv</p>
         {prFiles.length === 0 ? (
-          <p className="neutral-msg">No markdown files found in this PR.</p>
+          <p className="neutral-msg" data-testid="dorv-no-md-files">
+            No markdown files found in this PR.
+          </p>
         ) : (
           <>
-            <h1>Create Review Doc</h1>
-            <ul className="file-list">
+            <h1 data-testid="dorv-create-doc-title">Create Review Doc</h1>
+            <ul className="file-list" data-testid="dorv-file-list">
               {prFiles.map((f) => (
-                <li key={f.filename} className="file-list-item">
+                <li
+                  key={f.filename}
+                  className="file-list-item"
+                  data-testid={`dorv-file-item-${f.filename}`}
+                >
                   {f.filename}
                 </li>
               ))}
             </ul>
-            {createError && <p className="onboarding-error">{createError}</p>}
+            {createError && (
+              <p className="onboarding-error" data-testid="dorv-create-error">
+                {createError}
+              </p>
+            )}
             <button
               type="button"
               className="onboarding-btn"
               disabled={creating}
               onClick={() => void handleCreateDoc()}
+              data-testid="dorv-create-doc-btn"
             >
               {creating
                 ? "Creating..."
@@ -711,7 +761,7 @@ function SidePanel() {
 
   if (!mapping) {
     return (
-      <div className="dorv-sidepanel">
+      <div className="dorv-sidepanel" data-testid="dorv-no-mapping">
         <p className="dorv-eyebrow">dorv</p>
         <p className="neutral-msg">Open a GitHub PR or linked Google Doc to get started.</p>
       </div>
@@ -719,14 +769,14 @@ function SidePanel() {
   }
 
   return (
-    <main className="dorv-sidepanel">
+    <main className="dorv-sidepanel" data-testid="dorv-main-panel">
       {!compat.compatible && compat.warning && (
         <div className="dorv-compat-warning" role="alert">
           <strong>Compatibility notice</strong>
           <p>{compat.warning}</p>
         </div>
       )}
-      <header className="dorv-header">
+      <header className="dorv-header" data-testid="dorv-header">
         <div className="dorv-header-title">
           <p className="dorv-eyebrow">dorv</p>
           <h1>Review Sync</h1>
@@ -736,18 +786,21 @@ function SidePanel() {
             icon="ti-brand-github"
             label="Open GitHub PR"
             href={`https://github.com/${mapping.repo}/pull/${mapping.prNumber.toString()}`}
+            testId="dorv-open-pr-btn"
           />
           <IconButton
             icon="ti-file-description"
             label="Open Google Doc"
             href={mapping.docUrl}
             disabled={!mapping.docUrl}
+            testId="dorv-open-doc-btn"
           />
           <button
             type="button"
             className="dorv-close-btn"
             aria-label="Close panel"
             onClick={() => void closeSidePanelViaBackground()}
+            data-testid="dorv-close-panel-btn"
           >
             ›
           </button>
@@ -756,17 +809,19 @@ function SidePanel() {
             className="sync-now-btn"
             disabled={syncingNow}
             onClick={() => void handleManualSync()}
+            data-testid="dorv-sync-now-btn"
           >
             <i
               className={`ti ti-refresh${syncingNow ? " dorv-spinning" : ""}`}
               aria-hidden="true"
+              data-testid="dorv-refresh-icon"
             />
             {syncingNow ? " Syncing…" : " Sync now"}
           </button>
         </div>
       </header>
-      <div className="status-bar">
-        <span className={`status-dot ${status?.state ?? "idle"}`} />
+      <div className="status-bar" data-testid="dorv-status-bar">
+        <span className={`status-dot ${status?.state ?? "idle"}`} data-testid="dorv-status-dot" />
         <span>
           {status?.state === "syncing"
             ? "Syncing..."
@@ -774,13 +829,14 @@ function SidePanel() {
         </span>
       </div>
 
-      <div className="tabs">
+      <div className="tabs" data-testid="dorv-tabs">
         <button
           type="button"
           className={activeTab === "github" ? "active" : ""}
           onClick={() => {
             setActiveTab("github");
           }}
+          data-testid="dorv-tab-github"
         >
           GitHub
         </button>
@@ -790,6 +846,7 @@ function SidePanel() {
           onClick={() => {
             setActiveTab("gdoc");
           }}
+          data-testid="dorv-tab-gdoc"
         >
           Google Doc
         </button>
@@ -799,6 +856,7 @@ function SidePanel() {
           onClick={() => {
             setActiveTab("activities");
           }}
+          data-testid="dorv-tab-activities"
         >
           Activities
         </button>
@@ -806,16 +864,27 @@ function SidePanel() {
 
       <div className="tab-content">
         {activeTab === "github" && (
-          <div className="comment-list">
+          <div className="comment-list" data-testid="dorv-gh-comments">
             {groupedGhComments.length === 0 ? (
-              <p className="empty-msg">No GitHub comments yet.</p>
+              <p className="empty-msg" data-testid="dorv-gh-empty">
+                No GitHub comments yet.
+              </p>
             ) : (
               groupedGhComments.map((group) => (
-                <details key={group.path} open className="file-section">
+                <details
+                  key={group.path}
+                  open
+                  className="file-section"
+                  data-testid={`dorv-gh-file-section-${group.path}`}
+                >
                   <summary>{group.path}</summary>
                   <div className="comments">
                     {group.threads.map((thread) => (
-                      <div key={thread.root.id} className="comment-card dorv-comment-enter">
+                      <div
+                        key={thread.root.id}
+                        className="comment-card dorv-comment-enter"
+                        data-testid={`dorv-gh-comment-${String(thread.root.id)}`}
+                      >
                         <div className="comment-meta">
                           <span className="author">@{thread.root.user}</span>
                           <span className="line">L{thread.root.line?.toString() ?? "?"}</span>
@@ -835,6 +904,7 @@ function SidePanel() {
                               onClick={() => {
                                 toggleThread(thread.root.id);
                               }}
+                              data-testid={`dorv-thread-toggle-${String(thread.root.id)}`}
                             >
                               <i
                                 className={`ti ${expandedThreads.has(thread.root.id) ? "ti-chevron-down" : "ti-chevron-right"}`}
@@ -846,7 +916,11 @@ function SidePanel() {
                             {expandedThreads.has(thread.root.id) && (
                               <div className="thread-replies">
                                 {thread.replies.map((reply) => (
-                                  <div key={reply.id} className="reply-card">
+                                  <div
+                                    key={reply.id}
+                                    className="reply-card"
+                                    data-testid={`dorv-gh-reply-${String(reply.id)}`}
+                                  >
                                     <div className="comment-meta">
                                       <span className="author">@{reply.user}</span>
                                       <IconButton
@@ -873,23 +947,32 @@ function SidePanel() {
         )}
 
         {activeTab === "gdoc" && (
-          <div className="comment-list">
-            <h3>New GDoc Comments ({unmappedGdocComments.length.toString()})</h3>
+          <div className="comment-list" data-testid="dorv-gdoc-comments">
+            <h3 data-testid="dorv-gdoc-heading">
+              New GDoc Comments ({unmappedGdocComments.length.toString()})
+            </h3>
             {unmappedGdocComments.some((c) => c.quotedFileContent) && (
               <button
                 type="button"
                 className="push-btn"
                 disabled={pushingAll}
                 onClick={() => void handlePushAll()}
+                data-testid="dorv-push-all-btn"
               >
                 {pushingAll ? "Pushing..." : "Push all"}
               </button>
             )}
             {unmappedGdocComments.length === 0 ? (
-              <p className="empty-msg">No new comments in GDoc.</p>
+              <p className="empty-msg" data-testid="dorv-gdoc-empty">
+                No new comments in GDoc.
+              </p>
             ) : (
               unmappedGdocComments.map((c) => (
-                <div key={c.id} className="comment-card gdoc dorv-comment-enter">
+                <div
+                  key={c.id}
+                  className="comment-card gdoc dorv-comment-enter"
+                  data-testid={`dorv-gdoc-comment-${c.id}`}
+                >
                   <div className="comment-meta">
                     <span className="author">{c.author}</span>
                     <IconButton
@@ -908,6 +991,7 @@ function SidePanel() {
                     onClick={() => {
                       void handlePush(c);
                     }}
+                    data-testid={`dorv-push-btn-${c.id}`}
                   >
                     {pushedId === c.id && <CheckIcon />}
                     {pushedId === c.id
@@ -923,12 +1007,18 @@ function SidePanel() {
         )}
 
         {activeTab === "activities" && (
-          <div className="activities-feed">
+          <div className="activities-feed" data-testid="dorv-activities">
             {activities.length === 0 ? (
-              <p className="empty-msg">No synced activities yet.</p>
+              <p className="empty-msg" data-testid="dorv-activities-empty">
+                No synced activities yet.
+              </p>
             ) : (
               activities.map((act) => (
-                <div key={act.id} className="activity-card dorv-comment-enter">
+                <div
+                  key={act.id}
+                  className="activity-card dorv-comment-enter"
+                  data-testid={`dorv-activity-${act.id}`}
+                >
                   <div className="activity-header">
                     <span
                       className={`activity-direction ${act.direction === "github_to_gdoc" ? "dir-gh-gdoc" : "dir-gdoc-gh"}`}
