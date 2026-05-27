@@ -1,5 +1,7 @@
 # Agent worktrees (see docs/AGENT_COLLABORATION.md)
 .worktrees/
+# Claude Code session worktrees
+.claude/worktrees/
 
 # Dependencies and build outputs
 node_modules/

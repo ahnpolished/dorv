@@ -7,6 +7,7 @@ export default tseslint.config(
       "**/.output/**",
       "**/.wxt/**",
       ".worktrees/**",
+      ".claude/worktrees/**",
       "**/favicons/**",
       "coverage/**",
       "dist/**",

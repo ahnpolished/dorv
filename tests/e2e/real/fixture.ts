@@ -32,6 +32,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { GOOGLE_TOKEN_FILE } from "../../global-setup.js";
 
 export { expect };
 
@@ -40,7 +41,17 @@ const EXTENSION_PATH = path.resolve(__dirname, "../../../apps/extension/.output/
 
 // ── Env vars ──────────────────────────────────────────────────────────────────
 export const GITHUB_PAT = process.env.DORV_GITHUB_PAT ?? "";
-export const GOOGLE_TOKEN = process.env.DORV_GOOGLE_TOKEN ?? "";
+
+// DORV_GOOGLE_TOKEN can be set directly or auto-refreshed via globalSetup (which writes
+// to a temp file because process.env changes in globalSetup don't propagate to workers).
+const _tokenFromFile = (() => {
+  try {
+    return fs.readFileSync(GOOGLE_TOKEN_FILE, "utf8").trim();
+  } catch {
+    return "";
+  }
+})();
+export const GOOGLE_TOKEN = process.env.DORV_GOOGLE_TOKEN ?? _tokenFromFile;
 export const REAL_REPO = process.env.DORV_TEST_REPO ?? "ahnpolished/dorv";
 export const REAL_PR_NUMBER = parseInt(process.env.DORV_TEST_PR_NUMBER ?? "6", 10);
 export const REAL_PR_URL = `https://github.com/${REAL_REPO}/pull/${REAL_PR_NUMBER.toString()}`;
@@ -427,16 +438,29 @@ export async function openSidepanelOnRealPr(
 
   const prPage = await extensionContext.newPage();
 
-  const [sidepanel] = await Promise.all([
-    extensionContext.waitForEvent("page", {
-      predicate: (p) => p.url().includes(`${extensionId}/sidepanel`),
-      timeout: 15_000
-    }),
-    (async () => {
-      await prPage.goto(REAL_PR_URL, { waitUntil: "domcontentloaded" });
-      await prPage.keyboard.press("Alt+Shift+D");
-    })()
-  ]);
+  // Try keyboard shortcut first (works in --headless=new when the content script
+  // intercepts it and calls chrome.sidePanel.open(), which opens as a tab).
+  // Fall back to direct navigation if the page event doesn't fire — the shortcut
+  // doesn't reliably reach chrome.commands in all headless configurations.
+  let sidepanel: import("@playwright/test").Page;
+  try {
+    [sidepanel] = await Promise.all([
+      extensionContext.waitForEvent("page", {
+        predicate: (p) => p.url().includes(`${extensionId}/sidepanel`),
+        timeout: 8_000
+      }),
+      (async () => {
+        await prPage.goto(REAL_PR_URL, { waitUntil: "domcontentloaded" });
+        await prPage.keyboard.press("Alt+Shift+D");
+      })()
+    ]);
+  } catch {
+    // Keyboard shortcut didn't trigger the sidepanel page event — open directly.
+    sidepanel = await extensionContext.newPage();
+    await sidepanel.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+      waitUntil: "domcontentloaded"
+    });
+  }
 
   await sidepanel.waitForLoadState("domcontentloaded");
   return sidepanel;
