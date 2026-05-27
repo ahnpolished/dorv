@@ -62,6 +62,9 @@ export default defineBackground(() => {
   });
 
   chrome.runtime.onStartup.addListener(() => {
+    if (isSidePanelSupported()) {
+      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    }
     startPolling();
   });
 
@@ -74,8 +77,9 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message: ChromeMessage, sender, sendResponse) => {
     // OPEN_SIDE_PANEL is handled here, outside the async wrapper below.
     // chrome.sidePanel.open() requires an unbroken user-gesture context; any prior
-    // await — including entering an async function — causes Chrome to reject the call.
-    // Both IPC calls are fired synchronously so Chrome processes setOptions before open.
+    // await inside openSidePanelForTab's async scope would cause rejection.
+    // openSidePanelForTab now fires setOptions synchronously before calling open
+    // so Chrome processes both IPC calls in order without consuming the gesture.
     if (message.type === "OPEN_SIDE_PANEL") {
       if (sender.tab?.id === undefined) {
         sendResponse({ success: false, error: "Cannot open side panel without a sender tab." });
