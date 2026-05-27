@@ -25,8 +25,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   test,
   expect,
@@ -40,6 +40,9 @@ import {
   REAL_REPO
 } from "./fixture.js";
 import { readState, writeState } from "./state.js";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 // ── PR catalogue ──────────────────────────────────────────────────────────────
 
@@ -105,6 +108,25 @@ const PR_CATALOG = [
 const TEST_TAG = "[dorv-multi-pr-test]";
 const createdGhCommentIds: number[] = [];
 
+test.beforeAll(async () => {
+  // Pre-warm the PR data cache with generous delays to avoid rate limiting.
+  // PRs are fetched sequentially with 3s between each pair of requests.
+  for (const pr of PR_CATALOG) {
+    try {
+      await fetchPrMeta(pr.prNumber);
+      await delay(1500);
+      await fetchPrFiles(pr.prNumber);
+      await delay(1500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[beforeAll] PR #${pr.prNumber.toString()} cache warm failed: ${msg}`);
+    }
+  }
+  console.log(
+    `[beforeAll] PR cache warm complete — ${prMetaCache.size.toString()} meta, ${prFilesCache.size.toString()} files cached`
+  );
+});
+
 test.afterAll(async () => {
   const ids = [...createdGhCommentIds, ...(readState().ghCommentIds ?? [])];
   for (const id of ids) {
@@ -115,44 +137,132 @@ test.afterAll(async () => {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+/** Disk cache for PR API responses that persist across test runs */
+const PR_CACHE_DIR = path.join(os.tmpdir(), "dorv-e2e-pr-cache");
+try {
+  fs.mkdirSync(PR_CACHE_DIR, { recursive: true });
+} catch {
+  /* ok */
+}
+
 function prUrl(prNumber: number): string {
   return `https://github.com/${REAL_REPO}/pull/${prNumber.toString()}`;
 }
 
+/** Read PR data from disk cache */
+function readPrCache(prNumber: number, type: "meta" | "files"): any {
+  try {
+    const file = path.join(PR_CACHE_DIR, `${prNumber}-${type}.json`);
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Write PR data to disk cache */
+function writePrCache(prNumber: number, type: "meta" | "files", data: any): void {
+  try {
+    const file = path.join(PR_CACHE_DIR, `${prNumber}-${type}.json`);
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch {
+    /* ok */
+  }
+}
+
 async function fetchPrFiles(prNumber: number): Promise<any[]> {
-  const resp = await fetch(
+  const memCached = prFilesCache.get(prNumber);
+  if (memCached) return memCached;
+
+  const diskCached = readPrCache(prNumber, "files");
+  if (diskCached) {
+    prFilesCache.set(prNumber, diskCached);
+    return diskCached;
+  }
+
+  const resp = await fetchWithRetry(
     `https://api.github.com/repos/${REAL_REPO}/pulls/${prNumber.toString()}/files`,
     {
-      headers: {
-        Authorization: `Bearer ${GITHUB_PAT}`,
-        Accept: "application/vnd.github+json"
-      }
+      Authorization: `Bearer ${GITHUB_PAT}`,
+      Accept: "application/vnd.github+json"
     }
   );
   if (!resp.ok) {
     throw new Error(`PR #${prNumber.toString()} files fetch failed: ${resp.status.toString()}`);
   }
-  return resp.json() as Promise<any[]>;
+  const data = await resp.json();
+  prFilesCache.set(prNumber, data);
+  writePrCache(prNumber, "files", data);
+  return data;
 }
 
 async function fetchPrMeta(prNumber: number): Promise<any> {
-  const resp = await fetch(
+  const memCached = prMetaCache.get(prNumber);
+  if (memCached) return memCached;
+
+  const diskCached = readPrCache(prNumber, "meta");
+  if (diskCached) {
+    prMetaCache.set(prNumber, diskCached);
+    return diskCached;
+  }
+
+  const resp = await fetchWithRetry(
     `https://api.github.com/repos/${REAL_REPO}/pulls/${prNumber.toString()}`,
     {
-      headers: {
-        Authorization: `Bearer ${GITHUB_PAT}`,
-        Accept: "application/vnd.github+json"
-      }
+      Authorization: `Bearer ${GITHUB_PAT}`,
+      Accept: "application/vnd.github+json"
     }
   );
   if (!resp.ok) {
     throw new Error(`PR #${prNumber.toString()} meta fetch failed: ${resp.status.toString()}`);
   }
-  return resp.json() as Promise<any>;
+  const data = await resp.json();
+  prMetaCache.set(prNumber, data);
+  writePrCache(prNumber, "meta", data);
+  return data;
 }
 
 function mdFilesFromList(files: any[]): any[] {
   return files.filter((f) => typeof f.filename === "string" && /\.mdx?$/iu.test(f.filename));
+}
+
+// ── API response cache ──────────────────────────────────────────────────────
+
+const prMetaCache = new Map<number, any>();
+const prFilesCache = new Map<number, any[]>();
+
+/** Delay helper for rate limit backoff */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Fetch with retry/backoff for GitHub API rate limits */
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  maxRetries = 3,
+  baseDelayMs = 2000
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(url, { headers });
+    if (resp.ok) return resp;
+    if (resp.status !== 403 && resp.status !== 429) return resp;
+
+    // Rate limited — check for Retry-After header, else use exponential backoff
+    const retryAfter = resp.headers.get("retry-after");
+    const waitMs = retryAfter
+      ? parseInt(retryAfter, 10) * 1000
+      : baseDelayMs * Math.pow(2, attempt);
+
+    console.log(
+      `[rate-limit] ${resp.status} on ${url.split("github.com")[1] ?? url} — retry in ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${maxRetries})`
+    );
+
+    if (attempt < maxRetries) {
+      await delay(waitMs);
+    }
+  }
+  // Last attempt — just return the response (will throw on !resp.ok)
+  return fetch(url, { headers });
 }
 
 async function openSidepanelOnPr(
@@ -266,7 +376,17 @@ test.describe("TC-026: unlinked PR file listing", () => {
 
       await seedForPr(extensionWorker, pr.prNumber);
 
-      const files = await fetchPrFiles(pr.prNumber);
+      let files: any[];
+      try {
+        files = await fetchPrFiles(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
       const mdFiles = mdFilesFromList(files);
       expect(mdFiles.length, `PR #${pr.prNumber.toString()} md file count`).toBe(pr.mdFileCount);
 
@@ -305,7 +425,17 @@ test.describe("TC-027: PR metadata detection", () => {
     test(`TC-027-${pr.label}: fetches correct PR meta`, async () => {
       test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
 
-      const data = await fetchPrMeta(pr.prNumber);
+      let data: any;
+      try {
+        data = await fetchPrMeta(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
 
       expect(typeof data.title).toBe("string");
       expect(data.title.length).toBeGreaterThan(0);
@@ -315,7 +445,17 @@ test.describe("TC-027: PR metadata detection", () => {
       expect(data.head.sha.length).toBeGreaterThanOrEqual(40);
       expect(data.state).toBe(pr.state);
 
-      const files = await fetchPrFiles(pr.prNumber);
+      let files: any[];
+      try {
+        files = await fetchPrFiles(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
       const mdFiles = mdFilesFromList(files);
       expect(mdFiles.length).toBeGreaterThanOrEqual(1);
 
@@ -349,9 +489,30 @@ test.describe("TC-028: create GDoc from medium/large PRs", () => {
         return;
       }
 
-      const meta = await fetchPrMeta(pr.prNumber);
-      const files = await fetchPrFiles(pr.prNumber);
-      const mdFiles = mdFilesFromList(files).map((f) => ({
+      let meta: any;
+      try {
+        meta = await fetchPrMeta(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
+
+      let prFiles: any[];
+      try {
+        prFiles = await fetchPrFiles(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
+      const mdFiles = mdFilesFromList(prFiles).map((f) => ({
         filename: f.filename,
         rawUrl: f.raw_url,
         status: f.status,
@@ -429,11 +590,31 @@ test.describe("TC-029: GH comment rendering in medium/large PR sidepanel", () =>
         await seedForPr(extensionWorker, pr.prNumber);
       }
 
-      const prData = await fetchPrMeta(pr.prNumber);
+      let prData: any;
+      try {
+        prData = await fetchPrMeta(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
       const headSha = prData.head?.sha;
       expect(headSha).toBeTruthy();
 
-      const files = await fetchPrFiles(pr.prNumber);
+      let files: any[];
+      try {
+        files = await fetchPrFiles(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
       const addedFile = files.find((f) => f.status === "added" && /\.mdx?$/iu.test(f.filename));
       const targetFile = addedFile ?? files.find((f) => f.status === "modified");
       if (!targetFile) {
@@ -443,7 +624,13 @@ test.describe("TC-029: GH comment rendering in medium/large PR sidepanel", () =>
 
       const target = { path: targetFile.filename, line: 1, headSha };
       const body = `${TEST_TAG} TC-029 ${pr.label} ${Date.now().toString()}`;
-      const commentId = await createGhReviewComment(target.headSha, target.path, target.line, body);
+      const commentId = await createGhReviewComment(
+        target.headSha,
+        target.path,
+        target.line,
+        body,
+        pr.prNumber
+      );
       if (!commentId) {
         console.log(`[TC-029-${pr.label}] Could not create review comment — skipping`);
         return;
@@ -569,9 +756,30 @@ test.describe("TC-031: thread expand/collapse across PRs", () => {
         await seedForPr(extensionWorker, pr.prNumber);
       }
 
-      const prData = await fetchPrMeta(pr.prNumber);
+      let prData: any;
+      try {
+        prData = await fetchPrMeta(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
       const headSha = prData.head?.sha;
-      const files = await fetchPrFiles(pr.prNumber);
+
+      let files: any[];
+      try {
+        files = await fetchPrFiles(pr.prNumber);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("403") || msg.includes("rate limit")) {
+          test.skip(true, `GitHub rate limited: ${msg}`);
+          return;
+        }
+        throw err;
+      }
       const targetFile = files.find((f) => f.status === "added") ?? files[0];
       if (!targetFile || !headSha) {
         console.log(`[TC-031-${pr.label}] No suitable target — skipping`);
@@ -579,14 +787,24 @@ test.describe("TC-031: thread expand/collapse across PRs", () => {
       }
 
       const parentBody = `${TEST_TAG} TC-031 parent ${pr.label} ${Date.now().toString()}`;
-      const parentId = await createGhReviewComment(headSha, targetFile.filename, 1, parentBody);
+      const parentId = await createGhReviewComment(
+        headSha,
+        targetFile.filename,
+        1,
+        parentBody,
+        pr.prNumber
+      );
       if (!parentId) {
         console.log(`[TC-031-${pr.label}] Could not create parent comment — skipping`);
         return;
       }
       createdGhCommentIds.push(parentId);
 
-      const replyId = await createGhCommentReply(parentId, `${TEST_TAG} TC-031 reply ${pr.label}`);
+      const replyId = await createGhCommentReply(
+        parentId,
+        `${TEST_TAG} TC-031 reply ${pr.label}`,
+        pr.prNumber
+      );
       if (replyId) {
         createdGhCommentIds.push(replyId);
       }
