@@ -833,4 +833,73 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
     const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
     expect(driveUpload).toBeDefined();
   });
+
+  it("green-field: creates new GDoc and posts bot comment with hidden marker when no prior comment exists", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    let postedBotComment = "";
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+
+      if (urlStr.includes("/issues/42/comments") && (!init?.method || init.method === "GET")) {
+        return { ok: true, json: () => Promise.resolve([]) };
+      }
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# RFC") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "green-field-doc-id",
+              webViewLink: "https://docs.google.com/document/d/green-field-doc-id/edit"
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/green-field-doc-id/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/issues/42/comments") && init?.method === "POST") {
+        postedBotComment = JSON.parse(String(init.body)).body as string;
+        return { ok: true, json: () => Promise.resolve({ id: 999 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const result = await adapter.createDoc({
+      repo: "org/repo",
+      prNumber: 42,
+      title: "My PR",
+      author: "alice",
+      branch: "feature/x",
+      headSha: "sha-abc",
+      prUrl: "https://github.com/org/repo/pull/42",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    expect(result.mapping.docId).toBe("green-field-doc-id");
+    expect(result.mapping.headSha).toBe("sha-abc");
+
+    // Bot comment must carry the hidden marker so future pickup finds it
+    expect(postedBotComment).toContain("<!-- dorv-doc-id=green-field-doc-id -->");
+    expect(postedBotComment).toContain("**dorv**");
+    expect(postedBotComment).toContain(
+      "https://docs.google.com/document/d/green-field-doc-id/edit"
+    );
+
+    // Mapping must be stored
+    const stored = await docStore.get("org/repo", 42);
+    expect(stored?.docId).toBe("green-field-doc-id");
+  });
 });
