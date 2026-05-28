@@ -47,6 +47,8 @@ export const GITHUB_PAT = process.env.DORV_GITHUB_PAT ?? "";
 
 // DORV_GOOGLE_TOKEN can be set directly or auto-refreshed via globalSetup (which writes
 // to a temp file because process.env changes in globalSetup don't propagate to workers).
+// The file wins over the env var so a freshly-refreshed token always takes precedence
+// over a potentially-stale value baked into .env.test.local.
 const _tokenFromFile = (() => {
   try {
     return fs.readFileSync(GOOGLE_TOKEN_FILE, "utf8").trim();
@@ -54,7 +56,8 @@ const _tokenFromFile = (() => {
     return "";
   }
 })();
-export const GOOGLE_TOKEN = process.env.DORV_GOOGLE_TOKEN ?? _tokenFromFile;
+export const GOOGLE_TOKEN =
+  _tokenFromFile !== "" ? _tokenFromFile : (process.env.DORV_GOOGLE_TOKEN ?? "");
 export const REAL_REPO = process.env.DORV_TEST_REPO ?? "ahnpolished/dorv";
 export const REAL_PR_NUMBER = parseInt(process.env.DORV_TEST_PR_NUMBER ?? "6", 10);
 export const REAL_PR_URL = `https://github.com/${REAL_REPO}/pull/${REAL_PR_NUMBER.toString()}`;
