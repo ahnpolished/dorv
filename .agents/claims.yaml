@@ -439,6 +439,16 @@ claims:
     worktree: .worktrees/feature-hum-1279
     pr: https://github.com/ahnpolished/dorv/pull/62
 
+  HUM-1274:
+    agent: codex
+    status: done
+    claimed_at: "2026-05-27T23:45:27Z"
+    depends_on: []
+    branch: feature/hum-1274
+    worktree: .worktrees/feature-hum-1274
+    pr: https://github.com/ahnpolished/dorv/pull/77
+    completed_at: "2026-05-28T01:40:00Z"
+
 HUM-1280:
   agent: hermes
   status: done

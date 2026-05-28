@@ -116,6 +116,67 @@ describe("fetchReviewThreads", () => {
     ]);
   });
 
+  it("normalizes a resolved GraphQL review thread even when thread line is null", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("/graphql")) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              repository: {
+                pullRequest: {
+                  reviewThreads: {
+                    nodes: [
+                      {
+                        id: "thread-node-resolved",
+                        isResolved: true,
+                        path: "docs/rfc.md",
+                        line: null,
+                        diffSide: "RIGHT",
+                        comments: {
+                          nodes: [
+                            {
+                              databaseId: 401,
+                              body: "Resolved thread root.",
+                              path: "docs/rfc.md",
+                              line: 42,
+                              diffHunk:
+                                "@@ -40,3 +40,3 @@\n context\n unchanged\n+target paragraph",
+                              createdAt: "2026-05-25T00:00:00Z",
+                              updatedAt: "2026-05-25T00:00:00Z",
+                              url: "https://github.com/org/repo/pull/123#discussion_r401",
+                              author: { login: "alice" },
+                              replyTo: null
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    pageInfo: {
+                      hasNextPage: false,
+                      endCursor: null
+                    }
+                  }
+                }
+              }
+            }
+          })
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(fetchReviewThreads("gh-token", "org/repo", 123)).resolves.toEqual([
+      expect.objectContaining({
+        id: "thread-node-resolved",
+        isResolved: true,
+        line: 42,
+        rootComment: expect.objectContaining({ id: 401, line: 42 })
+      })
+    ]);
+  });
+
   it("skips LEFT-side GraphQL review threads", async () => {
     mockFetch.mockImplementation(async (url: string) => {
       if (url.includes("/graphql")) {
@@ -228,5 +289,22 @@ describe("fetchReviewThreads", () => {
       rootComment: { id: 301 },
       replies: [{ id: 302, inReplyToId: 301 }]
     });
+  });
+
+  it("does not fall back to REST when GraphQL is rate limited", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("/graphql")) {
+        return {
+          ok: false,
+          status: 403,
+          text: async () => "API rate limit exceeded"
+        };
+      }
+
+      throw new Error(`REST fallback should not run for rate limits: ${url}`);
+    });
+
+    await expect(fetchReviewThreads("gh-token", "org/repo", 123)).rejects.toThrow(/rate limit/i);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

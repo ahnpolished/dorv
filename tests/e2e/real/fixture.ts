@@ -410,7 +410,22 @@ export async function resolveGhThread(threadId: string): Promise<boolean> {
       query: `mutation { resolveReviewThread(input: { threadId: "${threadId}" }) { thread { id isResolved } } }`
     })
   });
-  return resp.ok;
+  if (!resp.ok) {
+    return false;
+  }
+
+  const data = (await resp.json()) as {
+    data?: {
+      resolveReviewThread?: { thread?: { id?: string; isResolved?: boolean } | null } | null;
+    };
+    errors?: { message?: string }[];
+  };
+
+  if (Array.isArray(data.errors) && data.errors.length > 0) {
+    return false;
+  }
+
+  return data.data?.resolveReviewThread?.thread?.isResolved === true;
 }
 
 // ── Drive REST helpers ────────────────────────────────────────────────────────
