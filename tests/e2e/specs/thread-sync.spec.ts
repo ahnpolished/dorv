@@ -1,7 +1,7 @@
 /**
  * TC-002 Basic Threading   — GH thread → GDoc comment has [GitHub: @user] prefix
  * TC-003 Replies           — GH thread reply → Drive reply POST captured
- * TC-004 Multiline/Code    — thread with diffHunk → Drive POST anchor contains path+line
+ * TC-004 Multiline/Code    — thread with diffHunk → Drive POST quotedFileContent contains quoted line
  * TC-005 Resolution Sync   — resolved GH thread → Drive PATCH to resolve comment
  */
 import { expect, test, TEST_PR } from "../fixtures/extension.js";
@@ -150,7 +150,7 @@ test("TC-003: SYNC_NOW syncs GH thread reply to GDoc", async ({
   ).toBe(true);
 });
 
-test("TC-004: SYNC_NOW thread with diffHunk has anchor with path+line in Drive POST", async ({
+test("TC-004: SYNC_NOW thread with diffHunk has quotedFileContent in Drive POST", async ({
   extensionContext,
   extensionWorker,
   seedStorage,
@@ -204,15 +204,11 @@ test("TC-004: SYNC_NOW thread with diffHunk has anchor with path+line in Drive P
   );
 
   if (drivePostBody !== undefined) {
-    const parsed = JSON.parse(drivePostBody) as { anchor?: string };
-    if (parsed.anchor) {
-      const anchor = JSON.parse(parsed.anchor) as {
-        region?: { line?: number };
-        dorv?: { path?: string };
-      };
-      expect(typeof anchor.region?.line).toBe("number");
-      expect(typeof anchor.dorv?.path).toBe("string");
-    }
+    const parsed = JSON.parse(drivePostBody) as {
+      quotedFileContent?: { mimeType: string; value: string };
+    };
+    expect(parsed.quotedFileContent?.mimeType).toBe("text/plain");
+    expect(typeof parsed.quotedFileContent?.value).toBe("string");
   }
 });
 

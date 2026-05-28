@@ -146,7 +146,7 @@ test.afterAll(async () => {
 });
 
 test.describe("sync", () => {
-  test("TC-002: GH review comment syncs to GDoc as anchored comment", async ({
+  test("TC-002: GH review comment syncs to GDoc as comment with quoted line", async ({
     extensionWorker,
     triggerSync
   }) => {

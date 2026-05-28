@@ -1,7 +1,6 @@
 const DRIVE_COMMENT_MAX_BYTES = 4096;
 
 interface DriveCommentOptions {
-  anchor?: string;
   quotedFileContent?: {
     mimeType: string;
     value: string;

@@ -648,20 +648,11 @@ export class DirectAdapter implements SyncAdapter {
 }
 
 function createDriveCommentContextFromComment(comment: GitHubReviewComment): {
-  anchor?: string;
   quotedFileContent?: { mimeType: string; value: string };
 } {
   const context: {
-    anchor?: string;
     quotedFileContent?: { mimeType: string; value: string };
   } = {};
-
-  if (comment.line != null) {
-    context.anchor = JSON.stringify({
-      region: { kind: "drive#commentRegion", line: comment.line, rev: "head" },
-      dorv: { path: comment.path, side: comment.side ?? "RIGHT" }
-    });
-  }
 
   const quotedLine = findQuotedLineFromComment(comment);
   if (quotedLine) {
@@ -675,27 +666,16 @@ function createDriveCommentContextFromComment(comment: GitHubReviewComment): {
 }
 
 function createDriveCommentContextFromThread(thread: GitHubReviewThread): {
-  anchor?: string;
   quotedFileContent?: { mimeType: string; value: string };
 } {
-  const context: {
-    anchor?: string;
-    quotedFileContent?: { mimeType: string; value: string };
-  } = {};
+  if (!thread.quotedLine) return {};
 
-  context.anchor = JSON.stringify({
-    region: { kind: "drive#commentRegion", line: thread.line, rev: "head" },
-    dorv: { path: thread.path, side: thread.side }
-  });
-
-  if (thread.quotedLine) {
-    context.quotedFileContent = {
+  return {
+    quotedFileContent: {
       mimeType: "text/plain",
       value: thread.quotedLine
-    };
-  }
-
-  return context;
+    }
+  };
 }
 
 function formatGitHubMirroredBody(comment: GitHubReviewComment): string {

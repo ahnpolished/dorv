@@ -194,10 +194,6 @@ describe("DirectAdapter baseline sync", () => {
     expect(driveBody).toEqual({
       content:
         "[GitHub: @alice]\n\nPlease tighten this paragraph.\n\n[View on GitHub](https://github.com/org/repo/pull/123#discussion_r1)",
-      anchor: JSON.stringify({
-        region: { kind: "drive#commentRegion", line: 42, rev: "head" },
-        dorv: { path: "docs/rfc.md", side: "RIGHT" }
-      }),
       quotedFileContent: {
         mimeType: "text/plain",
         value: "target paragraph"
