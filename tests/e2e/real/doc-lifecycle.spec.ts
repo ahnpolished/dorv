@@ -5,11 +5,13 @@
  * TC-009: Mermaid Diagrams — mermaid.ink URL present in exported doc text (skips if no mermaid)
  * TC-008: Large Files — doc creation does not time out on a 1000+ line PR
  *                       (set DORV_LARGE_PR_NUMBER to a PR with large files, else skipped)
+ * TC-010: GDoc Pickup — createDoc reuses the existing GDoc when a dorv bot comment is present
+ *                       (skips if TC-001 has not yet run for this PR)
  *
  * Side-effect: writes docId + mapping to /tmp/dorv-real-e2e-state.json for
  * downstream spec files (sync.spec.ts, push.spec.ts).
  *
- * Run:  DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-00[189]"
+ * Run:  DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-00[1890]"
  */
 import {
   test,
@@ -19,6 +21,7 @@ import {
   buildRealCreateDocInput,
   createDocViaExtension,
   hasRequiredGoogleScopes,
+  fetchPrIssueComments,
   REAL_REPO,
   REAL_PR_NUMBER
 } from "./fixture.js";
@@ -181,5 +184,77 @@ test.describe("doc lifecycle", () => {
     expect(mapping?.docId, "large-file doc must have a docId").toBeTruthy();
 
     await panel.close();
+  });
+
+  test("TC-010: reuses existing GDoc from bot comment without creating a new Drive file", async ({
+    extensionContext,
+    extensionId,
+    extensionWorker
+  }) => {
+    test.skip(!(await hasRequiredGoogleScopes()), "DORV_GOOGLE_TOKEN must include Drive scopes");
+
+    // Find existing dorv bot comments on the PR before calling createDoc.
+    // TC-001 must have run at least once to post the initial bot comment.
+    const commentBodies = await fetchPrIssueComments();
+    const botComments = commentBodies.filter(
+      (b) => b.includes("<!-- dorv-doc-id=") || b.includes("**dorv**")
+    );
+
+    if (botComments.length === 0) {
+      test.skip(true, "No dorv bot comment found — run TC-001 first to create the initial GDoc");
+      return;
+    }
+
+    // Extract all docIds referenced by existing bot comments so we can verify pickup.
+    const existingDocIds = new Set(
+      botComments
+        .map((b) => {
+          const markerMatch = /<!--\s*dorv-doc-id=([a-zA-Z0-9_-]+)\s*-->/.exec(b);
+          if (markerMatch?.[1]) return markerMatch[1];
+          const urlMatch = /\/document\/d\/([a-zA-Z0-9_-]+)/.exec(b);
+          return urlMatch?.[1];
+        })
+        .filter((id): id is string => Boolean(id))
+    );
+
+    // Clear storage mapping so createDoc sees no locally-cached doc
+    await extensionWorker.evaluate((key: string) => {
+      return new Promise<void>((resolve) => {
+        chrome.storage.local.remove([key], resolve);
+      });
+    }, DOC_STORE_KEY);
+
+    // Count bot comments before createDoc — pickup must not post a new one
+    const commentCountBefore = botComments.length;
+
+    const input = await buildRealCreateDocInput();
+    const result = await createDocViaExtension(extensionContext, extensionId, input);
+
+    // The returned docId must be one of the pre-existing bot comment docIds
+    expect(
+      existingDocIds.has(result.mapping.docId),
+      `expected picked-up docId (${result.mapping.docId}) to match an existing bot comment; ` +
+        `known ids: ${[...existingDocIds].join(", ")}`
+    ).toBe(true);
+    expect(result.mapping.docUrl).toMatch(/docs\.google\.com/);
+
+    // Verify mapping was persisted to extension storage
+    const storageAfter = await extensionWorker.evaluate<Record<string, unknown>>(
+      () =>
+        new Promise((resolve) => {
+          chrome.storage.local.get(null, resolve);
+        })
+    );
+    const mapping = storageAfter[DOC_STORE_KEY] as { docId?: string } | undefined;
+    expect(mapping?.docId).toBe(result.mapping.docId);
+
+    // No new bot comment must have been posted
+    const commentBodiesAfter = await fetchPrIssueComments();
+    const botCommentsAfter = commentBodiesAfter.filter(
+      (b) => b.includes("<!-- dorv-doc-id=") || b.includes("**dorv**")
+    );
+    expect(botCommentsAfter.length, "pickup must not post a new bot comment").toBe(
+      commentCountBefore
+    );
   });
 });

@@ -66,6 +66,23 @@ const REQUIRED_GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.file"] as
 
 // ── GH REST helpers ───────────────────────────────────────────────────────────
 
+/** Fetch all issue comments on a PR, returning just the body of each. */
+export async function fetchPrIssueComments(prNumber: number = REAL_PR_NUMBER): Promise<string[]> {
+  const resp = await fetch(
+    `https://api.github.com/repos/${REAL_REPO}/issues/${prNumber.toString()}/comments?per_page=100`,
+    {
+      headers: {
+        Authorization: `Bearer ${GITHUB_PAT}`,
+        Accept: "application/vnd.github+json"
+      }
+    }
+  );
+  if (!resp.ok) return [];
+  const data = (await resp.json()) as { body?: unknown }[];
+  if (!Array.isArray(data)) return [];
+  return data.map((c) => (typeof c.body === "string" ? c.body : ""));
+}
+
 export interface GhPrMeta {
   headSha: string;
   prUrl: string;
