@@ -91,15 +91,18 @@ export async function resolveGDocComment(
   docId: string,
   commentId: string
 ): Promise<void> {
-  const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments/${commentId}?fields=id,resolved`;
+  const url = `https://www.googleapis.com/drive/v3/files/${docId}/comments/${commentId}/replies?fields=id,comment`;
 
   const resp = await fetch(url, {
-    method: "PATCH",
+    method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ resolved: true })
+    body: JSON.stringify({
+      action: "resolve",
+      content: "Resolved in GitHub."
+    })
   });
 
   if (!resp.ok) {

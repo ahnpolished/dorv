@@ -197,7 +197,7 @@ describe("GitHub thread lifecycle sync", () => {
       threadSnapshot: ORIGINAL_SNAPSHOT
     });
 
-    let patchBody: unknown;
+    let resolveBody: unknown;
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
       const urlStr = String(url);
       if (urlStr.includes("/graphql")) {
@@ -211,9 +211,15 @@ describe("GitHub thread lifecycle sync", () => {
             })
         };
       }
-      if (urlStr.includes("/comments/doc-root-10") && init?.method === "PATCH") {
-        patchBody = JSON.parse(String(init.body));
-        return { ok: true, json: async () => ({ id: "doc-root-10", resolved: true }) };
+      if (urlStr.includes("/comments/doc-root-10/replies") && init?.method === "POST") {
+        resolveBody = JSON.parse(String(init.body));
+        return {
+          ok: true,
+          json: async () => ({
+            id: "reply-resolve-1",
+            comment: { id: "doc-root-10", resolved: true }
+          })
+        };
       }
       if (urlStr.includes("googleapis.com/drive")) {
         return { ok: true, json: async () => ({ comments: [] }) };
@@ -223,7 +229,7 @@ describe("GitHub thread lifecycle sync", () => {
 
     await adapter.syncAll();
 
-    expect(patchBody).toEqual({ resolved: true });
+    expect(resolveBody).toEqual({ action: "resolve", content: "Resolved in GitHub." });
     expect(await mappingStore.getByGH(10)).toMatchObject({
       docCommentId: "doc-root-10",
       resolvedAt: expect.any(String)

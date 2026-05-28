@@ -131,19 +131,25 @@ async function waitForDriveComment(docId: string, needle: string, timeout = 90_0
   return comments.find((c) => typeof c.content === "string" && c.content.includes(needle));
 }
 
-async function findStoredThreadId(
-  extensionWorker: ExtensionWorker,
-  ghCommentId: number
-): Promise<string | undefined> {
-  const snapshot = await extensionWorker.evaluate<Record<string, any>, undefined>(() => {
+async function readExtensionStorage(
+  extensionWorker: ExtensionWorker
+): Promise<Record<string, any>> {
+  return extensionWorker.evaluate<Record<string, any>, undefined>(() => {
     return new Promise((resolve) => {
       chrome.storage.local.get(null, resolve);
     });
   }, undefined);
+}
+
+async function findStoredMapping(
+  extensionWorker: ExtensionWorker,
+  ghCommentId: number
+): Promise<Record<string, any> | undefined> {
+  const snapshot = await readExtensionStorage(extensionWorker);
 
   for (const value of Object.values(snapshot)) {
     if (value && typeof value === "object" && value.ghCommentId === ghCommentId) {
-      return typeof value.ghThreadId === "string" ? value.ghThreadId : undefined;
+      return value as Record<string, any>;
     }
   }
 
@@ -278,14 +284,16 @@ test.describe("sync", () => {
     }
     if (!target) return;
 
-    const body = `${TEST_COMMENT_TAG} TC-005 resolution`;
+    const marker = `TC-005 resolution ${Date.now().toString()}`;
+    const body = `${TEST_COMMENT_TAG} ${marker}`;
     const commentId = await createGhReviewComment(target.headSha, target.path, target.line, body);
     if (!commentId) return;
     createdGhCommentIds.push(commentId);
 
     await triggerSync();
-    const synced = await waitForDriveComment(state.docId!, "TC-005", 120_000);
-    const threadId = await findStoredThreadId(extensionWorker, commentId);
+    const synced = await waitForDriveComment(state.docId!, marker, 120_000);
+    const storedMapping = await findStoredMapping(extensionWorker, commentId);
+    const threadId = storedMapping?.ghThreadId as string | undefined;
     expect(threadId, "synced root comment should persist its GitHub thread id").toBeTruthy();
 
     const resolved = await resolveGhThread(threadId!);
@@ -295,7 +303,7 @@ test.describe("sync", () => {
     await expect
       .poll(
         async () => {
-          const latest = await waitForDriveComment(state.docId!, "TC-005", 30_000);
+          const latest = await waitForDriveComment(state.docId!, marker, 30_000);
           return latest?.resolved ?? false;
         },
         { timeout: 120_000, intervals: [2_000, 3_000, 5_000] }
