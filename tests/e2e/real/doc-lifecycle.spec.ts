@@ -77,7 +77,7 @@ test.describe("doc lifecycle", () => {
     // Verify tabs are visible (TC-001 step 5)
     await expect(panel.locator("button", { hasText: "GitHub" })).toBeVisible();
     await expect(panel.locator("button", { hasText: "Google Doc" })).toBeVisible();
-    await expect(panel.locator("button", { hasText: "PR Info" })).toBeVisible();
+    await expect(panel.locator("button", { hasText: "Activities" })).toBeVisible();
 
     const docId = mapping?.docId;
     const docUrl = mapping?.docUrl;

@@ -174,10 +174,27 @@ export async function fetchReviewThreads(
     }
 
     return threads;
-  } catch {
+  } catch (error) {
+    if (isGitHubRateLimitError(error)) {
+      throw error;
+    }
+
     const comments = await fetchReviewComments(token, repo, prNumber);
     return normalizeRestThreads(comments);
   }
+}
+
+function isGitHubRateLimitError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("rate limit") ||
+    message.includes("secondary rate limit") ||
+    message.includes("abuse detection")
+  );
 }
 
 function parseRepo(repo: string): { owner: string; name: string } {
@@ -213,11 +230,10 @@ function normalizeGraphQLThread(node: any): GitHubReviewThread | undefined {
     return undefined;
   }
 
-  if (typeof node.path !== "string" || typeof node.line !== "number") {
+  if (typeof node.path !== "string") {
     return undefined;
   }
 
-  const line: number = node.line;
   const commentNodes = Array.isArray(node.comments?.nodes) ? (node.comments.nodes as any[]) : [];
   const comments: GitHubReviewComment[] = commentNodes
     .map(normalizeGraphQLComment)
@@ -236,6 +252,10 @@ function normalizeGraphQLThread(node: any): GitHubReviewThread | undefined {
   const replies = comments.filter(
     (comment: GitHubReviewComment): boolean => comment.inReplyToId != null
   );
+  const line = typeof node.line === "number" ? node.line : rootComment.line;
+  if (typeof line !== "number") {
+    return undefined;
+  }
   const quotedLine = buildQuotedLine(rootComment.diffHunk, line);
 
   return buildReviewThread({
