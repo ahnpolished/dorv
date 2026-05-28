@@ -68,6 +68,14 @@ const REQUIRED_GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.file"] as
 
 /** Fetch all issue comments on a PR, returning just the body of each. */
 export async function fetchPrIssueComments(prNumber: number = REAL_PR_NUMBER): Promise<string[]> {
+  const comments = await fetchPrIssueCommentsWithIds(prNumber);
+  return comments.map((c) => c.body);
+}
+
+/** Fetch all issue comments on a PR with their IDs (needed for deletion). */
+export async function fetchPrIssueCommentsWithIds(
+  prNumber: number = REAL_PR_NUMBER
+): Promise<{ id: number; body: string }[]> {
   const resp = await fetch(
     `https://api.github.com/repos/${REAL_REPO}/issues/${prNumber.toString()}/comments?per_page=100`,
     {
@@ -78,9 +86,22 @@ export async function fetchPrIssueComments(prNumber: number = REAL_PR_NUMBER): P
     }
   );
   if (!resp.ok) return [];
-  const data = (await resp.json()) as { body?: unknown }[];
+  const data = (await resp.json()) as { id?: unknown; body?: unknown }[];
   if (!Array.isArray(data)) return [];
-  return data.map((c) => (typeof c.body === "string" ? c.body : ""));
+  return data
+    .filter(
+      (c): c is { id: number; body: string } =>
+        typeof c.id === "number" && typeof c.body === "string"
+    )
+    .map((c) => ({ id: c.id, body: c.body }));
+}
+
+/** Delete a PR issue comment by id. */
+export async function deleteGhIssueComment(commentId: number): Promise<void> {
+  await fetch(`https://api.github.com/repos/${REAL_REPO}/issues/comments/${commentId.toString()}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${GITHUB_PAT}`, Accept: "application/vnd.github+json" }
+  });
 }
 
 export interface GhPrMeta {

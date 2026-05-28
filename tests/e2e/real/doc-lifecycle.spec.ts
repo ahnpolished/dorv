@@ -7,11 +7,16 @@
  *                       (set DORV_LARGE_PR_NUMBER to a PR with large files, else skipped)
  * TC-010: GDoc Pickup — createDoc reuses the existing GDoc when a dorv bot comment is present
  *                       (skips if TC-001 has not yet run for this PR)
+ * TC-011: Green-field  — createDoc creates a new GDoc and posts a bot comment with the hidden
+ *                       marker when no prior bot comment exists on the PR.
+ *                       Requires DORV_GREEN_FIELD_PR_NUMBER (a PR with ≥1 md file and no
+ *                       existing dorv bot comments, or one that tolerates comment deletion).
  *
  * Side-effect: writes docId + mapping to /tmp/dorv-real-e2e-state.json for
  * downstream spec files (sync.spec.ts, push.spec.ts).
  *
  * Run:  DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-00[1890]"
+ * Run TC-011: DORV_GREEN_FIELD_PR_NUMBER=<pr> pnpm e2e:real --grep "TC-011"
  */
 import {
   test,
@@ -22,6 +27,10 @@ import {
   createDocViaExtension,
   hasRequiredGoogleScopes,
   fetchPrIssueComments,
+  fetchPrIssueCommentsWithIds,
+  deleteGhIssueComment,
+  fetchRealPrMeta,
+  fetchRealMarkdownFiles,
   REAL_REPO,
   REAL_PR_NUMBER
 } from "./fixture.js";
@@ -256,5 +265,83 @@ test.describe("doc lifecycle", () => {
     expect(botCommentsAfter.length, "pickup must not post a new bot comment").toBe(
       commentCountBefore
     );
+  });
+
+  test("TC-011: green-field creates new GDoc and posts bot comment with hidden marker", async ({
+    extensionContext,
+    extensionId,
+    extensionWorker
+  }) => {
+    test.skip(!(await hasRequiredGoogleScopes()), "DORV_GOOGLE_TOKEN must include Drive scopes");
+
+    const gfPrNumber = process.env.DORV_GREEN_FIELD_PR_NUMBER
+      ? parseInt(process.env.DORV_GREEN_FIELD_PR_NUMBER, 10)
+      : undefined;
+
+    if (!gfPrNumber) {
+      test.skip(true, "Set DORV_GREEN_FIELD_PR_NUMBER to a PR with ≥1 markdown file");
+      return;
+    }
+
+    const gfDocStoreKey = `docStore:${REAL_REPO}#${gfPrNumber.toString()}`;
+
+    // Delete any existing dorv bot comments so this is truly green-field
+    const existingComments = await fetchPrIssueCommentsWithIds(gfPrNumber);
+    const existingBotComments = existingComments.filter(
+      (c) => c.body.includes("<!-- dorv-doc-id=") || c.body.includes("**dorv**")
+    );
+    for (const c of existingBotComments) {
+      await deleteGhIssueComment(c.id);
+    }
+
+    // Clear any stored mapping for this PR
+    await extensionWorker.evaluate((key: string) => {
+      return new Promise<void>((resolve) => {
+        chrome.storage.local.remove([key], resolve);
+      });
+    }, gfDocStoreKey);
+
+    // Build input for the green-field PR
+    const [meta, files] = await Promise.all([fetchRealPrMeta(), fetchRealMarkdownFiles()]);
+    const input = {
+      repo: REAL_REPO,
+      prNumber: gfPrNumber,
+      title: meta.title,
+      author: meta.author,
+      branch: meta.branch,
+      headSha: meta.headSha,
+      prUrl: `https://github.com/${REAL_REPO}/pull/${gfPrNumber.toString()}`,
+      files
+    };
+
+    if (files.length === 0) {
+      test.skip(true, `PR #${gfPrNumber.toString()} has no markdown files`);
+      return;
+    }
+
+    const result = await createDocViaExtension(extensionContext, extensionId, input);
+
+    // A fresh Drive doc must have been created
+    expect(result.mapping.docId, "new doc must have an id").toBeTruthy();
+    expect(result.mapping.docUrl).toMatch(/docs\.google\.com/);
+
+    // Mapping must be in extension storage
+    const storage = await extensionWorker.evaluate<Record<string, unknown>>(
+      () =>
+        new Promise((resolve) => {
+          chrome.storage.local.get(null, resolve);
+        })
+    );
+    const stored = storage[gfDocStoreKey] as { docId?: string } | undefined;
+    expect(stored?.docId).toBe(result.mapping.docId);
+
+    // Bot comment must have been posted and must carry the hidden marker
+    const postedComments = await fetchPrIssueCommentsWithIds(gfPrNumber);
+    const botComment = postedComments.find(
+      (c) => c.body.includes("<!-- dorv-doc-id=") && c.body.includes("**dorv**")
+    );
+    expect(botComment, "bot comment with hidden marker must be posted").toBeDefined();
+    expect(botComment?.body).toContain(`<!-- dorv-doc-id=${result.mapping.docId} -->`);
+    expect(botComment?.body).toContain(result.mapping.docUrl);
   });
 });
