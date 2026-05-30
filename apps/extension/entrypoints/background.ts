@@ -8,11 +8,8 @@ import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/s
 import { isSidePanelSupported, isNativeSidePanelBrowser } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
-// Sync every 2 minutes to reduce API calls and storage writes.
-// The sidepanel also triggers syncs on user interaction, so this
-// alarm is just a background safety net.
 const SYNC_POLL_ALARM = "sync_poll";
-const SYNC_POLL_MINUTES = 2;
+const SYNC_POLL_MINUTES = 1;
 
 interface ChromeMessage {
   type: string;
@@ -102,31 +99,13 @@ export default defineBackground(() => {
       })
         .then(() => {
           panelOpenTabs.add(tabId);
-          try {
-            sendResponse({ success: true });
-          } catch {
-            /* sender closed */
-          }
+          sendResponse({ success: true });
         })
         .catch((err: unknown) => {
-          try {
-            sendResponse({ success: false, error: String(err) });
-          } catch {
-            /* sender closed */
-          }
+          sendResponse({ success: false, error: String(err) });
         });
       return true;
     }
-
-    const safeSendResponse = (response: Record<string, unknown>) => {
-      try {
-        sendResponse(response);
-      } catch {
-        // Sender tab may have closed before the async handler resolved.
-        // Chrome throws "message channel closed before a response was received"
-        // — this is a no-op, safe to swallow.
-      }
-    };
 
     const run = async () => {
       try {
@@ -142,7 +121,7 @@ export default defineBackground(() => {
               storageArea
             });
             const result = await adapter.createDoc(payload as CreateDocInput);
-            safeSendResponse({ success: true, payload: result });
+            sendResponse({ success: true, payload: result });
             break;
           }
           case "SYNC_NOW": {
@@ -153,13 +132,13 @@ export default defineBackground(() => {
               storageArea
             });
             await adapter.syncAll();
-            safeSendResponse({ success: true });
+            sendResponse({ success: true });
             break;
           }
           case "GET_SYNC_STATUS": {
             const p = payload as PullRequestRef;
             const status = await statusStore.get(p.repo, p.prNumber);
-            safeSendResponse({ success: true, payload: status });
+            sendResponse({ success: true, payload: status });
             break;
           }
           case "CLOSE_SIDE_PANEL": {
@@ -171,11 +150,11 @@ export default defineBackground(() => {
                 await chrome.sidePanel.setOptions({ tabId, enabled: false });
               }
             }
-            safeSendResponse({ success: true });
+            sendResponse({ success: true });
             break;
           }
           default:
-            safeSendResponse({ success: false, error: `Unknown message type: ${message.type}` });
+            sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
         }
       } catch (err) {
         console.error("Message handler failed:", err);
@@ -184,7 +163,7 @@ export default defineBackground(() => {
           surface: "background",
           tags: { operation: "runtime_message" }
         });
-        safeSendResponse({ success: false, error: String(err) });
+        sendResponse({ success: false, error: String(err) });
       }
     };
 

@@ -2,6 +2,40 @@
 
 All notable changes to dorv are documented here.
 
+## [0.2.0] — 2026-05-30
+
+Stable bidirectional sync with thread lifecycle, Activities feed, real-credential E2E coverage, Sentry error tracking, and storage efficiency.
+
+### Added
+
+- **Thread-first sync** — review threads with root comments + replies sync bidirectionally between GitHub and Google Docs via GraphQL `reviewThreads` (HUM-1276, HUM-1277, HUM-1278)
+- **Thread lifecycle** — resolution sync (GH→GDoc and GDoc→GH via Drive reply action), destructive whole-thread updates on edit (HUM-1278)
+- **Activities feed** — replaces PR Info tab with real-time event feed of synced comments (GH→GDoc, GDoc→GH, push/fail events) (HUM-1279, HUM-1280)
+- **Real-credential E2E tests** — 30+ Playwright tests running against live GitHub PRs and Google Docs, including multi-PR tests across 7 repos (HUM-1281, HUM-1287, HUM-1288, HUM-1289, HUM-1290, HUM-1291, HUM-1300)
+- **Stale-PR detection** — amber warning banner when new commits land after doc creation; sidepanel shows old→new SHA (HUM-1290)
+- **Sidepanel caching** — TanStack Query with persisted cache snapshot for fast tab switching (HUM-1257)
+- **Existing GDoc pickup** — `createDoc` checks PR issue comments for existing GDoc link before creating a new one; supports new `<!-- dorv-doc-id=... -->` marker and legacy `**dorv**` format (HUM-1310)
+- **Auto-pickup on sidepanel load** — sidepanel pre-scans issue comments for linked GDocs even when no local mapping exists (HUM-1331)
+- **Sentry error collection** — throttled error reporting with surface-level tagging per extension surface (HUM-1265)
+- **Mermaid diagram support** — fenced ```````mermaid` blocks rendered as `mermaid.ink` images in generated Google Docs (HUM-1267)
+- **Sidepanel keyboard shortcut** — Alt+Shift+D toggles sidepanel open/close (HUM-1266)
+- **Compatibility layer** — auto-open fallback for Arc/Edge without native `sidePanel` support; browser detection with warning banner (HUM-1251, HUM-1275, HUM-1259)
+- **Comment anchors** — icon buttons in sidepanel link directly to original GH/GDoc comment locations (HUM-1273, HUM-1254)
+- **Design tokens & typography** — CSS custom property system, DM Sans + Geist Mono fonts, animation keyframes for sync spinner and slide-in UX (HUM-1225, HUM-1226, HUM-1227, HUM-1228, HUM-1229, HUM-1230)
+
+### Fixed
+
+- **GH→GDoc thread sync** — GH review comments now correctly appear as anchored GDoc comments (HUM-1274)
+- **Duplicate sync** — PR-level locking prevents concurrent syncs; mapping re-read guard in `pushGHThreadToDoc` prevents duplicate GDoc comments (HUM-1305, HUM-1309)
+- **Message channel closed** — `sendResponse` wrapped in try-catch to prevent "A listener indicated an asynchronous response..." Sentry errors (HUM-1283)
+- **GDoc→GH infinite loop** — GH threads whose root comment starts with `> From Google Docs --` are skipped in sync; sidepanel filter excludes round-tripped comments (HUM-1325)
+- **Sidepanel display mismatch** — GH tab uses `fetchReviewThreads` GraphQL instead of REST for consistency with GH UI (HUM-1332)
+- **Storage quota exceeded** — sidepanel cache snapshot truncated to 100 comments with 200-char body limit + 30-min TTL; background poll reduced from 1m to 2m; sidepanel auto-refresh reduced from 30s to 2m (HUM-1333)
+- **Google OAuth ID token expiration** — handle token refresh errors gracefully with clear re-auth prompt (HUM-1260)
+- **Sidepanel error on non-GH pages** — shows past docs list instead of error when URL is not a GH PR or GDoc (HUM-1231)
+- **Release automation** — GitHub Actions workflow for Chrome Web Store + GitHub Release (HUM-1233)
+- **README & docs** — comprehensive update for v0.2.0 features, flows, and milestone info (HUM-1262)
+
 ## [0.1.0] — 2026-05-16
 
 First working release. DirectAdapter only — no backend required.

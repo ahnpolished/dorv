@@ -12,30 +12,13 @@ export const SIDEPANEL_QUERY_STALE_MS = 60_000;
 const SIDEPANEL_QUERY_GC_MS = 10 * 60_000;
 const SNAPSHOT_KEY = "sidepanel_query_cache_snapshot";
 
-// Maximum number of GH comments to store in the persisted snapshot.
-// Full bodies are stripped because they dominate storage — only IDs
-// and metadata survive a restart. Re-fetching 100 comments is fast;
-// the snapshot is just for instant tab-switch UX.
-const MAX_SNAPSHOT_COMMENTS = 100;
-
-// Snapshots older than this are discarded on hydration.
-const SNAPSHOT_TTL_MS = 30 * 60_000;
-
 interface SidepanelCacheSnapshot {
-  version: 1 | 2;
+  version: 1;
   updatedAt: string;
   entries: {
     key: QueryKey;
     data: GitHubReviewComment[] | GoogleDocComment[] | CommentMapping[] | SyncStatus | undefined;
   }[];
-}
-
-/** Return a lightweight copy of a comment that omits the full body when storing. */
-function slimComment(c: GitHubReviewComment): GitHubReviewComment {
-  return {
-    ...c,
-    body: c.body.length > 200 ? c.body.slice(0, 200) : c.body
-  };
 }
 
 export const sidepanelQueryKeys = {
@@ -78,27 +61,16 @@ export function createSidepanelQueryClient(): QueryClient {
   });
 }
 
-/**
- * Persist a lightweight sidepanel cache snapshot.
- *
- * GH comments are trimmed to reduce storage: bodies are truncated,
- * and at most 100 entries are kept. Snapshots older than 30 minutes
- * are discarded on hydrate.
- */
 export async function persistSidepanelCacheSnapshot(
   storage: StorageArea,
   queryClient: QueryClient,
   mapping: DocMapping
 ): Promise<void> {
-  const rawGhComments = queryClient.getQueryData<GitHubReviewComment[]>(
-    sidepanelQueryKeys.ghComments(mapping)
-  );
-  const slimmedGhComments = rawGhComments?.slice(0, MAX_SNAPSHOT_COMMENTS).map(slimComment);
-
   const entries: SidepanelCacheSnapshot["entries"] = [
-    ...(slimmedGhComments
-      ? [{ key: sidepanelQueryKeys.ghComments(mapping), data: slimmedGhComments }]
-      : []),
+    {
+      key: sidepanelQueryKeys.ghComments(mapping),
+      data: queryClient.getQueryData<GitHubReviewComment[]>(sidepanelQueryKeys.ghComments(mapping))
+    },
     {
       key: sidepanelQueryKeys.gdocComments(mapping.docId),
       data: queryClient.getQueryData<GoogleDocComment[]>(
@@ -116,7 +88,7 @@ export async function persistSidepanelCacheSnapshot(
   ].filter((entry) => entry.data !== undefined);
 
   const snapshot: SidepanelCacheSnapshot = {
-    version: 2,
+    version: 1,
     updatedAt: new Date().toISOString(),
     entries
   };
@@ -131,14 +103,7 @@ export async function hydrateSidepanelCache(
 ): Promise<void> {
   const values = await storage.get([SNAPSHOT_KEY]);
   const snapshot = values[SNAPSHOT_KEY] as SidepanelCacheSnapshot | undefined;
-  if (snapshot?.version !== 1 && snapshot?.version !== 2) return;
-
-  // Discard stale snapshots to free storage.
-  const age = Date.now() - new Date(snapshot.updatedAt).getTime();
-  if (age > SNAPSHOT_TTL_MS) {
-    await storage.remove([SNAPSHOT_KEY]);
-    return;
-  }
+  if (snapshot?.version !== 1) return;
 
   const allowedKeys = new Set(
     [

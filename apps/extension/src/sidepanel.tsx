@@ -5,7 +5,7 @@ import { createDocStore, createStatusStore, createActivityStore } from "../lib/s
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
-import { parseDocId, extractDocFromBotComment } from "../lib/gdoc/urls.js";
+import { parseDocId } from "../lib/gdoc/urls.js";
 import { groupCommentsByPath } from "../lib/gdoc/grouping.js";
 import { buildOnboardingStep } from "../lib/onboarding/model.js";
 import {
@@ -13,7 +13,7 @@ import {
   fetchPullRequestFiles,
   filterMarkdownFiles
 } from "../lib/github/pr-files.js";
-import { fetchPullRequestMeta, fetchIssueComments } from "../lib/github/fetch.js";
+import { fetchPullRequestMeta } from "../lib/github/fetch.js";
 import {
   createDocViaBackground,
   syncNowViaBackground,
@@ -399,7 +399,7 @@ function SidePanel() {
           `${ref.owner}/${ref.repo}#${ref.prNumber.toString()}`
         );
         const cached = queryClient.getQueryData<DocMapping | null>(docKey);
-        let m: DocMapping | null =
+        const m: DocMapping | null =
           cached ??
           (await queryClient.fetchQuery({
             queryKey: docKey,
@@ -411,39 +411,6 @@ function SidePanel() {
                 })
                 .then((d) => d ?? null)
           }));
-
-        // If no local mapping exists, scan PR issue comments for a legacy
-        // dorv bot comment that already links a Google Doc. This lets users
-        // on a new machine or after storage clear pick up existing docs.
-        if (!m && pat) {
-          try {
-            const comments = await fetchIssueComments(
-              pat,
-              `${ref.owner}/${ref.repo}`,
-              ref.prNumber
-            );
-            for (const c of comments) {
-              const existing = extractDocFromBotComment(c.body);
-              if (existing) {
-                m = {
-                  repo: `${ref.owner}/${ref.repo}`,
-                  prNumber: ref.prNumber,
-                  docId: existing.docId,
-                  docUrl: existing.docUrl,
-                  createdAt: new Date().toISOString(),
-                  lastSyncedAt: new Date().toISOString(),
-                  headSha: "",
-                  latestSha: "",
-                  isStale: false
-                };
-                await docStore.upsert(m);
-                break;
-              }
-            }
-          } catch {
-            // Non-fatal: existing-doc scan failure should not block showing UI
-          }
-        }
 
         if (m) {
           setMapping(m);
