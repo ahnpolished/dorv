@@ -99,13 +99,31 @@ export default defineBackground(() => {
       })
         .then(() => {
           panelOpenTabs.add(tabId);
-          sendResponse({ success: true });
+          try {
+            sendResponse({ success: true });
+          } catch {
+            /* sender closed */
+          }
         })
         .catch((err: unknown) => {
-          sendResponse({ success: false, error: String(err) });
+          try {
+            sendResponse({ success: false, error: String(err) });
+          } catch {
+            /* sender closed */
+          }
         });
       return true;
     }
+
+    const safeSendResponse = (response: Record<string, unknown>) => {
+      try {
+        sendResponse(response);
+      } catch {
+        // Sender tab may have closed before the async handler resolved.
+        // Chrome throws "message channel closed before a response was received"
+        // — this is a no-op, safe to swallow.
+      }
+    };
 
     const run = async () => {
       try {
@@ -121,7 +139,7 @@ export default defineBackground(() => {
               storageArea
             });
             const result = await adapter.createDoc(payload as CreateDocInput);
-            sendResponse({ success: true, payload: result });
+            safeSendResponse({ success: true, payload: result });
             break;
           }
           case "SYNC_NOW": {
@@ -132,13 +150,13 @@ export default defineBackground(() => {
               storageArea
             });
             await adapter.syncAll();
-            sendResponse({ success: true });
+            safeSendResponse({ success: true });
             break;
           }
           case "GET_SYNC_STATUS": {
             const p = payload as PullRequestRef;
             const status = await statusStore.get(p.repo, p.prNumber);
-            sendResponse({ success: true, payload: status });
+            safeSendResponse({ success: true, payload: status });
             break;
           }
           case "CLOSE_SIDE_PANEL": {
@@ -150,11 +168,11 @@ export default defineBackground(() => {
                 await chrome.sidePanel.setOptions({ tabId, enabled: false });
               }
             }
-            sendResponse({ success: true });
+            safeSendResponse({ success: true });
             break;
           }
           default:
-            sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
+            safeSendResponse({ success: false, error: `Unknown message type: ${message.type}` });
         }
       } catch (err) {
         console.error("Message handler failed:", err);
@@ -163,7 +181,7 @@ export default defineBackground(() => {
           surface: "background",
           tags: { operation: "runtime_message" }
         });
-        sendResponse({ success: false, error: String(err) });
+        safeSendResponse({ success: false, error: String(err) });
       }
     };
 

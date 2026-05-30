@@ -13,7 +13,9 @@ function sendBackgroundMessage<T>(
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response: BackgroundResponse<T> | undefined) => {
       if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message ?? "Background message failed."));
+        // The message channel may have closed (e.g. sender tab navigated away).
+        // This is not an application error — resolve silently as undefined.
+        resolve(undefined);
         return;
       }
 
@@ -39,15 +41,15 @@ export async function syncNowViaBackground(): Promise<void> {
   await sendBackgroundMessage<undefined>({ type: "SYNC_NOW" }, "Manual sync failed.");
 }
 
-export function createDocViaBackground(input: CreateDocInput): Promise<CreateDocResult> {
-  return sendBackgroundMessage<CreateDocResult>(
+export async function createDocViaBackground(input: CreateDocInput): Promise<CreateDocResult> {
+  const payload = await sendBackgroundMessage<CreateDocResult>(
     { type: "CREATE_DOC", payload: input },
     "Google Doc creation failed."
-  ).then((payload) => {
-    if (!payload) {
-      throw new Error("Google Doc creation returned no result.");
-    }
+  );
 
-    return payload;
-  });
+  if (!payload) {
+    throw new Error("Google Doc creation returned no result.");
+  }
+
+  return payload;
 }

@@ -11,12 +11,22 @@ Chrome extension that bridges GitHub PR inline review and Google Docs comments f
 | Architecture | [Architecture overview](https://linear.app/humphreyahn/document/architecture-overview-f7a18d7c265f) |
 | Rollout | [Rollout plan](https://linear.app/humphreyahn/document/rollout-plan-bb3a252aa510) |
 
-## Current milestone: v0.1.0
+## Current milestone: v0.2.0
 
-Weekend hack scope: working Chrome extension with **DirectAdapter** (GitHub PAT + `chrome.identity`). No backend. Team dogfoods on real markdown PRs.
+Stable bidirectional sync with real-credential E2E coverage. **DirectAdapter** only — no backend required.
 
-- **Phase 1 adapter:** alarm polling every 2 min, `chrome.storage.local`
-- **Phase 2 adapter (later):** set `backend_url` in options → BackendAdapter + webhooks (no reinstall)
+### What's new in v0.2.0
+
+- **Thread-first sync** — review threads with root comments + replies sync bidirectionally between GitHub and Google Docs
+- **Thread lifecycle** — resolution sync (GH → GDoc and GDoc → GH), destructive whole-thread updates on edit
+- **Activities feed** — replaces the old PR Info tab with a real-time event feed of synced comments (GH→GDoc, GDoc→GH, push/fail events)
+- **Real-credential E2E tests** — 30+ Playwright tests running against live GitHub PRs and Google Docs
+- **Stale-PR detection** — amber warning banner when new commits land after doc creation
+- **Sidepanel caching** — TanStack Query with persisted cache for fast tab switching
+- **Animations & design polish** — sync spinner, slide-in comments, dark mode, Google Sans for tab titles
+- **Compatibility** — Auto-open fallback for Arc/Edge without native sidePanel support
+- **Sentry error collection** — throttled error reporting with surface-level tagging
+- **Existing GDoc pickup** — if a bot comment already links a GDoc, reuses it instead of creating a new one
 
 See [docs/PRIORITIES.md](docs/PRIORITIES.md) for the Linear backlog, priorities, and suggested build order.
 
@@ -41,9 +51,10 @@ GitHub diff review is a poor fit for long markdown. Teams often review in Google
 ## Core user flows
 
 1. **Author** opens a PR with `.md` files → sidebar offers **Create Google Doc** → formatted doc + bot comment on PR.
-2. **GH → GDoc** — new GitHub review comments appear in the doc within ~2 minutes (alarm poll).
-3. **Reviewer** opens the doc → side panel lists GH comments; highlights text → pushes Drive comments to GitHub with line matching.
+2. **GH → GDoc** — GitHub review threads with replies appear in the doc within ~1 minute (alarm poll).
+3. **Reviewer** opens the doc → side panel lists GH comments and GDoc comments; highlights text → pushes Drive comments to GitHub with line matching.
 4. **Stale commits** — new pushes set `isStale`; sidebar warns (doc content is not auto-updated).
+5. **Activities** — real-time feed shows every synced comment, push, and resolution event.
 
 ## Tech stack (planned)
 
@@ -84,4 +95,4 @@ Use `.env.example` as the placeholder reference for local extension credentials.
 
 ## Status
 
-Bootstrap in progress. Track feature work in [Linear (dorv)](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).
+**v0.2.0** — stable, dogfooding on real PRs. Track feature work in [Linear (dorv)](https://linear.app/humphreyahn/project/dorv-ffb245d3afc0/issues).

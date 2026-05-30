@@ -6,8 +6,9 @@ Instructions for coding agents (Cursor, Codex, Claude Code, and others). Human-o
 
 **dorv** is a Chrome extension (WXT + React) that syncs GitHub PR review comments with Google Docs for markdown-heavy PRs.
 
-- **v0.1.0 scope:** `DirectAdapter` only — GitHub PAT + `chrome.identity`, 2-minute alarm polling, `chrome.storage.local`. No backend.
+- **v0.2.0 scope:** `DirectAdapter` only — thread-first sync (GH review threads → GDoc comments), Activities feed, real-credential E2E tests, Sentry error tracking.
 - **Do not build** BackendAdapter, webhooks, or Postgres unless explicitly assigned and `backend_url` flow is in scope.
+- **v0.3.0 scope (next):** GDoc → GH resolution sync, Mermaid support in comments, refresh doc content workflow.
 
 ## Read before coding
 

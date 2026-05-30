@@ -14,5 +14,6 @@ This file remains as a lightweight pointer for Claude Code sessions that auto-lo
 ## Quick principles
 
 - Simplicity over architectural beauty; TDD with CI; monorepo + per-package READMEs; [prek](https://github.com/j178/prek) for hooks.
-- v0.1.0 = DirectAdapter only (see [docs/PRIORITIES.md](docs/PRIORITIES.md)).
+- **v0.2.0** = DirectAdapter only, thread-first sync, real-credential E2E tests, Activities feed.
+- Next: v0.3.0 — GDoc → GH resolution sync, Mermaid in comments, refresh doc content workflow.
 - Org: enough polish, no fuss — [Ahnpolished](README.md) bar in [AGENTS.md](AGENTS.md).
