@@ -484,7 +484,7 @@ function SidePanel() {
     }
   }, [onboarding]);
 
-  // Auto-refresh: while the sidepanel is open and a doc is loaded, sync every 30s.
+  // Auto-refresh: while the sidepanel is open, sync every 2 minutes.
   // lastSyncAt in the dep array restarts the timer whenever Sync now is clicked.
   useEffect(() => {
     if (!mapping) return;
@@ -499,7 +499,7 @@ function SidePanel() {
             tags: { operation: "auto_refresh" }
           });
         });
-    }, 30_000);
+    }, 120_000);
     return () => {
       clearInterval(id);
     };

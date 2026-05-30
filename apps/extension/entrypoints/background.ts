@@ -8,8 +8,11 @@ import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/s
 import { isSidePanelSupported, isNativeSidePanelBrowser } from "../lib/compat.js";
 import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
 
+// Sync every 2 minutes to reduce API calls and storage writes.
+// The sidepanel also triggers syncs on user interaction, so this
+// alarm is just a background safety net.
 const SYNC_POLL_ALARM = "sync_poll";
-const SYNC_POLL_MINUTES = 1;
+const SYNC_POLL_MINUTES = 2;
 
 interface ChromeMessage {
   type: string;
