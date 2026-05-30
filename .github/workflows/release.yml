@@ -83,6 +83,8 @@ jobs:
       - name: Build extension zip
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          WXT_SENTRY_DSN: ${{ secrets.WXT_SENTRY_DSN }}
+          WXT_SENTRY_ENVIRONMENT: production
         run: pnpm --filter @dorv/extension zip
 
       - name: Locate extension zip
