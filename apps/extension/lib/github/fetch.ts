@@ -199,7 +199,13 @@ export async function fetchIssueComments(
       }
     }
   );
-  if (!resp.ok) return [];
+  if (!resp.ok) {
+    console.warn(
+      `fetchIssueComments: HTTP ${resp.status.toString()} — ` +
+        "check that your GitHub PAT has `Issues: Read` permission."
+    );
+    return [];
+  }
   const data = await resp.json();
   if (!Array.isArray(data)) return [];
   return data as { body: string }[];
