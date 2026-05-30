@@ -521,11 +521,21 @@ function SidePanel() {
   };
 
   const unmappedGdocComments = useMemo(() => {
-    return gdocComments.filter(
-      (gd) =>
-        !commentMappings.some((cm) => cm.docCommentId === gd.id) &&
-        !gd.content.startsWith("[GitHub: ")
-    );
+    // Build a set of GDoc comment IDs that already have sync mappings.
+    const mappedDocIds = new Set(commentMappings.map((cm) => cm.docCommentId));
+
+    return gdocComments.filter((gd) => {
+      // Already tracked in a mapping → not pushable.
+      if (mappedDocIds.has(gd.id)) return false;
+
+      // GH→GDoc mirrored comments carry a "[GitHub: @user]" prefix.
+      if (gd.content.startsWith("[GitHub: ")) return false;
+
+      // GDoc→GH→GDoc round-tripped comments contain "From Google Docs".
+      if (gd.content.includes("> From Google Docs -- ")) return false;
+
+      return true;
+    });
   }, [gdocComments, commentMappings]);
 
   const handlePush = async (comment: GoogleDocComment) => {

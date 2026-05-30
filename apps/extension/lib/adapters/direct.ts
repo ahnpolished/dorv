@@ -507,6 +507,12 @@ export class DirectAdapter implements SyncAdapter {
 
         // GH top-level comments → Doc, plus first-pass lifecycle for mapped GH threads.
         for (const thread of threads) {
+          // Skip comments pushed from GDoc — they were already synced and should
+          // not be mirrored back to GDoc (infinite loop protection).
+          if (thread.rootComment.body.startsWith("> From Google Docs -- ")) {
+            continue;
+          }
+
           const existingRootMapping = await this.mappingStore.getByGH(thread.rootComment.id);
           if (!existingRootMapping) {
             await this.pushGHThreadToDoc(thread, mapping);
