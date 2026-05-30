@@ -11,16 +11,16 @@ Chrome extension: on PRs with markdown files, create a Google Doc from PR conten
 | Entrypoint | Match | Role |
 | --- | --- | --- |
 | `github-sidebar.content` | `github.com/*/pull/*` | PR sidebar — MD detection, doc lifecycle, sync status |
-| Side panel | `docs.google.com` | Comments list, push-to-GH, replies |
-| `background.ts` | — | Alarms (2 min), message bus, enable side panel on Docs tabs |
-| Options | — | PAT, Google OAuth, optional `backend_url` |
+| Side panel | `github.com/*/pull/*`, `docs.google.com` | Comments list, GH→GDoc/ GDOC→GH push, Activities feed, past-docs list |
+| `background.ts` | — | Alarms (2 min), message bus, side panel lifecycle per tab URL, threading |
+| Options | — | PAT, Google OAuth, optional `backend_url`, Sentry DSN |
 
 ## Adapter layer (upgrade seam)
 
-| | DirectAdapter (v0.1.0) | BackendAdapter (later) |
+| | DirectAdapter (v0.2.0) | BackendAdapter (later) |
 | --- | --- | --- |
 | Auth | GitHub PAT + `chrome.identity` | GitHub App installation token |
-| Sync | Alarm every 2 min | Webhooks |
+| Sync | Alarm every 2 min, GraphQL `reviewThreads` | Webhooks |
 | Storage | `chrome.storage.local` | Postgres (backend) |
 | Switch | `backend_url` empty | `backend_url` set in options |
 
@@ -38,14 +38,34 @@ No reinstall to move from phase 1 → 2. DirectAdapter works for GitHub Organiza
 
 1. PR with `.md` → user creates doc (raw MD → `marked` → HTML → Drive multipart).
 2. Doc seeded with PR metadata; `headSha` stored.
-3. Bot comment on PR with doc link.
-4. Poll: new GH review comments → Drive comments; replies via `inReplyToId`.
+3. Bot comment on PR with doc link (`<!-- dorv-doc-id=... -->` marker).
+4. Poll via GraphQL `reviewThreads`: new GH review threads → Drive comments as anchored comments.
+5. Thread lifecycle: resolution sync, destructive whole-thread updates on edit.
+6. GDoc pickup: existing bot comments scanned on `createDoc` to reuse linked docs.
+
+All GH→GDoc comments carry a `[GitHub: @user]` prefix and a `[View on GitHub]` link. Mapping guards (`hasByGH` / `hasByDoc`) prevent double-sync.
 
 **Google Doc → GitHub**
 
 1. Side panel on Docs tab.
 2. Drive comment → line match via `quotedFileContent` → push GH review comment.
 3. Drive replies on mapped threads → GH replies.
+4. Sidepanel filter excludes GH→GDoc mirror comments from pushable list.
+
+**GDoc pickup from bot comments**
+
+If the user (or a collaborator) already created a Google Doc for a PR, `createDoc` scans PR issue comments for a dorv bot comment containing `<!-- dorv-doc-id=... -->` or the legacy `**dorv**` text. On match, it creates a local `DocMapping` and returns early — no new Drive file or bot comment is created.
+
+## Activities feed
+
+Replaces the old PR Info tab. Every synced event (comment synced, reply synced, thread resolved) is recorded in a persisted `SyncedActivity` store (capped at 1000 events). The sidepanel's Activities tab shows them in reverse-chronological order.
+
+## Storage efficiency
+
+- Comment mappings: per-GH-ID and per-doc-ID entries for O(1) lookup per mapping; per-PR array for bulk listing.
+- Persisted query cache (TanStack Query): limited to 100 GH comments, bodies truncated to 200 chars, 30-min TTL.
+- Auto-cleanup: stale snapshots removed on hydrate.
+- Sync intervals: background alarm 2 min, sidepanel auto-refresh 2 min.
 
 ## Stale commits
 
