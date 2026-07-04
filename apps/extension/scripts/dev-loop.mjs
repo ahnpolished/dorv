@@ -10,8 +10,8 @@
  */
 
 import { execSync, spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
 import { resolve, dirname } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 
@@ -87,7 +87,6 @@ run("pkill -9 -f 'Google Chrome' 2>/dev/null || true", { silent: true });
 run(`lsof -tiTCP:9222 -sTCP:LISTEN | xargs kill 2>/dev/null || true`, { silent: true });
 await sleep(3_000);
 
-const chromeLog = createWriteStream("/tmp/dorv-dev-loop-chrome.log", { flags: "a" });
 spawn(
   CHROME,
   [
@@ -97,8 +96,8 @@ spawn(
     "--load-extension=" + BUILD_DIR,
     TARGET_URL
   ],
-  { stdio: ["ignore", chromeLog, chromeLog], detached: true }
-);
+  { stdio: "ignore", detached: true }
+).unref();
 
 // Wait for CDP port
 const startedAt = Date.now();
@@ -193,7 +192,7 @@ console.log("");
 if (stamp) {
   const reportFile = resolve(PROJECT_DIR, ".agents", "last-verify-report.md");
   const reportDir = dirname(reportFile);
-  run(`mkdir -p "${reportDir}"`, { silent: true });
+  mkdirSync(reportDir, { recursive: true });
   const report = [
     `# Dev Loop Verification Report`,
     `- **Git SHA:** \`${gitSha}\``,
@@ -203,6 +202,6 @@ if (stamp) {
     `- **Verified at:** ${new Date().toISOString()}`,
     ""
   ].join("\n");
-  require("fs").writeFileSync(reportFile, report);
+  writeFileSync(reportFile, report);
   log(GREEN, `  Report written to .agents/last-verify-report.md`);
 }
