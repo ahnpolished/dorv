@@ -25,21 +25,12 @@ test.describe("auth smoke", () => {
   test("TC-013: background responds to a GET_SYNC_STATUS message round-trip", async ({
     extensionContext
   }) => {
-    // There is no more sidepanel to open — the smoke check for "extension
-    // loads and is responsive" is now a direct message round-trip to the
-    // background service worker via an extension page, the same mechanism
-    // the button-injection content scripts use.
-    // Open options page via the extension SW runtime to bypass Chrome v130+
-    // redirect of direct page.goto("chrome-extension://...") navigations.
+    // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+    // so we send messages directly from the SW context.
     const worker =
       extensionContext.serviceWorkers()[0] ??
       (await extensionContext.waitForEvent("serviceworker"));
-    const [page] = await Promise.all([
-      extensionContext.waitForEvent("page"),
-      worker.evaluate(() => chrome.runtime.openOptionsPage())
-    ]);
-    await page.waitForLoadState("domcontentloaded");
-    const response = await page.evaluate(
+    const response = await worker.evaluate(
       ([repo, prNumber]) => {
         return new Promise<{ success: boolean }>((resolve) => {
           chrome.runtime.sendMessage(
@@ -51,7 +42,6 @@ test.describe("auth smoke", () => {
       [REAL_REPO, REAL_PR_NUMBER] as const
     );
     expect(response.success, "background must respond successfully to GET_SYNC_STATUS").toBe(true);
-    await page.close();
   });
 
   test("TC-011: empty Google token results in error sync state", async ({

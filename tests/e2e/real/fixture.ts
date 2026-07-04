@@ -219,23 +219,18 @@ export async function createDocViaExtension(
   _extensionId: string,
   input: CreateDocInput
 ): Promise<CreateDocResult> {
-  // Open options page via the extension SW runtime to bypass Chrome v130+
-  // redirect of direct page.goto("chrome-extension://...") navigations.
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
   const worker =
     extensionContext.serviceWorkers()[0] ?? (await extensionContext.waitForEvent("serviceworker"));
-  const [page] = await Promise.all([
-    extensionContext.waitForEvent("page"),
-    worker.evaluate(() => chrome.runtime.openOptionsPage())
-  ]);
-  await page.waitForLoadState("domcontentloaded");
-  const response = await page.evaluate((payload) => {
+  const response = await worker.evaluate((payload) => {
     return new Promise<{ success: boolean; payload?: CreateDocResult; error?: string }>(
       (resolve) => {
         chrome.runtime.sendMessage({ type: "CREATE_DOC", payload }, resolve);
       }
     );
   }, input);
-  await page.close();
   if (!response.success || !response.payload) {
     throw new Error(response.error ?? "CREATE_DOC returned no payload");
   }
@@ -582,24 +577,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { auto: true }
   ],
 
-  // Sends SYNC_NOW from the options extension page (which has chrome.runtime access).
-  // Uses openOptionsPage() from the SW context to avoid Chrome v130+ redirect of direct
-  // page.goto("chrome-extension://...") navigations.
-  triggerSync: async ({ extensionContext, extensionWorker }, use) => {
+  // Sends SYNC_NOW directly from the background service worker.
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
+  triggerSync: async ({ extensionWorker }, use) => {
     const trigger = async () => {
-      const [page] = await Promise.all([
-        extensionContext.waitForEvent("page"),
-        extensionWorker.evaluate(() => chrome.runtime.openOptionsPage())
-      ]);
-      await page.waitForLoadState("domcontentloaded");
-      await page.evaluate(() => {
+      await extensionWorker.evaluate(() => {
         return new Promise<void>((resolve) => {
           chrome.runtime.sendMessage({ type: "SYNC_NOW", payload: null }, () => {
             resolve();
           });
         });
       });
-      await page.close();
     };
     await use(trigger);
   }
