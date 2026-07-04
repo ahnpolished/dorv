@@ -218,6 +218,16 @@ function Options() {
               This ID must be listed in your Google Cloud OAuth client.
             </p>
 
+            {chrome.runtime.getManifest().oauth2?.client_id === "GOOGLE_CLIENT_ID" && (
+              <p className="compat-warning">
+                ⚠️ <strong>OAuth not configured.</strong> The OAuth client ID is still the
+                placeholder &quot;GOOGLE_CLIENT_ID&quot;. Copy{" "}
+                <code>apps/extension/.env.example</code> to <code>apps/extension/.env</code> and set
+                a real <code>GOOGLE_CLIENT_ID</code>, then rebuild. Without this, Google sign-in
+                will always fail with &quot;Error 400: invalid_request&quot;.
+              </p>
+            )}
+
             {googleConnected && googleProfile ? (
               <div className="google-profile-card">
                 <img

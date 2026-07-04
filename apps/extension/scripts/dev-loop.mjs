@@ -11,7 +11,7 @@
 
 import { execSync, spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 
@@ -70,6 +70,12 @@ async function cdpSend(ws, id, method, params = {}) {
     };
     ws.on("message", handler);
   });
+}
+
+// ── pre-flight checks ─────────────────────────────────────────────────
+if (!existsSync(resolve(PROJECT_DIR, "node_modules"))) {
+  log(YELLOW, "node_modules missing — running pnpm install first...");
+  run("pnpm install", { cwd: resolve(PROJECT_DIR, ".."), silent: true });
 }
 
 // ── Step 1: Build from HEAD ───────────────────────────────────────────
