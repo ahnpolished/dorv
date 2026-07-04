@@ -3,13 +3,8 @@ import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { captureExtensionException, initSentryForSurface } from "../lib/telemetry/sentry.js";
-import { createDocStore, createStatusStore, createSettingsStore } from "../lib/storage/stores.js";
-import { syncSidePanelForTabUrl, openSidePanelForTab } from "../lib/background/sidepanel.js";
-import { isSidePanelSupported, isNativeSidePanelBrowser } from "../lib/compat.js";
-import type { CreateDocInput, PullRequestRef } from "../lib/adapters/types.js";
-
-const SYNC_POLL_ALARM = "sync_poll";
-const SYNC_POLL_MINUTES = 1;
+import { createStatusStore } from "../lib/storage/stores.js";
+import type { CreateDocInput, GoogleDocComment, PullRequestRef } from "../lib/adapters/types.js";
 
 interface ChromeMessage {
   type: string;
@@ -20,93 +15,18 @@ interface ChromeMessage {
 export default defineBackground(() => {
   initSentryForSurface("background");
   const storageArea = createChromeStorageArea(chrome.storage.local);
-  // Tracks which tabs currently have the side panel open so Alt+Shift+D can toggle.
-  // State is best-effort: Chrome's sidePanel API has no "is open" query, so closing
-  // via the browser's own X button won't update this set (next press re-opens).
-  const panelOpenTabs = new Set<number>();
   const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
-  const docStore = createDocStore(storageArea);
   const statusStore = createStatusStore(storageArea);
-  const settingsStore = createSettingsStore(storageArea);
-  const useNativeSidePanel = isSidePanelSupported() && isNativeSidePanelBrowser();
 
-  const startPolling = () => {
-    void chrome.alarms.create(SYNC_POLL_ALARM, { periodInMinutes: SYNC_POLL_MINUTES });
-  };
-
-  const handlePoll = async () => {
-    try {
-      const backendUrl = await authStore.getBackendUrl();
-      const adapter = resolveAdapter({
-        backendUrl,
-        authStore,
-        storageArea
-      });
-      await adapter.syncAll();
-    } catch (err) {
-      console.error("Background poll failed:", err);
-      captureExtensionException(err, {
-        extra: { alarm: SYNC_POLL_ALARM },
-        surface: "background",
-        tags: { operation: "poll" }
-      });
-    }
-  };
-
-  chrome.runtime.onInstalled.addListener(() => {
-    if (isSidePanelSupported()) {
-      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-    }
-    startPolling();
-    void handlePoll();
-  });
-
-  chrome.runtime.onStartup.addListener(() => {
-    if (isSidePanelSupported()) {
-      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-    }
-    startPolling();
-  });
-
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === SYNC_POLL_ALARM) {
-      void handlePoll();
+  // In dev mode, auto-open the options page on install/update so
+  // the developer sees the Google auth button immediately.
+  chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === "install" || details.reason === "update") {
+      void chrome.runtime.openOptionsPage();
     }
   });
 
-  chrome.runtime.onMessage.addListener((message: ChromeMessage, sender, sendResponse) => {
-    // OPEN_SIDE_PANEL is handled here, outside the async wrapper below.
-    // chrome.sidePanel.open() requires an unbroken user-gesture context; any prior
-    // await inside openSidePanelForTab's async scope would cause rejection.
-    // openSidePanelForTab now fires setOptions synchronously before calling open
-    // so Chrome processes both IPC calls in order without consuming the gesture.
-    if (message.type === "OPEN_SIDE_PANEL") {
-      if (sender.tab?.id === undefined) {
-        sendResponse({ success: false, error: "Cannot open side panel without a sender tab." });
-        return false;
-      }
-      const tabId = sender.tab.id;
-      const setOptions = useNativeSidePanel
-        ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
-        : () => Promise.resolve();
-      const open = useNativeSidePanel
-        ? chrome.sidePanel.open.bind(chrome.sidePanel)
-        : () => Promise.reject(new Error("Side panel is not supported in this browser."));
-      void openSidePanelForTab({
-        tabId,
-        setOptions,
-        open
-      })
-        .then(() => {
-          panelOpenTabs.add(tabId);
-          sendResponse({ success: true });
-        })
-        .catch((err: unknown) => {
-          sendResponse({ success: false, error: String(err) });
-        });
-      return true;
-    }
-
+  chrome.runtime.onMessage.addListener((message: ChromeMessage, _sender, sendResponse) => {
     const run = async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -135,21 +55,66 @@ export default defineBackground(() => {
             sendResponse({ success: true });
             break;
           }
+          case "SYNC_PR": {
+            const backendUrl = await authStore.getBackendUrl();
+            const adapter = resolveAdapter({
+              backendUrl,
+              authStore,
+              storageArea
+            });
+            await adapter.syncPR(payload as PullRequestRef);
+            sendResponse({ success: true });
+            break;
+          }
+          case "PUSH_DOC_COMMENT_TO_GH": {
+            const { ref, docId, comment } = payload as {
+              ref: PullRequestRef;
+              docId: string;
+              comment: GoogleDocComment;
+            };
+            const backendUrl = await authStore.getBackendUrl();
+            const adapter = resolveAdapter({
+              backendUrl,
+              authStore,
+              storageArea
+            });
+            const mapping = await adapter.getDoc(ref);
+            if (!mapping) {
+              sendResponse({ success: false, error: "PR is not linked to a Google Doc." });
+              break;
+            }
+            const result = await adapter.pushDocCommentToGH(comment, mapping, docId);
+            sendResponse({ success: true, payload: result });
+            break;
+          }
+          case "GET_DOC_COMMENTS": {
+            // Content scripts can't call chrome.identity directly (not exposed
+            // to the content-script execution context), so fetching Google Doc
+            // comments — needed to resolve a sidebar card's full comment
+            // (including quotedFileContent for line-matching) — must be
+            // proxied through here rather than done in-page.
+            const { ref } = payload as { ref: PullRequestRef };
+            const backendUrl = await authStore.getBackendUrl();
+            const adapter = resolveAdapter({
+              backendUrl,
+              authStore,
+              storageArea
+            });
+            const comments = await adapter.getDocComments(ref);
+            sendResponse({ success: true, payload: comments });
+            break;
+          }
           case "GET_SYNC_STATUS": {
             const p = payload as PullRequestRef;
             const status = await statusStore.get(p.repo, p.prNumber);
             sendResponse({ success: true, payload: status });
             break;
           }
-          case "CLOSE_SIDE_PANEL": {
-            if (isSidePanelSupported()) {
-              const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-              const tabId = tabs[0]?.id;
-              if (tabId !== undefined) {
-                panelOpenTabs.delete(tabId);
-                await chrome.sidePanel.setOptions({ tabId, enabled: false });
-              }
-            }
+          case "OPEN_OPTIONS_PAGE": {
+            // Only available in the service worker / extension-page contexts,
+            // not content scripts — this handler is why callers must go
+            // through openOptionsPageViaBackground() instead of calling it directly.
+            await chrome.runtime.openOptionsPage();
             sendResponse({ success: true });
             break;
           }
@@ -169,70 +134,5 @@ export default defineBackground(() => {
 
     void run();
     return true;
-  });
-
-  const syncTabSidePanel = (tabId: number, url?: string) => {
-    const setOptions = useNativeSidePanel
-      ? chrome.sidePanel.setOptions.bind(chrome.sidePanel)
-      : () => Promise.resolve();
-    const open = useNativeSidePanel
-      ? chrome.sidePanel.open.bind(chrome.sidePanel)
-      : () => Promise.resolve();
-    void syncSidePanelForTabUrl({
-      tabId,
-      url,
-      docStore,
-      settingsStore,
-      setOptions,
-      open,
-      useNativeSidePanel
-    }).catch((err: unknown) => {
-      console.error("Side panel sync failed:", err);
-      captureExtensionException(err, {
-        extra: { tabId, url },
-        surface: "background",
-        tags: { operation: "sidepanel_sync" }
-      });
-    });
-  };
-
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status !== "complete" && changeInfo.url === undefined) return;
-    if (!tab.active) return;
-    syncTabSidePanel(tabId, tab.url ?? changeInfo.url);
-  });
-
-  chrome.tabs.onActivated.addListener(({ tabId }) => {
-    chrome.tabs.get(tabId, (tab) => {
-      syncTabSidePanel(tabId, tab.url);
-    });
-  });
-
-  chrome.tabs.onRemoved.addListener((tabId) => {
-    panelOpenTabs.delete(tabId);
-  });
-
-  chrome.commands.onCommand.addListener((command, tab) => {
-    if (command !== "toggle-sidepanel") return;
-    if (!isSidePanelSupported()) return;
-    const tabId = tab?.id;
-    if (tabId === undefined) return;
-    if (panelOpenTabs.has(tabId)) {
-      panelOpenTabs.delete(tabId);
-      void chrome.sidePanel.setOptions({ tabId, enabled: false });
-    } else {
-      panelOpenTabs.add(tabId);
-      void openSidePanelForTab({
-        tabId,
-        setOptions: chrome.sidePanel.setOptions.bind(chrome.sidePanel),
-        open: chrome.sidePanel.open.bind(chrome.sidePanel)
-      }).catch((err: unknown) => {
-        console.error("[dorv] sidepanel toggle open failed:", err);
-        captureExtensionException(err, {
-          surface: "background",
-          tags: { operation: "keyboard_shortcut_toggle" }
-        });
-      });
-    }
   });
 });

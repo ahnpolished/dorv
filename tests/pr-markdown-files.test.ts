@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildPrSidebarState,
   filterMarkdownFiles,
   parseGitHubPullRequestUrl
 } from "../apps/extension/lib/github/pr-files.js";
@@ -68,34 +67,5 @@ describe("HUM-1195 GitHub PR markdown file detection", () => {
         status: "renamed"
       }
     ]);
-  });
-
-  it("hides the sidebar when no markdown files are present", () => {
-    expect(buildPrSidebarState([])).toEqual({ visible: false, files: [], buttonLabel: "" });
-  });
-
-  it("shows markdown file list and count-specific create button", () => {
-    expect(buildPrSidebarState(filterMarkdownFiles(files))).toEqual({
-      visible: true,
-      files: [
-        {
-          filename: "docs/rfc.md",
-          rawUrl: "https://raw.githubusercontent.com/a/dorv/docs/rfc.md",
-          status: "modified"
-        },
-        {
-          filename: "docs/spec.mdx",
-          rawUrl: "https://raw.githubusercontent.com/a/dorv/docs/spec.mdx",
-          status: "added"
-        },
-        {
-          filename: "docs/new-name.md",
-          previousFilename: "docs/old-name.md",
-          rawUrl: "https://raw.githubusercontent.com/a/dorv/docs/new-name.md",
-          status: "renamed"
-        }
-      ],
-      buttonLabel: "Create Google Doc (3 files)"
-    });
   });
 });

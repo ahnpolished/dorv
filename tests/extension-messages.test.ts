@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createDocViaBackground,
-  openSidePanelViaBackground,
+  openOptionsPageViaBackground,
   syncNowViaBackground
 } from "../apps/extension/lib/adapters/messages.js";
 import type { CreateDocInput, CreateDocResult } from "../apps/extension/lib/adapters/types.js";
@@ -29,27 +29,6 @@ const input: CreateDocInput = {
 };
 
 describe("extension background messages", () => {
-  it("requests side panel opening through the background script", async () => {
-    globalThis.chrome = {
-      runtime: {
-        sendMessage: vi.fn(
-          (
-            message: { type: "OPEN_SIDE_PANEL" },
-            callback: (response: CreateDocResponse) => void
-          ) => {
-            callback({ success: true });
-          }
-        )
-      }
-    } as unknown as typeof chrome;
-
-    await expect(openSidePanelViaBackground()).resolves.toBeUndefined();
-    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
-      { type: "OPEN_SIDE_PANEL" },
-      expect.any(Function)
-    );
-  });
-
   it("requests manual sync through the background script", async () => {
     globalThis.chrome = {
       runtime: {
@@ -73,8 +52,13 @@ describe("extension background messages", () => {
       mapping: {
         repo: input.repo,
         prNumber: input.prNumber,
-        docId: "doc-1",
-        docUrl: "https://docs.google.com/document/d/doc-1/edit",
+        docs: [
+          {
+            filename: "README.md",
+            docId: "doc-1",
+            docUrl: "https://docs.google.com/document/d/doc-1/edit"
+          }
+        ],
         createdAt: "2026-05-16T00:00:00.000Z",
         lastSyncedAt: "2026-05-16T00:00:00.000Z",
         headSha: input.headSha,
@@ -112,5 +96,29 @@ describe("extension background messages", () => {
     } as unknown as typeof chrome;
 
     await expect(createDocViaBackground(input)).rejects.toThrow("Google account not connected.");
+  });
+
+  it("requests opening the options page through the background script", async () => {
+    // chrome.runtime.openOptionsPage() is not callable from a content script —
+    // this must be proxied through a background message (regression coverage
+    // for the QA-reported "openOptionsPage is not a function" crash).
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(
+          (
+            message: { type: "OPEN_OPTIONS_PAGE" },
+            callback: (response: CreateDocResponse) => void
+          ) => {
+            callback({ success: true });
+          }
+        )
+      }
+    } as unknown as typeof chrome;
+
+    await expect(openOptionsPageViaBackground()).resolves.toBeUndefined();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { type: "OPEN_OPTIONS_PAGE" },
+      expect.any(Function)
+    );
   });
 });

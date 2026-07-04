@@ -95,7 +95,7 @@ describe("Sentry telemetry", () => {
         WXT_SENTRY_ENVIRONMENT: "staging"
       },
       manifestVersion: "0.1.1",
-      surface: "sidepanel"
+      surface: "gdoc-buttons"
     });
 
     expect(config).toEqual({
@@ -103,7 +103,7 @@ describe("Sentry telemetry", () => {
       environment: "staging",
       manifestVersion: "0.1.1",
       release: "dorv-extension@0.1.1",
-      surface: "sidepanel"
+      surface: "gdoc-buttons"
     });
   });
 
@@ -162,7 +162,7 @@ describe("Sentry telemetry", () => {
   it("captures handled exceptions with extension metadata", () => {
     const error = new Error("sync failed");
 
-    initSentryForSurface("github-sidebar", {
+    initSentryForSurface("github-buttons", {
       env: {
         MODE: "production",
         WXT_SENTRY_DSN: "https://examplePublicKey@o0.ingest.sentry.io/0"
@@ -172,12 +172,12 @@ describe("Sentry telemetry", () => {
 
     captureExtensionException(error, {
       extra: { repo: "ahnpolished/dorv" },
-      surface: "github-sidebar",
+      surface: "github-buttons",
       tags: { operation: "sync_now" }
     });
 
     const captureScope = hoisted.scopeInstances[1];
-    expect(captureScope?.setTag).toHaveBeenCalledWith("surface", "github-sidebar");
+    expect(captureScope?.setTag).toHaveBeenCalledWith("surface", "github-buttons");
     expect(captureScope?.setTags).toHaveBeenCalledWith({ operation: "sync_now" });
     expect(captureScope?.setExtras).toHaveBeenCalledWith({ repo: "ahnpolished/dorv" });
     expect(hoisted.captureExceptionMock).toHaveBeenCalledWith(error);
@@ -205,10 +205,10 @@ describe("Sentry telemetry", () => {
     const dsn = "https://examplePublicKey@o0.ingest.sentry.io/0";
 
     initSentryForSurface("background", { env: { MODE: "production", WXT_SENTRY_DSN: dsn } });
-    initSentryForSurface("sidepanel", { env: { MODE: "production", WXT_SENTRY_DSN: dsn } });
+    initSentryForSurface("gdoc-buttons", { env: { MODE: "production", WXT_SENTRY_DSN: dsn } });
 
     captureExtensionException(error, { surface: "background", tags: { operation: "a" } });
-    captureExtensionException(error, { surface: "sidepanel", tags: { operation: "a" } });
+    captureExtensionException(error, { surface: "gdoc-buttons", tags: { operation: "a" } });
     captureExtensionException(error, { surface: "background", tags: { operation: "b" } });
 
     expect(hoisted.captureExceptionMock).toHaveBeenCalledTimes(3);

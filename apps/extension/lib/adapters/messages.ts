@@ -1,4 +1,10 @@
-import type { CreateDocInput, CreateDocResult } from "./types.js";
+import type {
+  CommentMapping,
+  CreateDocInput,
+  CreateDocResult,
+  GoogleDocComment,
+  PullRequestRef
+} from "./types.js";
 
 interface BackgroundResponse<T> {
   success: boolean;
@@ -13,8 +19,6 @@ function sendBackgroundMessage<T>(
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response: BackgroundResponse<T> | undefined) => {
       if (chrome.runtime.lastError) {
-        // The message channel may have closed (e.g. sender tab navigated away).
-        // This is not an application error — resolve silently as undefined.
         resolve(undefined);
         return;
       }
@@ -29,16 +33,15 @@ function sendBackgroundMessage<T>(
   });
 }
 
-export async function openSidePanelViaBackground(): Promise<void> {
-  await sendBackgroundMessage<undefined>({ type: "OPEN_SIDE_PANEL" }, "Side panel open failed.");
-}
-
-export async function closeSidePanelViaBackground(): Promise<void> {
-  await sendBackgroundMessage<undefined>({ type: "CLOSE_SIDE_PANEL" }, "Side panel close failed.");
-}
-
 export async function syncNowViaBackground(): Promise<void> {
   await sendBackgroundMessage<undefined>({ type: "SYNC_NOW" }, "Manual sync failed.");
+}
+
+export async function openOptionsPageViaBackground(): Promise<void> {
+  await sendBackgroundMessage<undefined>(
+    { type: "OPEN_OPTIONS_PAGE" },
+    "Opening options page failed."
+  );
 }
 
 export async function createDocViaBackground(input: CreateDocInput): Promise<CreateDocResult> {
@@ -49,6 +52,38 @@ export async function createDocViaBackground(input: CreateDocInput): Promise<Cre
 
   if (!payload) {
     throw new Error("Google Doc creation returned no result.");
+  }
+
+  return payload;
+}
+
+export async function syncPRViaBackground(ref: PullRequestRef): Promise<void> {
+  await sendBackgroundMessage<undefined>({ type: "SYNC_PR", payload: ref }, "PR sync failed.");
+}
+
+export async function getDocCommentsViaBackground(
+  ref: PullRequestRef
+): Promise<GoogleDocComment[]> {
+  const payload = await sendBackgroundMessage<GoogleDocComment[]>(
+    { type: "GET_DOC_COMMENTS", payload: { ref } },
+    "Fetching Google Doc comments failed."
+  );
+
+  return payload ?? [];
+}
+
+export async function pushDocCommentToGHViaBackground(input: {
+  ref: PullRequestRef;
+  docId: string;
+  comment: GoogleDocComment;
+}): Promise<CommentMapping> {
+  const payload = await sendBackgroundMessage<CommentMapping>(
+    { type: "PUSH_DOC_COMMENT_TO_GH", payload: input },
+    "Pushing comment to GitHub failed."
+  );
+
+  if (!payload) {
+    throw new Error("Pushing comment to GitHub returned no result.");
   }
 
   return payload;

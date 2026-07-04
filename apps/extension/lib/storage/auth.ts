@@ -1,5 +1,11 @@
 import type { StorageArea } from "./area.js";
 
+export interface GoogleProfile {
+  email: string;
+  name: string;
+  picture: string;
+}
+
 export interface AuthStore {
   getGitHubToken(): Promise<string | undefined>;
   setGitHubToken(token: string): Promise<void>;
@@ -8,6 +14,7 @@ export interface AuthStore {
   setBackendUrl(url: string): Promise<void>;
   isManagedBackendUrl(): Promise<boolean>;
   getGoogleToken(interactive: boolean): Promise<string | undefined>;
+  getGoogleProfile(token: string): Promise<GoogleProfile>;
   revokeGoogleToken(): Promise<void>;
 }
 
@@ -59,6 +66,30 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
         });
       });
     },
+    async getGoogleProfile(token: string): Promise<GoogleProfile> {
+      const resp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!resp.ok) {
+        throw new Error(
+          `Failed to fetch Google profile: ${resp.status.toString()} ${resp.statusText}`
+        );
+      }
+
+      const data = (await resp.json()) as {
+        email: string;
+        name: string;
+        picture: string;
+      };
+
+      return {
+        email: data.email,
+        name: data.name,
+        picture: data.picture
+      };
+    },
+
     async revokeGoogleToken(): Promise<void> {
       return new Promise((resolve) => {
         chrome.identity.getAuthToken({ interactive: false }, (token) => {

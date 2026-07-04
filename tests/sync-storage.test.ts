@@ -42,8 +42,13 @@ describe("HUM-1193 typed storage stores", () => {
     const mapping: DocMapping = {
       repo: "ahnpolished/dorv",
       prNumber: 42,
-      docId: "doc-123",
-      docUrl: "https://docs.google.com/document/d/doc-123",
+      docs: [
+        {
+          filename: "README.md",
+          docId: "doc-123",
+          docUrl: "https://docs.google.com/document/d/doc-123"
+        }
+      ],
       createdAt: "2026-05-16T15:00:00Z",
       lastSyncedAt: "2026-05-16T15:01:00Z",
       headSha: "abc1234",
@@ -64,6 +69,7 @@ describe("HUM-1193 typed storage stores", () => {
       prNumber: 42,
       ghCommentId: 1001,
       docCommentId: "doc-comment-1",
+      docId: "doc-123",
       source: "github"
     };
 
@@ -86,6 +92,7 @@ describe("HUM-1193 typed storage stores", () => {
       docReplyId: "doc-reply-2",
       ghParentCommentId: 1001,
       docParentCommentId: "doc-comment-1",
+      docId: "doc-123",
       source: "gdoc"
     };
     const status: SyncStatus = {

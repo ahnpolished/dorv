@@ -17,8 +17,9 @@ vi.stubGlobal("fetch", mockFetch);
 function makeDocMapping(ref: { repo: string; prNumber: number }): DocMapping {
   return {
     ...ref,
-    docId: "doc-1",
-    docUrl: "https://docs.google.com/document/d/doc-1",
+    docs: [
+      { filename: "f.md", docId: "doc-1", docUrl: "https://docs.google.com/document/d/doc-1" }
+    ],
     createdAt: "2026-05-16T12:00:00Z",
     lastSyncedAt: "2026-05-16T12:00:00Z",
     headSha: "sha1",
@@ -66,6 +67,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 10,
         docCommentId: "doc-c-10",
+        docId: "doc-1",
         source: "github"
       });
 
@@ -174,6 +176,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 10,
         docCommentId: "doc-c-10",
+        docId: "doc-1",
         source: "github"
       });
       // Pre-populate reply mapping
@@ -183,6 +186,7 @@ describe("Reply sync — bidirectional", () => {
         docReplyId: "existing-reply",
         ghParentCommentId: 10,
         docParentCommentId: "doc-c-10",
+        docId: "doc-1",
         source: "github"
       });
 
@@ -245,6 +249,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 50,
         docCommentId: "doc-c-50",
+        docId: "doc-1",
         source: "github"
       });
 
@@ -302,6 +307,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 50,
         docCommentId: "doc-c-50",
+        docId: "doc-1",
         source: "github"
       });
       await replyMappingStore.upsert({
@@ -310,6 +316,7 @@ describe("Reply sync — bidirectional", () => {
         docReplyId: "doc-reply-7",
         ghParentCommentId: 50,
         docParentCommentId: "doc-c-50",
+        docId: "doc-1",
         source: "gdoc"
       });
 

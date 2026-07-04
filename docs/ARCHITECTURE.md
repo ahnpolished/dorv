@@ -4,23 +4,27 @@ Canonical version: [Architecture overview (Linear)](https://linear.app/humphreya
 
 ## What dorv is
 
-Chrome extension: on PRs with markdown files, create a Google Doc from PR content and keep **GitHub PR review comments** and **Google Drive comments** in sync bidirectionally.
+Chrome extension: on PRs with markdown files, create Google Docs from PR content (one per markdown file) and keep **GitHub PR review comments** and **Google Drive comments** in sync bidirectionally — user-triggered, not automatic.
+
+## v0.3.0 rewrite
+
+v0.2.0 shipped two P0s that caused user churn: a flickering, sometimes-non-opening GitHub sidebar, and an incident where one PR received 1000+ duplicate synced comments. v0.3.0 replaced the side panel with buttons injected directly into native GitHub/GDoc UI, dropped the 1-minute background alarm in favor of explicit user-triggered sync, and anchored dedup on remote content instead of local storage so a failed local write can no longer cause a resync storm. See `/Users/taeahn/.claude/plans/vivid-shimmying-candy.md` for the full rationale if it's still present in this checkout.
 
 ## Entrypoints
 
 | Entrypoint | Match | Role |
 | --- | --- | --- |
-| `github-sidebar.content` | `github.com/*/pull/*` | PR sidebar — MD detection, doc lifecycle, sync status |
-| Side panel | `github.com/*/pull/*`, `docs.google.com` | Comments list, GH→GDoc/ GDOC→GH push, Activities feed, past-docs list |
-| `background.ts` | — | Alarms (2 min), message bus, side panel lifecycle per tab URL, threading |
+| `github-buttons.content` | `github.com/*/pull/*` | Idempotently-injected buttons: create linked doc(s), open doc(s), sync new comments to doc(s), stale badge |
+| `gdoc-buttons.content` | `docs.google.com/*` | "Push to GitHub" button injected onto each unsynced native comment card |
+| `background.ts` | — | Message bus only (`CREATE_DOC`, `SYNC_PR`, `SYNC_NOW`, `PUSH_DOC_COMMENT_TO_GH`, `GET_DOC_COMMENTS`, `GET_SYNC_STATUS`) — no alarms, no side panel |
 | Options | — | PAT, Google OAuth, optional `backend_url`, Sentry DSN |
 
 ## Adapter layer (upgrade seam)
 
-| | DirectAdapter (v0.2.0) | BackendAdapter (later) |
+| | DirectAdapter (current) | BackendAdapter (later) |
 | --- | --- | --- |
 | Auth | GitHub PAT + `chrome.identity` | GitHub App installation token |
-| Sync | Alarm every 2 min, GraphQL `reviewThreads` | Webhooks |
+| Sync | User-triggered per-PR (`syncPR`) via button click; `syncAll()` remains as a manual "sync everything" sweep, no longer alarm-driven | Webhooks |
 | Storage | `chrome.storage.local` | Postgres (backend) |
 | Switch | `backend_url` empty | `backend_url` set in options |
 
@@ -28,52 +32,56 @@ No reinstall to move from phase 1 → 2. DirectAdapter works for GitHub Organiza
 
 ## Data model
 
-- **DocMapping:** `repo`, `prNumber`, `docId`, `docUrl`, `createdAt`, `lastSyncedAt`, `headSha` (anchor), `latestSha`, `isStale`
-- **CommentMapping:** `ghCommentId` ↔ `docCommentId`, `source` (`github` \| `gdoc`) — loop guard
-- **ReplyMapping:** reply IDs + parent comment IDs + `source`
+- **DocMapping:** `repo`, `prNumber`, `docs: DocFileMapping[]` (`{ filename, docId, docUrl }` — one Google Doc per markdown file; Google Docs' API cannot create tabs programmatically, so a PR maps to a *set* of docs rather than tabs within one doc), `createdAt`, `lastSyncedAt`, `headSha` (anchor), `latestSha`, `isStale`
+- **CommentMapping:** `ghCommentId` ↔ `docCommentId`, `docId` (which doc in the set), `source` (`github` \| `gdoc`) — loop guard
+- **ReplyMapping:** reply IDs + parent comment IDs + `docId` + `source`
+- **SyncLock:** persisted per-PR lock (`chrome.storage.local`, TTL-based), replacing an in-memory `Map` that didn't survive service-worker restarts
 
 ## Sync directions
 
 **GitHub → Google Doc**
 
-1. PR with `.md` → user creates doc (raw MD → `marked` → HTML → Drive multipart).
-2. Doc seeded with PR metadata; `headSha` stored.
-3. Bot comment on PR with doc link (`<!-- dorv-doc-id=... -->` marker).
-4. Poll via GraphQL `reviewThreads`: new GH review threads → Drive comments as anchored comments.
-5. Thread lifecycle: resolution sync, destructive whole-thread updates on edit.
-6. GDoc pickup: existing bot comments scanned on `createDoc` to reuse linked docs.
+1. PR with `.md` files → user clicks "Create linked doc(s)"; one Drive doc created per file (raw MD → `marked` → HTML → Drive multipart).
+2. Each doc seeded with that file's content + PR metadata; `headSha` stored once on the `DocMapping`.
+3. One bot comment on the PR links all docs (`<!-- dorv-docs={"file.md":"docId",...} -->` marker; the legacy single-doc `<!-- dorv-doc-id=... -->` marker from pre-v0.3.0 PRs is still parsed for backward compatibility).
+4. User clicks "Sync new comments to doc" (or the manual sync-all action) → GraphQL `reviewThreads`: new GH review threads routed to the doc matching their file path, pushed as anchored Drive comments.
+5. **Dedup anchors on remote content, not local storage**: before pushing a GH comment to a doc, existing Drive comments on that doc are listed and checked for an already-embedded GH comment id (recoverable from the `[View on GitHub](htmlUrl)` link already present in the mirrored body). Only push if no match is found. This is what makes "sync once at most" hold even if the local `chrome.storage.local` write throws (e.g. quota exceeded) — the root cause of the v0.2.0 1000-duplicate incident.
+6. GDoc pickup: existing bot comments scanned on `createDoc` to reuse a previously-linked doc set.
 
-All GH→GDoc comments carry a `[GitHub: @user]` prefix and a `[View on GitHub]` link. Mapping guards (`hasByGH` / `hasByDoc`) prevent double-sync.
+All GH→GDoc comments carry a `[GitHub: @user]` prefix and a `[View on GitHub]` link. The local `mappingStore`/`replyMappingStore` remain a fast-path cache (checked first to avoid a remote list call when the mapping is already known); the remote dedup check is the correctness boundary.
 
 **Google Doc → GitHub**
 
-1. Side panel on Docs tab.
-2. Drive comment → line match via `quotedFileContent` → push GH review comment.
-3. Drive replies on mapped threads → GH replies.
-4. Sidepanel filter excludes GH→GDoc mirror comments from pushable list.
+1. `gdoc-buttons.content` injects a "Push to GitHub" button directly onto each unsynced native comment card in the Google Docs comment sidebar (DOM-based; the editor body itself is canvas-rendered and not directly instrumentable — see `docs/GDOC_COMMENT_DOM_NOTES.md`).
+2. Click → line match via `quotedFileContent` scoped to the one markdown file that doc corresponds to → push GH review comment, embedding an invisible `<!-- dorv-src=doc:{docCommentId} -->` marker.
+3. Before pushing, existing GH comments are checked for that marker (same remote-dedup principle as the GH→GDoc direction) — pushing the same doc comment twice is a safe no-op.
+4. Doc replies on mapped threads → GH replies, same dedup principle.
 
 **GDoc pickup from bot comments**
 
-If the user (or a collaborator) already created a Google Doc for a PR, `createDoc` scans PR issue comments for a dorv bot comment containing `<!-- dorv-doc-id=... -->` or the legacy `**dorv**` text. On match, it creates a local `DocMapping` and returns early — no new Drive file or bot comment is created.
+If a Google Doc set already exists for a PR (created by the user or a collaborator), `createDoc` scans PR issue comments for a dorv bot comment (`<!-- dorv-docs=... -->` or the legacy `<!-- dorv-doc-id=... -->`/`**dorv**` markers). On match, it creates a local `DocMapping` and returns early — no new Drive files or bot comment are created.
 
 ## Activities feed
 
-Replaces the old PR Info tab. Every synced event (comment synced, reply synced, thread resolved) is recorded in a persisted `SyncedActivity` store (capped at 1000 events). The sidepanel's Activities tab shows them in reverse-chronological order.
+Every synced event (comment synced, reply synced, thread resolved) is recorded in a persisted `SyncedActivity` store (capped at 1000 events), currently consumed by telemetry/debugging rather than a dedicated UI surface (the Activities tab lived in the removed side panel).
 
 ## Storage efficiency
 
 - Comment mappings: per-GH-ID and per-doc-ID entries for O(1) lookup per mapping; per-PR array for bulk listing.
-- Persisted query cache (TanStack Query): limited to 100 GH comments, bodies truncated to 200 chars, 30-min TTL.
 - Auto-cleanup: stale snapshots removed on hydrate.
-- Sync intervals: background alarm 2 min, sidepanel auto-refresh 2 min.
+- No background polling: sync only runs when a user clicks a button, eliminating the periodic storage-write bursts that caused the v0.2.0 UI flicker.
 
 ## Stale commits
 
-Each poll: compare `pr.head.sha` to stored `headSha`. If different → `isStale = true` (amber UI). **No automatic doc rewrite** (would orphan Drive anchors).
+Each sync: compare `pr.head.sha` to stored `headSha`. If different → `isStale = true` (amber badge in the GitHub-side button UI). **No automatic doc rewrite** (would orphan Drive anchors). Refresh-doc-content workflow for stale PRs is deferred to v0.3.1.
+
+## Migration (v0.2.0 → v0.3.0)
+
+Clean-slate, not conversion: old-shape `DocMapping`/`CommentMapping`/`ReplyMapping` records are cleared on update via `chrome.runtime.onInstalled`. The legacy bot-comment marker on GitHub is durable independent of local storage, so `createDoc`'s existing-bot-comment scan re-links old single-doc PRs the next time a user clicks "Create linked doc(s)" — no doc-link data loss, but pre-upgrade comment-sync history is gone, so the first post-upgrade sync on an old PR relies on the remote-dedup check (not local history) to avoid re-mirroring every historical comment.
 
 ## Enterprise
 
 1. `npm run zip` → Chrome Web Store (or private)
 2. Google Admin force-install by extension ID
 3. Managed storage: pre-set `backend_url`
-4. Options shows “Set by IT” for managed values
+4. Options shows "Set by IT" for managed values

@@ -1,18 +1,19 @@
 {
   "name": "@dorv/extension",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "wxt build",
     "dev": "wxt",
+    "chrome-dev-setup": "/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --user-data-dir=\"$HOME/.dorv-dev-chrome-profile\" --profile-directory=Default about:blank &",
+    "dev:chrome-fresh": "bash scripts/dev-chrome-fresh.sh",
+    "chrome-debug": "open -a 'Google Chrome' --args --remote-debugging-port=9222",
     "zip": "wxt zip"
   },
   "dependencies": {
     "@sentry/browser": "^10.53.1",
-    "@tanstack/react-query": "^5.100.11",
     "@wxt-dev/module-react": "1.1.3",
-    "bowser": "^2.14.1",
     "marked": "^18.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

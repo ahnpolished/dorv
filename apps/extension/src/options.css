@@ -126,6 +126,109 @@ button.secondary:hover:not(:disabled) {
   background: var(--dorv-light-hover);
 }
 
+button.danger {
+  background: var(--dorv-error-subtle);
+  color: var(--dorv-error);
+  border: 1px solid var(--dorv-error);
+}
+
+button.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.google-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--dorv-light);
+  border: 1px solid var(--dorv-border-strong);
+  border-radius: var(--dorv-radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.google-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.google-avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dorv-muted-subtle);
+  border: 2px dashed var(--dorv-border-strong);
+}
+
+.google-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.google-profile-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dorv-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.google-profile-email {
+  font-size: 12px;
+  color: var(--dorv-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.google-status-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.google-status-badge.connected {
+  background: var(--dorv-success-subtle);
+  color: var(--dorv-success);
+}
+
+.re-auth-hint {
+  font-size: 12px;
+  color: var(--dorv-muted);
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
+.extension-id-hint {
+  font-size: 12px;
+  color: var(--dorv-muted);
+  margin: 0 0 16px;
+  line-height: 1.6;
+  background: var(--dorv-light);
+  border: 1px solid var(--dorv-border-strong);
+  border-radius: var(--dorv-radius-sm);
+  padding: 10px 14px;
+}
+
+.extension-id-hint code {
+  font-family: var(--dorv-font-mono);
+  font-size: 12px;
+  background: var(--dorv-muted-subtle);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--dorv-text);
+  user-select: all;
+}
+
 .badge-it {
   font-size: 11px;
   color: var(--dorv-muted);

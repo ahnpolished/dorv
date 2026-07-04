@@ -1,10 +1,14 @@
 /**
- * AC #3: Google Doc created; sidebar switches to linked state.
+ * AC #3: Google Doc created; github-buttons switches to linked state.
+ *
+ * v0.3.0 note: the sidepanel `dorv-pr-sidebar-root` host was deleted. The
+ * GitHub-side surface is now `github-buttons.content.tsx`, mounted as a
+ * `<dorv-gh-buttons>` shadow host.
  */
 import { expect, test, TEST_PR } from "../fixtures/extension.js";
 import { setupPageRoutes } from "../fixtures/mock-apis.js";
 
-const SIDEBAR_HOST = "dorv-pr-sidebar-root";
+const BUTTON_HOST = "dorv-gh-buttons";
 const TIMEOUT = 20_000;
 
 async function shadowQuery(
@@ -12,7 +16,7 @@ async function shadowQuery(
   selector: string
 ): Promise<boolean> {
   return page.evaluate((sel) => {
-    const allHosts = document.querySelectorAll("dorv-pr-sidebar-root");
+    const allHosts = document.querySelectorAll("dorv-gh-buttons");
     for (const host of allHosts) {
       if (host.shadowRoot?.querySelector(sel)) return true;
     }
@@ -22,7 +26,7 @@ async function shadowQuery(
 
 async function shadowClick(page: import("@playwright/test").Page, selector: string): Promise<void> {
   const clicked = await page.evaluate((sel) => {
-    const allHosts = document.querySelectorAll("dorv-pr-sidebar-root");
+    const allHosts = document.querySelectorAll("dorv-gh-buttons");
     for (const host of allHosts) {
       const el = host.shadowRoot?.querySelector<HTMLElement>(sel);
       if (el) {
@@ -35,7 +39,7 @@ async function shadowClick(page: import("@playwright/test").Page, selector: stri
   if (!clicked) throw new Error(`Shadow element not found: ${selector}`);
 }
 
-test("clicking Create Google Doc calls Drive API and shows linked state", async ({
+test("clicking Create linked doc calls Drive API and shows linked state", async ({
   extensionContext,
   extensionWorker,
   seedStorage,
@@ -50,15 +54,16 @@ test("clicking Create Google Doc calls Drive API and shows linked state", async 
   const page = await extensionContext.newPage();
   await page.goto(TEST_PR.url);
 
-  // Wait for sidebar in no-doc state (button present)
-  await page.waitForSelector(SIDEBAR_HOST, { timeout: TIMEOUT });
+  // Wait for button host in no-doc state (button present)
+  await page.waitForSelector(BUTTON_HOST, { timeout: TIMEOUT });
   await expect.poll(async () => shadowQuery(page, "button"), { timeout: TIMEOUT }).toBe(true);
 
-  // Click the Create button
+  // Click the "Create linked doc" button
   await shadowClick(page, "button");
 
   // Primary check: verify storage was updated with the doc mapping
-  // (decoupled from UI re-render which depends on renderGeneration timing)
+  // (decoupled from UI re-render which depends on renderGeneration timing).
+  // v0.3.0: mapping is `{ docs: DocFileMapping[] }`, not `{ docId, docUrl }`.
   const docMappingKey = `docStore:${TEST_PR.ref}#${TEST_PR.prNumber.toString()}`;
 
   await expect
@@ -78,10 +83,14 @@ test("clicking Create Google Doc calls Drive API and shows linked state", async 
         message: "Storage should contain doc mapping after creation"
       }
     )
-    .toMatchObject({ [docMappingKey]: expect.objectContaining({ docId: "fake-doc-id-123" }) });
+    .toMatchObject({
+      [docMappingKey]: expect.objectContaining({
+        docs: expect.arrayContaining([expect.objectContaining({ docId: "fake-doc-id-123" })])
+      })
+    });
 
-  // Secondary: sidebar may re-render to "linked" state (best-effort; renderGeneration timing)
-  void shadowQuery(page, "a");
+  // Secondary: buttons may re-render to "linked" state (best-effort; renderGeneration timing)
+  void shadowQuery(page, "button");
 
   // Clean up doc mapping so it doesn't bleed into subsequent tests
   await extensionWorker.evaluate(

@@ -6,7 +6,7 @@ import {
   makeFetchTransport
 } from "@sentry/browser";
 
-export type SentrySurface = "background" | "github-sidebar" | "options" | "sidepanel";
+export type SentrySurface = "background" | "github-buttons" | "gdoc-buttons" | "options";
 
 interface SentryEnv {
   MODE?: string;

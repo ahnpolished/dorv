@@ -1,10 +1,10 @@
 /**
  * Multi-PR real-credential E2E tests.
  *
- * Runs the same sidepanel assertions across many real PRs with varying
- * markdown content — from tiny single-file PRs (PR #9, +21 md lines) to
- * large multi-file PRs (PR #7, +288 md lines) and the load-test fixture
- * (PR #70, +267 md lines with 100+ review comments).
+ * Runs PR-metadata and doc-creation checks across many real PRs with
+ * varying markdown content — from tiny single-file PRs (PR #9, +21 md
+ * lines) to large multi-file PRs (PR #7, +288 md lines) and the load-test
+ * fixture (PR #70, +267 md lines with 100+ review comments).
  *
  * PR taxonomy (all in repo ahnpolished/dorv):
  *
@@ -16,10 +16,19 @@
  *   MEDIUM — PR #70  (1 md file,  +267 md lines) — load test fixture
  *   LARGE  — PR #7   (2 md files, +288 md lines) — GH->GDoc creation
  *
- * Run all:     DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-02[6-9]|TC-03[0-5]"
- * Run small:   ... pnpm e2e:real --grep "TC-02[67].*small"
- * Run medium:  ... pnpm e2e:real --grep "TC-028|TC-033"
- * Run large:   ... pnpm e2e:real --grep "TC-029|TC-034.*large"
+ * v0.3.0 note: this file originally also carried TC-026 and TC-029 through
+ * TC-035, which drove the deleted sidepanel UI (tabs, file lists, thread
+ * toggles, status bar, header) across the PR catalog above. They were
+ * removed rather than adapted — the sidepanel/tabs UI they exercised no
+ * longer exists, and there is no multi-doc-model equivalent to assert
+ * against; button-injection UI has its own coverage in
+ * tests/github-button-injection.test.ts and
+ * tests/gdoc-comment-card-injection.test.ts. Only TC-027 (pure GitHub API
+ * metadata, no UI) and TC-028 (doc creation via the extension's
+ * message-passing API, no UI) survive, updated for the `docs[]`
+ * multi-doc-mapping shape.
+ *
+ * Run all:     DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-02[78]"
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -30,16 +39,14 @@
 import {
   test,
   expect,
-  createGhReviewComment,
-  createGhCommentReply,
   deleteGhReviewComment,
   createDocViaExtension,
   hasRequiredGoogleScopes,
   GITHUB_PAT,
-  GOOGLE_TOKEN,
   REAL_REPO
 } from "./fixture.js";
 import { readState, readStateForPr, writeState, writeStateForPr } from "./state.js";
+import type { DocMapping } from "../../../apps/extension/lib/adapters/types.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -105,7 +112,6 @@ const PR_CATALOG = [
   }
 ];
 
-const TEST_TAG = "[dorv-multi-pr-test]";
 const createdGhCommentIds: number[] = [];
 
 test.beforeAll(async () => {
@@ -265,161 +271,6 @@ async function fetchWithRetry(
   return fetch(url, { headers });
 }
 
-async function openSidepanelOnPr(
-  extensionContext: import("@playwright/test").BrowserContext,
-  extensionId: string,
-  prNumber: number
-): Promise<import("@playwright/test").Page> {
-  await extensionContext.addInitScript(
-    ({ prUrl: prUrlValue, googleToken }: { prUrl: string; googleToken: string }) => {
-      if (typeof chrome === "undefined") return;
-      const fakeTab = [{ url: prUrlValue, id: 1 }];
-      (chrome.tabs as any).query = (
-        _filter: unknown,
-        callback?: (tabs: { url: string; id: number }[]) => void
-      ) => {
-        if (typeof callback === "function") {
-          callback(fakeTab);
-          return;
-        }
-        return Promise.resolve(fakeTab);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (chrome.identity) {
-        (chrome.identity as any).getAuthToken = (
-          _opts: unknown,
-          callback: (token: string) => void
-        ) => {
-          callback(googleToken);
-        };
-      }
-    },
-    { prUrl: prUrl(prNumber), googleToken: GOOGLE_TOKEN }
-  );
-
-  const prPage = await extensionContext.newPage();
-  let sidepanel: import("@playwright/test").Page;
-  try {
-    [sidepanel] = await Promise.all([
-      extensionContext.waitForEvent("page", {
-        predicate: (p) => p.url().includes(`${extensionId}/sidepanel`),
-        timeout: 8_000
-      }),
-      (async () => {
-        await prPage.goto(prUrl(prNumber), { waitUntil: "domcontentloaded" });
-        await prPage.keyboard.press("Alt+Shift+D");
-      })()
-    ]);
-  } catch {
-    sidepanel = await extensionContext.newPage();
-    await sidepanel.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-      waitUntil: "domcontentloaded"
-    });
-  }
-
-  await sidepanel.waitForLoadState("domcontentloaded");
-  return sidepanel;
-}
-
-/** Wait for the sidepanel to render any recognizable state */
-async function waitForSidepanelReady(
-  panel: import("@playwright/test").Page,
-  timeout = 30_000
-): Promise<void> {
-  const selectors = [
-    "[data-testid='dorv-main-panel']",
-    "[data-testid='dorv-create-doc-title']",
-    "[data-testid='dorv-checking']",
-    "[data-testid='dorv-loading']",
-    "[data-testid='dorv-error']",
-    "[data-testid='dorv-neutral']",
-    "[data-testid='dorv-onboarding-container']",
-    "[data-testid='dorv-no-mapping']"
-  ];
-  const combined = selectors.join(", ");
-  await expect(panel.locator(combined).first()).toBeVisible({ timeout });
-}
-
-async function seedForPr(
-  extensionWorker: import("@playwright/test").Worker,
-  prNumber: number,
-  mapping?: Record<string, unknown>
-): Promise<void> {
-  const data: Record<string, unknown> = {
-    github_pat: GITHUB_PAT,
-    active_prs: [{ repo: REAL_REPO, prNumber }]
-  };
-  if (mapping) {
-    data[`docStore:${REAL_REPO}#${prNumber.toString()}`] = mapping;
-  }
-  await extensionWorker.evaluate((d: any) => {
-    return new Promise<void>((resolve) => {
-      chrome.storage.local.clear(() => {
-        chrome.storage.local.set(d, resolve);
-      });
-    });
-  }, data);
-}
-
-function pick<T>(arr: readonly T[], ...indices: number[]): T[] {
-  return indices.map((i) => arr[i]).filter((v): v is T => v !== undefined);
-}
-
-// ── TC-026: Unlinked PR file listing across all PRs ─────────────────────────
-
-test.describe("TC-026: unlinked PR file listing", () => {
-  for (const pr of PR_CATALOG) {
-    test(`TC-026-${pr.label}: sidepanel shows correct md file count and names`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      await seedForPr(extensionWorker, pr.prNumber);
-
-      let files: any[];
-      try {
-        files = await fetchPrFiles(pr.prNumber);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("403") || msg.includes("rate limit")) {
-          test.skip(true, `GitHub rate limited: ${msg}`);
-          return;
-        }
-        throw err;
-      }
-      const mdFiles = mdFilesFromList(files);
-      expect(mdFiles.length, `PR #${pr.prNumber.toString()} md file count`).toBe(pr.mdFileCount);
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await expect(panel.locator("[data-testid='dorv-create-doc-title']")).toBeVisible({
-        timeout: 30_000
-      });
-
-      const fileList = panel.locator("[data-testid='dorv-file-list']");
-      await expect(fileList).toBeVisible({ timeout: 15_000 });
-      const items = fileList.locator("li");
-      await expect(items).toHaveCount(mdFiles.length);
-
-      for (const f of mdFiles) {
-        const fileItem = panel.locator(`[data-testid='dorv-file-item-${f.filename}']`);
-        await expect(fileItem).toBeVisible({ timeout: 5_000 });
-        await expect(fileItem).toContainText(f.filename);
-      }
-
-      const createBtn = panel.locator("[data-testid='dorv-create-doc-btn']");
-      await expect(createBtn).toBeVisible({ timeout: 5_000 });
-      await expect(createBtn).toContainText(
-        `${mdFiles.length.toString()} file${mdFiles.length === 1 ? "" : "s"}`
-      );
-
-      await panel.close();
-    });
-  }
-});
-
 // ── TC-027: PR metadata detection across sizes ──────────────────────────────
 
 test.describe("TC-027: PR metadata detection", () => {
@@ -551,492 +402,31 @@ test.describe("TC-028: create GDoc from medium/large PRs", () => {
           chrome.storage.local.get(null, r);
         });
       });
-      const mapping = storage[docStoreKey] as { docId?: string; docUrl?: string } | undefined;
+      const mapping = storage[docStoreKey] as DocMapping | undefined;
       expect(mapping, `doc mapping for PR #${pr.prNumber.toString()}`).toBeDefined();
-      expect(mapping?.docId).toBeTruthy();
-      expect(mapping?.docUrl).toMatch(/docs\.google\.com/);
+      expect(Array.isArray(mapping?.docs), "mapping must have a docs array").toBe(true);
+      expect(
+        mapping?.docs.length,
+        `PR #${pr.prNumber.toString()} must have one doc per md file`
+      ).toBe(mdFiles.length);
+      for (const doc of mapping?.docs ?? []) {
+        expect(doc.docId, `doc for ${doc.filename} must have a docId`).toBeTruthy();
+        expect(doc.docUrl, `doc for ${doc.filename} must have a docUrl`).toMatch(
+          /docs\.google\.com/
+        );
+      }
 
+      const firstDoc = mapping?.docs[0];
       writeStateForPr(REAL_REPO, pr.prNumber, {
-        docId: mapping?.docId ?? "",
-        docUrl: mapping?.docUrl ?? "",
+        docId: firstDoc?.docId ?? "",
+        docUrl: firstDoc?.docUrl ?? "",
         docStoreKey,
         docMapping: storage[docStoreKey] as Record<string, unknown>
       });
 
       console.log(
-        `[TC-028-${pr.label}] Created doc ${mapping?.docId ?? ""} for PR #${pr.prNumber.toString()} (${mdFiles.length} md files)`
+        `[TC-028-${pr.label}] Created ${mapping?.docs.length.toString() ?? "0"} doc(s) for PR #${pr.prNumber.toString()} (${mdFiles.length} md files)`
       );
-    });
-  }
-});
-
-// ── TC-029: GH comment rendering in medium/large PR sidepanel ───────────────
-
-test.describe("TC-029: GH comment rendering in medium/large PR sidepanel", () => {
-  const targets = PR_CATALOG.filter((p) => p.size === "medium" || p.size === "large");
-
-  for (const pr of targets) {
-    test(`TC-029-${pr.label}: real GH review comment renders in sidepanel DOM`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
-
-      if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
-        await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
-      } else {
-        await seedForPr(extensionWorker, pr.prNumber);
-      }
-
-      let prData: any;
-      try {
-        prData = await fetchPrMeta(pr.prNumber);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("403") || msg.includes("rate limit")) {
-          test.skip(true, `GitHub rate limited: ${msg}`);
-          return;
-        }
-        throw err;
-      }
-      const headSha = prData.head?.sha;
-      expect(headSha).toBeTruthy();
-
-      let files: any[];
-      try {
-        files = await fetchPrFiles(pr.prNumber);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("403") || msg.includes("rate limit")) {
-          test.skip(true, `GitHub rate limited: ${msg}`);
-          return;
-        }
-        throw err;
-      }
-      const addedFile = files.find((f) => f.status === "added" && /\.mdx?$/iu.test(f.filename));
-      const targetFile = addedFile ?? files.find((f) => f.status === "modified");
-      if (!targetFile) {
-        console.log(`[TC-029-${pr.label}] No suitable file for review comment — skipping`);
-        return;
-      }
-
-      const target = { path: targetFile.filename, line: 1, headSha };
-      const body = `${TEST_TAG} TC-029 ${pr.label} ${Date.now().toString()}`;
-      const commentId = await createGhReviewComment(
-        target.headSha,
-        target.path,
-        target.line,
-        body,
-        pr.prNumber
-      );
-      if (!commentId) {
-        console.log(`[TC-029-${pr.label}] Could not create review comment — skipping`);
-        return;
-      }
-      createdGhCommentIds.push(commentId);
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await waitForSidepanelReady(panel);
-
-      const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-      if (await mainPanel.isVisible().catch(() => false)) {
-        const commentLocator = panel.locator(
-          `[data-testid='dorv-gh-comment-${String(commentId)}']`
-        );
-        await expect(commentLocator).toBeVisible({ timeout: 40_000 });
-        await expect(commentLocator.locator(".author")).toContainText("@");
-        await expect(commentLocator.locator(".comment-body")).toContainText(body, {
-          timeout: 5_000
-        });
-
-        const section = panel.locator(`[data-testid='dorv-gh-file-section-${target.path}']`);
-        await expect(section).toBeVisible({ timeout: 10_000 });
-
-        console.log(
-          `[TC-029-${pr.label}] Comment ${commentId.toString()} rendered for PR #${pr.prNumber.toString()}`
-        );
-      } else {
-        console.log(`[TC-029-${pr.label}] Unlinked view — comment test skipped`);
-      }
-
-      await panel.close();
-    });
-  }
-});
-
-// ── TC-030: Tab switching across PRs ────────────────────────────────────────
-
-test.describe("TC-030: tab switching across PRs", () => {
-  const targets = pick(PR_CATALOG, 0, 3, 6);
-
-  for (const pr of targets) {
-    test(`TC-030-${pr.label}: tab switching works with real PR data`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
-
-      if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
-        await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
-      } else {
-        await seedForPr(extensionWorker, pr.prNumber);
-      }
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await waitForSidepanelReady(panel);
-
-      const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-      if (!(await mainPanel.isVisible().catch(() => false))) {
-        console.log(`[TC-030-${pr.label}] Unlinked view — tab switching N/A`);
-        await panel.close();
-        return;
-      }
-
-      await expect(panel.locator("[data-testid='dorv-tab-github']")).toHaveClass(/active/);
-      await expect(panel.locator("[data-testid='dorv-gh-comments']")).toBeVisible({
-        timeout: 15_000
-      });
-
-      await panel.locator("[data-testid='dorv-tab-gdoc']").click();
-      await expect(panel.locator("[data-testid='dorv-tab-gdoc']")).toHaveClass(/active/);
-      await expect(panel.locator("[data-testid='dorv-tab-github']")).not.toHaveClass(/active/);
-      await expect(panel.locator("[data-testid='dorv-gdoc-comments']")).toBeVisible({
-        timeout: 10_000
-      });
-      await expect(panel.locator("[data-testid='dorv-gdoc-heading']")).toContainText(
-        "Google Doc Comments"
-      );
-      await expect(panel.locator("[data-testid='dorv-push-all-btn']")).toBeVisible();
-
-      await panel.locator("[data-testid='dorv-tab-activities']").click();
-      await expect(panel.locator("[data-testid='dorv-tab-activities']")).toHaveClass(/active/);
-      await expect(panel.locator("[data-testid='dorv-activities']")).toBeVisible({
-        timeout: 10_000
-      });
-
-      await panel.locator("[data-testid='dorv-tab-github']").click();
-      await expect(panel.locator("[data-testid='dorv-tab-github']")).toHaveClass(/active/);
-      await expect(panel.locator("[data-testid='dorv-gh-comments']")).toBeVisible({
-        timeout: 10_000
-      });
-
-      console.log(`[TC-030-${pr.label}] Tab switching verified for PR #${pr.prNumber.toString()}`);
-      await panel.close();
-    });
-  }
-});
-
-// ── TC-031: Thread expand/collapse across PRs ───────────────────────────────
-
-test.describe("TC-031: thread expand/collapse across PRs", () => {
-  const targets = pick(PR_CATALOG, 2, 4);
-
-  for (const pr of targets) {
-    test(`TC-031-${pr.label}: thread toggle works with real PR data`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
-
-      if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
-        await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
-      } else {
-        await seedForPr(extensionWorker, pr.prNumber);
-      }
-
-      let prData: any;
-      try {
-        prData = await fetchPrMeta(pr.prNumber);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("403") || msg.includes("rate limit")) {
-          test.skip(true, `GitHub rate limited: ${msg}`);
-          return;
-        }
-        throw err;
-      }
-      const headSha = prData.head?.sha;
-
-      let files: any[];
-      try {
-        files = await fetchPrFiles(pr.prNumber);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("403") || msg.includes("rate limit")) {
-          test.skip(true, `GitHub rate limited: ${msg}`);
-          return;
-        }
-        throw err;
-      }
-      const targetFile = files.find((f) => f.status === "added") ?? files[0];
-      if (!targetFile || !headSha) {
-        console.log(`[TC-031-${pr.label}] No suitable target — skipping`);
-        return;
-      }
-
-      const parentBody = `${TEST_TAG} TC-031 parent ${pr.label} ${Date.now().toString()}`;
-      const parentId = await createGhReviewComment(
-        headSha,
-        targetFile.filename,
-        1,
-        parentBody,
-        pr.prNumber
-      );
-      if (!parentId) {
-        console.log(`[TC-031-${pr.label}] Could not create parent comment — skipping`);
-        return;
-      }
-      createdGhCommentIds.push(parentId);
-
-      const replyId = await createGhCommentReply(
-        parentId,
-        `${TEST_TAG} TC-031 reply ${pr.label}`,
-        pr.prNumber
-      );
-      if (replyId) {
-        createdGhCommentIds.push(replyId);
-      }
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await waitForSidepanelReady(panel);
-
-      const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-      if (!(await mainPanel.isVisible().catch(() => false))) {
-        console.log(`[TC-031-${pr.label}] Unlinked view — thread test N/A`);
-        await panel.close();
-        return;
-      }
-
-      const parentLocator = panel.locator(`[data-testid='dorv-gh-comment-${String(parentId)}']`);
-      await expect(parentLocator).toBeVisible({ timeout: 40_000 });
-      await expect(parentLocator.locator(".comment-body")).toContainText(parentBody, {
-        timeout: 5_000
-      });
-
-      const toggleBtn = panel.locator(`[data-testid='dorv-thread-toggle-${String(parentId)}']`);
-      if (await toggleBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await toggleBtn.click();
-        await panel.waitForTimeout(500);
-        console.log(
-          `[TC-031-${pr.label}] Thread toggle clicked for comment ${parentId.toString()}`
-        );
-      } else {
-        console.log(`[TC-031-${pr.label}] No toggle (single comment, no replies visible)`);
-      }
-
-      await expect(panel.locator("[data-testid='dorv-tab-github']")).toHaveClass(/active/);
-      await panel.close();
-    });
-  }
-});
-
-// ── TC-032: Sidepanel responsiveness across PRs ──────────────────────────────
-
-test.describe("TC-032: sidepanel responsiveness across PRs", () => {
-  for (const pr of PR_CATALOG) {
-    test(`TC-032-${pr.label}: no horizontal overflow at narrow widths`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      await seedForPr(extensionWorker, pr.prNumber);
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-      await waitForSidepanelReady(panel);
-
-      for (const width of [320, 480, 720]) {
-        await panel.setViewportSize({ width, height: 800 });
-        await panel.evaluate(() => {
-          return new Promise((r) => {
-            requestAnimationFrame(r);
-          });
-        });
-        const { scrollWidth, innerWidth } = await panel.evaluate(() => ({
-          scrollWidth: document.body.scrollWidth,
-          innerWidth: window.innerWidth
-        }));
-        expect(
-          scrollWidth,
-          `PR #${pr.prNumber.toString()} horizontal overflow at ${width.toString()}px`
-        ).toBeLessThanOrEqual(innerWidth + 2);
-      }
-
-      await panel.close();
-    });
-  }
-});
-
-// ── TC-033: GDoc comment push from medium/large PRs ─────────────────────────
-
-test.describe("TC-033: GDoc comment push from medium/large PRs", () => {
-  const targets = PR_CATALOG.filter((p) => p.size === "medium" || p.size === "large");
-
-  for (const pr of targets) {
-    test(`TC-033-${pr.label}: push-all button visible in GDoc tab`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
-
-      if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
-        await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
-      } else {
-        await seedForPr(extensionWorker, pr.prNumber);
-      }
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await waitForSidepanelReady(panel);
-
-      const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-      if (!(await mainPanel.isVisible().catch(() => false))) {
-        console.log(`[TC-033-${pr.label}] Unlinked view — push button N/A`);
-        await panel.close();
-        return;
-      }
-
-      await panel.locator("[data-testid='dorv-tab-gdoc']").click();
-      await expect(panel.locator("[data-testid='dorv-gdoc-comments']")).toBeVisible({
-        timeout: 10_000
-      });
-      await expect(panel.locator("[data-testid='dorv-push-all-btn']")).toBeVisible({
-        timeout: 5_000
-      });
-      await expect(panel.locator("[data-testid='dorv-gdoc-heading']")).toContainText(
-        "Google Doc Comments"
-      );
-
-      console.log(
-        `[TC-033-${pr.label}] Push-all button verified for PR #${pr.prNumber.toString()}`
-      );
-      await panel.close();
-    });
-  }
-});
-
-// ── TC-034: Status bar states across PRs ────────────────────────────────────
-
-test.describe("TC-034: status bar states across PRs", () => {
-  const targets = pick(PR_CATALOG, 0, 2, 5, 6);
-
-  for (const pr of targets) {
-    test(`TC-034-${pr.label}: status bar renders correctly`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
-
-      if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
-        await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
-      } else {
-        await seedForPr(extensionWorker, pr.prNumber);
-      }
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await waitForSidepanelReady(panel);
-
-      const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-      if (!(await mainPanel.isVisible().catch(() => false))) {
-        console.log(`[TC-034-${pr.label}] Unlinked view — status bar N/A`);
-        await panel.close();
-        return;
-      }
-
-      await expect(panel.locator("[data-testid='dorv-status-bar']")).toBeVisible({
-        timeout: 10_000
-      });
-      await expect(panel.locator("[data-testid='dorv-status-dot']")).toBeVisible();
-
-      const statusText = await panel.locator("[data-testid='dorv-status-bar']").textContent();
-      expect(statusText).toMatch(/Last synced:|Syncing/);
-
-      await expect(panel.locator("[data-testid='dorv-sync-now-btn']")).toBeVisible();
-      await expect(panel.locator("[data-testid='dorv-sync-now-btn']")).toContainText("Sync now");
-      await expect(panel.locator("[data-testid='dorv-refresh-icon']")).toBeVisible();
-      await expect(panel.locator("[data-testid='dorv-refresh-icon']")).not.toHaveClass(
-        /dorv-spinning/
-      );
-
-      console.log(
-        `[TC-034-${pr.label}] Status bar OK for PR #${pr.prNumber.toString()}: "${statusText?.trim()}"`
-      );
-      await panel.close();
-    });
-  }
-});
-
-// ── TC-035: Header renders correctly across all PRs ─────────────────────────
-
-test.describe("TC-035: header renders correctly across all PRs", () => {
-  for (const pr of PR_CATALOG) {
-    test(`TC-035-${pr.label}: header with eyebrand, title, and action buttons`, async ({
-      extensionContext,
-      extensionId,
-      extensionWorker
-    }) => {
-      test.skip(!GITHUB_PAT, "Requires DORV_GITHUB_PAT");
-
-      const docStoreKey = `docStore:${REAL_REPO}#${pr.prNumber.toString()}`;
-      const existingState = readStateForPr(REAL_REPO, pr.prNumber);
-
-      if (existingState.docStoreKey === docStoreKey && existingState.docMapping) {
-        await seedForPr(extensionWorker, pr.prNumber, existingState.docMapping);
-      } else {
-        await seedForPr(extensionWorker, pr.prNumber);
-      }
-
-      const panel = await openSidepanelOnPr(extensionContext, extensionId, pr.prNumber);
-
-      await waitForSidepanelReady(panel);
-
-      const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-      if (!(await mainPanel.isVisible().catch(() => false))) {
-        // Unlinked / checking / neutral / error state — just verify the panel rendered
-        console.log(`[TC-035-${pr.label}] Non-linked view rendered`);
-        await panel.close();
-        return;
-      }
-
-      await expect(panel.locator("[data-testid='dorv-header']")).toBeVisible({
-        timeout: 10_000
-      });
-      await expect(panel.locator("[data-testid='dorv-header'] .dorv-eyebrow")).toContainText(
-        "dorv"
-      );
-      await expect(panel.locator("[data-testid='dorv-header'] h1")).toContainText("Review Sync");
-      await expect(panel.locator("[data-testid='dorv-open-pr-btn']")).toBeVisible();
-      await expect(panel.locator("[data-testid='dorv-open-doc-btn']")).toBeVisible();
-      await expect(panel.locator("[data-testid='dorv-close-panel-btn']")).toBeVisible();
-      await expect(panel.locator("[data-testid='dorv-sync-now-btn']")).toBeVisible();
-
-      console.log(`[TC-035-${pr.label}] Header verified for PR #${pr.prNumber.toString()}`);
-      await panel.close();
     });
   }
 });
