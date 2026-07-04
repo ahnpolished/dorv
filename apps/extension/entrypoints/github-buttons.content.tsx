@@ -144,7 +144,10 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       // Content-script fetch() stalls on cross-origin API calls even
       // with host_permissions; the background has unrestricted access.
       const repo = `${ref.owner}/${ref.repo}`;
-      const { files: allFiles, meta } = await fetchPrInfoViaBackground(ref);
+      const { files: allFiles, meta } = await fetchPrInfoViaBackground({
+        repo,
+        prNumber: ref.prNumber
+      });
 
       const file = allFiles.find((f: { filename: string }) => f.filename === filename);
       if (!file) throw new Error(`File "${filename}" not found in PR`);

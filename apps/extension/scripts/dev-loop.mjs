@@ -79,7 +79,7 @@ const gitShort = gitSha.slice(0, 7);
 const buildTs = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 
 log(YELLOW, `[1/4] Building from commit ${gitShort}...`);
-run("pnpm run build --filter @dorv/extension");
+run("pnpm run build");
 
 // ── Step 2: Launch Chrome ─────────────────────────────────────────────
 log(YELLOW, "[2/4] Launching Chrome...");
