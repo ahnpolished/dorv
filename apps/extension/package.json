@@ -8,6 +8,7 @@
     "dev": "wxt",
     "chrome-dev-setup": "/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --user-data-dir=\"$HOME/.dorv-dev-chrome-profile\" --profile-directory=Default about:blank &",
     "dev:chrome-fresh": "bash scripts/dev-chrome-fresh.sh",
+    "dev:loop": "node scripts/dev-loop.mjs",
     "chrome-debug": "open -a 'Google Chrome' --args --remote-debugging-port=9222",
     "zip": "wxt zip"
   },
@@ -23,6 +24,7 @@
     "@types/marked": "^6.0.0",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "ws": "^8.21.0"
   }
 }
