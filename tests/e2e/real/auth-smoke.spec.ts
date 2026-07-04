@@ -23,17 +23,22 @@ function isGitHubRateLimitMessage(message: string): boolean {
 
 test.describe("auth smoke", () => {
   test("TC-013: background responds to a GET_SYNC_STATUS message round-trip", async ({
-    extensionContext,
-    extensionId
+    extensionContext
   }) => {
     // There is no more sidepanel to open — the smoke check for "extension
     // loads and is responsive" is now a direct message round-trip to the
     // background service worker via an extension page, the same mechanism
     // the button-injection content scripts use.
-    const page = await extensionContext.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`, {
-      waitUntil: "domcontentloaded"
-    });
+    // Open options page via the extension SW runtime to bypass Chrome v130+
+    // redirect of direct page.goto("chrome-extension://...") navigations.
+    const worker =
+      extensionContext.serviceWorkers()[0] ??
+      (await extensionContext.waitForEvent("serviceworker"));
+    const [page] = await Promise.all([
+      extensionContext.waitForEvent("page"),
+      worker.evaluate(() => chrome.runtime.openOptionsPage())
+    ]);
+    await page.waitForLoadState("domcontentloaded");
     const response = await page.evaluate(
       ([repo, prNumber]) => {
         return new Promise<{ success: boolean }>((resolve) => {

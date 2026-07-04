@@ -8,14 +8,17 @@ const TIMEOUT = 20_000;
 
 test("entering PAT and saving stores it in chrome.storage.local", async ({
   extensionContext,
-  extensionId,
   extensionWorker
 }) => {
   await setupPageRoutes(extensionContext);
 
-  const optionsUrl = `chrome-extension://${extensionId}/options.html`;
-  const page = await extensionContext.newPage();
-  await page.goto(optionsUrl, { waitUntil: "domcontentloaded" });
+  // Open options page via the extension SW runtime to bypass Chrome v130+
+  // redirect of direct page.goto("chrome-extension://...") navigations.
+  const [page] = await Promise.all([
+    extensionContext.waitForEvent("page"),
+    extensionWorker.evaluate(() => chrome.runtime.openOptionsPage())
+  ]);
+  await page.waitForLoadState("domcontentloaded");
 
   // Options page starts in "Loading..." state, then shows the form once auth state loads.
   // getGoogleToken(false) is now wrapped in try/catch so it doesn't block rendering.

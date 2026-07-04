@@ -114,13 +114,15 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 
   // Sends SYNC_NOW from the options extension page (which has chrome.runtime access).
-  triggerSync: async ({ extensionContext, extensionId }, use) => {
+  // Uses openOptionsPage() from the SW context to avoid Chrome v130+ redirect of direct
+  // page.goto("chrome-extension://...") navigations.
+  triggerSync: async ({ extensionContext, extensionWorker }, use) => {
     const trigger = async () => {
-      const page = await extensionContext.newPage();
-      // Navigate to any extension page — options page is convenient
-      await page.goto(`chrome-extension://${extensionId}/options.html`, {
-        waitUntil: "domcontentloaded"
-      });
+      const [page] = await Promise.all([
+        extensionContext.waitForEvent("page"),
+        extensionWorker.evaluate(() => chrome.runtime.openOptionsPage())
+      ]);
+      await page.waitForLoadState("domcontentloaded");
       await page.evaluate(() => {
         return new Promise<void>((resolve) => {
           chrome.runtime.sendMessage({ type: "SYNC_NOW", payload: null }, () => {

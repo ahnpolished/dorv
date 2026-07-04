@@ -216,13 +216,18 @@ export async function buildRealCreateDocInput(): Promise<CreateDocInput> {
 /** Send CREATE_DOC through the extension runtime, using the same background adapter path as UI. */
 export async function createDocViaExtension(
   extensionContext: BrowserContext,
-  extensionId: string,
+  _extensionId: string,
   input: CreateDocInput
 ): Promise<CreateDocResult> {
-  const page = await extensionContext.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html`, {
-    waitUntil: "domcontentloaded"
-  });
+  // Open options page via the extension SW runtime to bypass Chrome v130+
+  // redirect of direct page.goto("chrome-extension://...") navigations.
+  const worker =
+    extensionContext.serviceWorkers()[0] ?? (await extensionContext.waitForEvent("serviceworker"));
+  const [page] = await Promise.all([
+    extensionContext.waitForEvent("page"),
+    worker.evaluate(() => chrome.runtime.openOptionsPage())
+  ]);
+  await page.waitForLoadState("domcontentloaded");
   const response = await page.evaluate((payload) => {
     return new Promise<{ success: boolean; payload?: CreateDocResult; error?: string }>(
       (resolve) => {
@@ -577,12 +582,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { auto: true }
   ],
 
-  triggerSync: async ({ extensionContext, extensionId }, use) => {
+  // Sends SYNC_NOW from the options extension page (which has chrome.runtime access).
+  // Uses openOptionsPage() from the SW context to avoid Chrome v130+ redirect of direct
+  // page.goto("chrome-extension://...") navigations.
+  triggerSync: async ({ extensionContext, extensionWorker }, use) => {
     const trigger = async () => {
-      const page = await extensionContext.newPage();
-      await page.goto(`chrome-extension://${extensionId}/options.html`, {
-        waitUntil: "domcontentloaded"
-      });
+      const [page] = await Promise.all([
+        extensionContext.waitForEvent("page"),
+        extensionWorker.evaluate(() => chrome.runtime.openOptionsPage())
+      ]);
+      await page.waitForLoadState("domcontentloaded");
       await page.evaluate(() => {
         return new Promise<void>((resolve) => {
           chrome.runtime.sendMessage({ type: "SYNC_NOW", payload: null }, () => {
