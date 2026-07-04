@@ -135,10 +135,17 @@ export class DirectAdapter implements SyncAdapter {
     // so a PR maps to a set of docs rather than one doc with multiple tabs.
     const docs: DocFileMapping[] = [];
     for (const file of input.files) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 30_000);
       const resp = await fetch(file.rawUrl, {
         headers: {
           Authorization: `token ${ghToken}`
-        }
+        },
+        signal: controller.signal
+      }).finally(() => {
+        clearTimeout(timeout);
       });
       if (!resp.ok) {
         throw new Error(`Failed to fetch ${file.filename}: ${resp.status.toString()}`);
@@ -534,8 +541,15 @@ export class DirectAdapter implements SyncAdapter {
       throw new Error(`File "${targetDoc.filename}" not found among the PR's markdown files.`);
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 30_000);
     const fileResp = await fetch(fileRef.rawUrl, {
-      headers: { Authorization: `token ${ghToken}` }
+      headers: { Authorization: `token ${ghToken}` },
+      signal: controller.signal
+    }).finally(() => {
+      clearTimeout(timeout);
     });
     const content = await fileResp.text();
 
