@@ -3,13 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { defineContentScript } from "wxt/utils/define-content-script";
 import type { ContentScriptContext } from "wxt/utils/content-script-context";
 
-import {
-  fetchPullRequestFiles,
-  filterMarkdownFiles,
-  parseGitHubPullRequestUrl
-} from "../lib/github/pr-files.js";
+import { parseGitHubPullRequestUrl } from "../lib/github/pr-files.js";
 import type { GitHubPullRequestRef } from "../lib/github/pr-files.js";
-import { fetchPullRequestMeta } from "../lib/github/fetch.js";
 import { createAuthStore } from "../lib/storage/auth.js";
 import { createChromeStorageArea } from "../lib/storage/area.js";
 import { createStatusStore } from "../lib/storage/stores.js";
@@ -17,6 +12,7 @@ import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { captureExtensionException, initSentryForSurface } from "../lib/telemetry/sentry.js";
 import {
   createDocViaBackground,
+  fetchPrInfoViaBackground,
   openOptionsPageViaBackground,
   syncPRViaBackground
 } from "../lib/adapters/messages.js";
@@ -143,21 +139,16 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       const pat = await authStore.getGitHubToken();
       console.log("[dorv] token present:", !!pat);
       if (!pat) throw new Error("Missing GitHub token");
-      const repo = `${ref.owner}/${ref.repo}`;
 
-      const allFiles = filterMarkdownFiles(
-        await fetchPullRequestFiles(ref, {
-          fetch: fetch,
-          token: pat
-        })
-      );
-      const file = allFiles.find((f) => f.filename === filename);
+      // Fetch PR files + meta through the background service worker.
+      // Content-script fetch() stalls on cross-origin API calls even
+      // with host_permissions; the background has unrestricted access.
+      const repo = `${ref.owner}/${ref.repo}`;
+      const { files: allFiles, meta } = await fetchPrInfoViaBackground(ref);
+
+      const file = allFiles.find((f: { filename: string }) => f.filename === filename);
       if (!file) throw new Error(`File "${filename}" not found in PR`);
 
-      const meta = await fetchPullRequestMeta(ref, {
-        fetch: fetch,
-        token: pat
-      });
       const result = await createDocViaBackground({
         repo,
         prNumber: ref.prNumber,
@@ -170,7 +161,6 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       });
       setView({ kind: "linked", mapping: result.mapping, status: undefined });
     } catch (err: unknown) {
-      console.error("[dorv] handleCreate failed:", err);
       setCreateError(err instanceof Error ? err.message : String(err));
       captureExtensionException(err, {
         surface: "github-buttons",

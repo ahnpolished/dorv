@@ -5,6 +5,8 @@ import { resolveAdapter } from "../lib/adapters/resolve.js";
 import { captureExtensionException, initSentryForSurface } from "../lib/telemetry/sentry.js";
 import { createStatusStore } from "../lib/storage/stores.js";
 import type { CreateDocInput, GoogleDocComment, PullRequestRef } from "../lib/adapters/types.js";
+import { fetchPullRequestFiles, filterMarkdownFiles } from "../lib/github/pr-files.js";
+import { fetchPullRequestMeta } from "../lib/github/fetch.js";
 
 interface ChromeMessage {
   type: string;
@@ -116,6 +118,44 @@ export default defineBackground(() => {
             // through openOptionsPageViaBackground() instead of calling it directly.
             await chrome.runtime.openOptionsPage();
             sendResponse({ success: true });
+            break;
+          }
+          case "FETCH_PR_INFO": {
+            const { ref: fetchRef } = payload as { ref: PullRequestRef };
+            const ghPat = await authStore.getGitHubToken();
+            if (!ghPat) {
+              sendResponse({ success: false, error: "Missing GitHub token" });
+              break;
+            }
+            const [owner, name] = fetchRef.repo.split("/");
+            if (!owner || !name) {
+              sendResponse({ success: false, error: `Invalid repo format: ${fetchRef.repo}` });
+              break;
+            }
+            const ghRef = { owner, repo: name, prNumber: fetchRef.prNumber };
+            const files = filterMarkdownFiles(
+              await fetchPullRequestFiles(ghRef, {
+                fetch: fetch.bind(globalThis),
+                token: ghPat
+              })
+            );
+            const meta = await fetchPullRequestMeta(ghRef, {
+              fetch: globalThis.fetch.bind(globalThis),
+              token: ghPat
+            });
+            sendResponse({
+              success: true,
+              payload: {
+                files,
+                meta: {
+                  title: meta.title,
+                  author: meta.author,
+                  branch: meta.branch,
+                  headSha: meta.headSha,
+                  prUrl: meta.prUrl
+                }
+              }
+            });
             break;
           }
           default:

@@ -5,6 +5,7 @@ import type {
   GoogleDocComment,
   PullRequestRef
 } from "./types.js";
+import type { MarkdownFileRef } from "./types.js";
 
 interface BackgroundResponse<T> {
   success: boolean;
@@ -84,6 +85,36 @@ export async function pushDocCommentToGHViaBackground(input: {
 
   if (!payload) {
     throw new Error("Pushing comment to GitHub returned no result.");
+  }
+
+  return payload;
+}
+
+export interface PrFileInfo {
+  files: MarkdownFileRef[];
+  meta: {
+    title: string;
+    author: string;
+    branch: string;
+    headSha: string;
+    prUrl: string;
+  };
+}
+
+/**
+ * Fetches PR file list and metadata through the background service worker.
+ * Content-script `fetch()` can stall on cross-origin API calls even with
+ * `host_permissions`; the background worker has unrestricted network access
+ * and handles this reliably.
+ */
+export async function fetchPrInfoViaBackground(ref: PullRequestRef): Promise<PrFileInfo> {
+  const payload = await sendBackgroundMessage<PrFileInfo>(
+    { type: "FETCH_PR_INFO", payload: { ref } },
+    "Fetching PR info failed."
+  );
+
+  if (!payload) {
+    throw new Error("Fetching PR info returned no result.");
   }
 
   return payload;
