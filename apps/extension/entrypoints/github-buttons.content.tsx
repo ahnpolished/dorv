@@ -131,13 +131,10 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
   }, [ref.owner, ref.repo, ref.prNumber, filename]);
 
   const handleCreate = async () => {
-    console.log("[dorv] handleCreate called for", filename);
     setCreateError(undefined);
     setIsCreating(true);
     try {
-      console.log("[dorv] getting github token...");
       const pat = await authStore.getGitHubToken();
-      console.log("[dorv] token present:", !!pat);
       if (!pat) throw new Error("Missing GitHub token");
 
       // Fetch PR files + meta through the background service worker.
