@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createDocViaBackground,
+  fetchPrInfoViaBackground,
   openOptionsPageViaBackground,
   syncNowViaBackground
 } from "../apps/extension/lib/adapters/messages.js";
@@ -11,9 +12,10 @@ interface CreateDocMessage {
   payload: CreateDocInput;
 }
 
-interface CreateDocResponse {
+interface MessageResponse {
   success: boolean;
-  payload?: CreateDocResult;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any;
   error?: string;
 }
 
@@ -33,7 +35,7 @@ describe("extension background messages", () => {
     globalThis.chrome = {
       runtime: {
         sendMessage: vi.fn(
-          (message: { type: "SYNC_NOW" }, callback: (response: CreateDocResponse) => void) => {
+          (message: { type: "SYNC_NOW" }, callback: (response: MessageResponse) => void) => {
             callback({ success: true });
           }
         )
@@ -70,7 +72,7 @@ describe("extension background messages", () => {
     globalThis.chrome = {
       runtime: {
         sendMessage: vi.fn(
-          (message: CreateDocMessage, callback: (response: CreateDocResponse) => void) => {
+          (message: CreateDocMessage, callback: (response: MessageResponse) => void) => {
             callback({ success: true, payload: result });
           }
         )
@@ -88,7 +90,7 @@ describe("extension background messages", () => {
     globalThis.chrome = {
       runtime: {
         sendMessage: vi.fn(
-          (message: CreateDocMessage, callback: (response: CreateDocResponse) => void) => {
+          (message: CreateDocMessage, callback: (response: MessageResponse) => void) => {
             callback({ success: false, error: "Google account not connected." });
           }
         )
@@ -107,7 +109,7 @@ describe("extension background messages", () => {
         sendMessage: vi.fn(
           (
             message: { type: "OPEN_OPTIONS_PAGE" },
-            callback: (response: CreateDocResponse) => void
+            callback: (response: MessageResponse) => void
           ) => {
             callback({ success: true });
           }
@@ -119,6 +121,64 @@ describe("extension background messages", () => {
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
       { type: "OPEN_OPTIONS_PAGE" },
       expect.any(Function)
+    );
+  });
+
+  it("fetches PR file info through the background service worker", async () => {
+    const mockPayload = {
+      files: [{ filename: "README.md", rawUrl: "https://example.com/raw", status: "modified" }],
+      meta: {
+        title: "Test PR",
+        author: "test",
+        branch: "main",
+        headSha: "abc123",
+        prUrl: "https://github.com/a/b/pull/1"
+      }
+    };
+
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(
+          (
+            message: {
+              type: "FETCH_PR_INFO";
+              payload: { ref: { repo: string; prNumber: number } };
+            },
+            callback: (response: MessageResponse) => void
+          ) => {
+            callback({ success: true, payload: mockPayload });
+          }
+        )
+      }
+    } as unknown as typeof chrome;
+
+    const result = await fetchPrInfoViaBackground({ repo: "a/b", prNumber: 1 });
+    expect(result).toEqual(mockPayload);
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { type: "FETCH_PR_INFO", payload: { ref: { repo: "a/b", prNumber: 1 } } },
+      expect.any(Function)
+    );
+  });
+
+  it("rejects when FETCH_PR_INFO returns an error from the background", async () => {
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(
+          (
+            message: {
+              type: "FETCH_PR_INFO";
+              payload: { ref: { repo: string; prNumber: number } };
+            },
+            callback: (response: MessageResponse) => void
+          ) => {
+            callback({ success: false, error: "Missing GitHub token" });
+          }
+        )
+      }
+    } as unknown as typeof chrome;
+
+    await expect(fetchPrInfoViaBackground({ repo: "a/b", prNumber: 1 })).rejects.toThrow(
+      "Missing GitHub token"
     );
   });
 });
