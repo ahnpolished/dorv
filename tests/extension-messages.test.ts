@@ -232,6 +232,27 @@ describe("extension background messages", () => {
       fetchPrInfoViaBackground({ repo: "ahnpolished/dorv", prNumber: 1 })
     ).resolves.toBeDefined();
   });
+
+  it("rejects with a timeout error when the background service worker never responds", async () => {
+    vi.useFakeTimers();
+
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(() => {
+          // intentionally never calls the callback
+        })
+      }
+    } as unknown as typeof chrome;
+
+    const promise = expect(fetchPrInfoViaBackground({ repo: "a/b", prNumber: 1 })).rejects.toThrow(
+      /timed out after/
+    );
+
+    vi.advanceTimersByTime(31_000);
+
+    await promise;
+    vi.useRealTimers();
+  });
 });
 
 describe("HUM-1409: toPullRequestRef", () => {

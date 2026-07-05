@@ -25,12 +25,26 @@ interface BackgroundResponse<T> {
   error?: string;
 }
 
+/** Default timeout for background message round-trips (30 seconds). */
+const DEFAULT_MESSAGE_TIMEOUT_MS = 30_000;
+
 function sendBackgroundMessage<T>(
   message: Record<string, unknown>,
-  fallbackError: string
+  fallbackError: string,
+  timeoutMs = DEFAULT_MESSAGE_TIMEOUT_MS
 ): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(
+          `Background message "${String(message.type)}" timed out after ${(timeoutMs / 1000).toString()}s.`
+        )
+      );
+    }, timeoutMs);
+
     chrome.runtime.sendMessage(message, (response: BackgroundResponse<T> | undefined) => {
+      clearTimeout(timer);
+
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message ?? fallbackError));
         return;
