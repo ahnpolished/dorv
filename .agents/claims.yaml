@@ -522,4 +522,12 @@ claims:
     depends_on: []
     completed_at: "2026-05-30T13:24:00Z"
 
+  HUM-1415:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-05T18:40:00Z"
+    depends_on: []
+    branch: feature/hum-1415
+    worktree: .worktrees/feature-hum-1415
+
 wait_queue: {}
