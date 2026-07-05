@@ -8,7 +8,16 @@ Chrome extension: on PRs with markdown files, create Google Docs from PR content
 
 ## v0.3.0 rewrite
 
-v0.2.0 shipped two P0s that caused user churn: a flickering, sometimes-non-opening GitHub sidebar, and an incident where one PR received 1000+ duplicate synced comments. v0.3.0 replaced the side panel with buttons injected directly into native GitHub/GDoc UI, dropped the 1-minute background alarm in favor of explicit user-triggered sync, and anchored dedup on remote content instead of local storage so a failed local write can no longer cause a resync storm. See `/Users/taeahn/.claude/plans/vivid-shimmying-candy.md` for the full rationale if it's still present in this checkout.
+v0.2.0 shipped two P0s that caused user churn: a flickering, sometimes-non-opening GitHub sidebar, and an incident where one PR received 1000+ duplicate synced comments. v0.3.0 replaced the side panel with buttons injected directly into native GitHub/GDoc UI, dropped the 1-minute background alarm in favor of explicit user-triggered sync, and anchored dedup on remote content instead of local storage so a failed local write can no longer cause a resync storm.
+
+### Button injection (no side panel)
+
+Instead of a dedicated extension side panel, dorv injects compact action buttons directly into the native UI of both platforms:
+
+- **GitHub → GDoc** (`github-buttons.content.tsx`): Scans the "Files Changed" view for markdown file headers (`.md` extension) using cascaded CSS selectors (`file-header`, `DiffFileHeader`, etc.). Each detected `.md` file gets a per-file button set injected inline next to its filename — Create Doc, Open Doc, Sync, and a stale badge. Buttons share a branded dorv orange outline wrapper (`.dorv-file-btn-set`) that groups multiple buttons under one visual ring. Injection is idempotent per file header via stable DOM ids derived from the filename.
+- **GDoc → GitHub** (`gdoc-buttons.content.tsx`): Scans the Google Docs comment sidebar DOM for unsynced native comment cards. On each card, injects a "Push to GitHub" button. Comment-id extraction and card detection rely on best-effort DOM heuristics (Google Docs' comment sidebar is unofficial/unversioned — see `docs/GDOC_COMMENT_DOM_NOTES.md`).
+
+Both entrypoints communicate with the adapter layer through the background service worker (message bus only — no alarms, no persistent panels).
 
 ## Entrypoints
 
@@ -32,9 +41,10 @@ No reinstall to move from phase 1 → 2. DirectAdapter works for GitHub Organiza
 
 ## Data model
 
-- **DocMapping:** `repo`, `prNumber`, `docs: DocFileMapping[]` (`{ filename, docId, docUrl }` — one Google Doc per markdown file; Google Docs' API cannot create tabs programmatically, so a PR maps to a *set* of docs rather than tabs within one doc), `createdAt`, `lastSyncedAt`, `headSha` (anchor), `latestSha`, `isStale`
-- **CommentMapping:** `ghCommentId` ↔ `docCommentId`, `docId` (which doc in the set), `source` (`github` \| `gdoc`) — loop guard
-- **ReplyMapping:** reply IDs + parent comment IDs + `docId` + `source`
+- **DocMapping:** `repo`, `prNumber`, `docs: DocFileMapping[]` (`{ filename, docId, docUrl }` — one Google Doc per markdown file; Google Docs' API cannot create tabs programmatically, so a PR maps to a *set* of docs rather than tabs within one doc), `createdAt`, `lastSyncedAt`, `headSha` (anchor), `latestSha`, `isStale`. Multiple `createDoc` calls for different files in the same PR merge into the existing `docs[]` (replace by filename match, append if new). The storage layer (`docStore.upsert`) handles the merge; `createDoc` at the business-logic layer further avoids unnecessary Drive API calls by only creating docs for files not yet mapped.
+- **CommentMapping:** `ghCommentId` ↔ `docCommentId`, `docId` (which doc in the set), `source` (`github` \| `gdoc`) — loop guard. Indexed by both GH id and doc id for O(1) bidirectional lookup.
+- **ReplyMapping:** `ghReplyId` ↔ `docReplyId`, `ghParentCommentId` ↔ `docParentCommentId`, `docId`, `source`. Indexed by both GH id and doc id.
+  - **Nested reply fallback (HUM-1415):** `mappingStore.getByGH()` only indexes root `CommentMapping` records. When a reply's parent is itself a reply (not a root comment), the GH→Doc sync loop falls back to `replyMappingStore.getByGH(reply.inReplyToId)` to resolve the parent mapping. If found, a synthetic `CommentMapping` is built from the parent `ReplyMapping`'s `docParentCommentId` and `docId`, allowing the nested reply to be pushed to the correct GDoc comment thread. The REST-fallback thread normalizer (`normalizeRestThreads`) complements this with recursive `collectNestedReplies()` to ensure nested replies survive in the thread structure before reaching the sync loop.
 - **SyncLock:** persisted per-PR lock (`chrome.storage.local`, TTL-based), replacing an in-memory `Map` that didn't survive service-worker restarts
 
 ## Sync directions
