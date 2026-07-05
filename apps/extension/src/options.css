@@ -267,6 +267,17 @@ button.danger:hover:not(:disabled) {
   width: 100%;
 }
 
+/* Options page is light-themed; override the dark-token shimmer from animations.css */
+.options-shell .dorv-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--dorv-light-hover) 25%,
+    var(--dorv-light-surface) 50%,
+    var(--dorv-light-hover) 75%
+  );
+  background-size: 200% 100%;
+}
+
 .compat-warning {
   background: var(--dorv-warning-subtle);
   border: 1px solid var(--dorv-warning);

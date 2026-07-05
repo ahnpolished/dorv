@@ -3,7 +3,8 @@ import {
   createDocViaBackground,
   fetchPrInfoViaBackground,
   openOptionsPageViaBackground,
-  syncNowViaBackground
+  syncNowViaBackground,
+  toPullRequestRef
 } from "../apps/extension/lib/adapters/messages.js";
 import type { CreateDocInput, CreateDocResult } from "../apps/extension/lib/adapters/types.js";
 
@@ -230,5 +231,23 @@ describe("extension background messages", () => {
     await expect(
       fetchPrInfoViaBackground({ repo: "ahnpolished/dorv", prNumber: 1 })
     ).resolves.toBeDefined();
+  });
+});
+
+describe("HUM-1409: toPullRequestRef", () => {
+  it("joins owner + repo into the combined 'owner/repo' shape background.ts expects", () => {
+    expect(toPullRequestRef({ owner: "ahnpolished", repo: "dorv", prNumber: 6 })).toEqual({
+      repo: "ahnpolished/dorv",
+      prNumber: 6
+    });
+  });
+
+  it("does not regress to passing the bare repo name (pre-cedc6f7 bug)", () => {
+    const result = toPullRequestRef({ owner: "ahnpolished", repo: "dorv", prNumber: 6 });
+    // The original bug passed the raw GitHubPullRequestRef straight through,
+    // so `repo` ended up as just "dorv" — background.ts's `repo.split("/")`
+    // then produced only one part and failed with "Invalid repo format: dorv".
+    expect(result.repo).not.toBe("dorv");
+    expect(result.repo.split("/")).toHaveLength(2);
   });
 });

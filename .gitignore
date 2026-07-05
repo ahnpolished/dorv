@@ -21,3 +21,7 @@ test-results/
 
 .DS_Store
 .agents/last-verify-report.md
+.pi/
+.pi-subagents/
+.tokensave/
+.plans/

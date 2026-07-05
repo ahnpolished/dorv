@@ -6,6 +6,18 @@ import type {
   PullRequestRef
 } from "./types.js";
 import type { MarkdownFileRef } from "./types.js";
+import type { GitHubPullRequestRef } from "../github/pr-files.js";
+
+/**
+ * Converts a parsed GitHub URL ref (owner + repo kept separate) into the
+ * combined "owner/repo" shape that PullRequestRef and the background
+ * message handlers expect. Passing a GitHubPullRequestRef directly where a
+ * PullRequestRef is expected type-checks (structural typing) but silently
+ * sends the bare repo name, e.g. "dorv" instead of "ahnpolished/dorv".
+ */
+export function toPullRequestRef(ref: GitHubPullRequestRef): PullRequestRef {
+  return { repo: `${ref.owner}/${ref.repo}`, prNumber: ref.prNumber };
+}
 
 interface BackgroundResponse<T> {
   success: boolean;

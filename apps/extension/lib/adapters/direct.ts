@@ -106,24 +106,49 @@ export class DirectAdapter implements SyncAdapter {
       throw new Error("GitHub PAT not configured. Please set it in extension options.");
     }
 
-    // Check if a dorv bot comment already links a set of GDocs for this PR
-    const issueComments = await fetchIssueComments(ghToken, input.repo, input.prNumber);
-    for (const comment of issueComments) {
-      const existingDocs = extractDocsFromBotComment(comment.body);
-      if (existingDocs) {
-        const mapping: DocMapping = {
-          repo: input.repo,
-          prNumber: input.prNumber,
-          docs: existingDocs,
-          createdAt: new Date().toISOString(),
-          lastSyncedAt: new Date().toISOString(),
-          headSha: input.headSha,
-          latestSha: input.headSha,
-          isStale: false
-        };
-        await this.docStore.upsert(mapping);
-        return { mapping };
+    // Check docStore first for an existing mapping (fast, survives page reloads).
+    let existingDocs: DocFileMapping[] = [];
+    let existingCreatedAt: string | undefined;
+    const storedMapping = await this.docStore.get(input.repo, input.prNumber);
+    if (storedMapping) {
+      existingDocs = storedMapping.docs;
+      existingCreatedAt = storedMapping.createdAt;
+    } else {
+      // Fallback: recover mapping from a dorv bot comment (survives
+      // extension uninstall, where chrome.storage is cleared).
+      const issueComments = await fetchIssueComments(ghToken, input.repo, input.prNumber);
+      for (const comment of issueComments) {
+        const recovered = extractDocsFromBotComment(comment.body);
+        if (recovered) {
+          existingDocs = recovered;
+          break;
+        }
       }
+    }
+
+    // Identify files that still need a Google Doc.
+    // Legacy single-doc mappings use __legacy__ as a synthetic filename;
+    // they already cover the PR — don't try to create a second doc on top.
+    const isLegacy =
+      existingDocs.length > 0 && existingDocs.every((d) => d.filename === "__legacy__");
+    const existingFilenames = new Set(existingDocs.map((d) => d.filename));
+    const newFiles = isLegacy ? [] : input.files.filter((f) => !existingFilenames.has(f.filename));
+
+    // If every requested file already has a doc, return the existing mapping as-is.
+    if (newFiles.length === 0) {
+      const now = new Date().toISOString();
+      const mapping: DocMapping = {
+        repo: input.repo,
+        prNumber: input.prNumber,
+        docs: existingDocs,
+        createdAt: existingCreatedAt ?? now,
+        lastSyncedAt: now,
+        headSha: input.headSha,
+        latestSha: input.headSha,
+        isStale: false
+      };
+      await this.docStore.upsert(mapping);
+      return { mapping };
     }
 
     const gToken = await this.authStore.getGoogleToken(false);
@@ -133,8 +158,8 @@ export class DirectAdapter implements SyncAdapter {
 
     // One Google Doc per markdown file — GDoc tabs can't be created via API,
     // so a PR maps to a set of docs rather than one doc with multiple tabs.
-    const docs: DocFileMapping[] = [];
-    for (const file of input.files) {
+    const newDocs: DocFileMapping[] = [];
+    for (const file of newFiles) {
       const resp = await fetch(file.rawUrl, {
         headers: {
           Authorization: `token ${ghToken}`
@@ -157,8 +182,11 @@ export class DirectAdapter implements SyncAdapter {
       const driveFile = await createGoogleDoc(gToken, docName, fullHtml);
       await grantAnyoneCommentAccess(gToken, driveFile.id, inferOrganizationDomain(driveFile));
 
-      docs.push({ filename: file.filename, docId: driveFile.id, docUrl: driveFile.webViewLink });
+      newDocs.push({ filename: file.filename, docId: driveFile.id, docUrl: driveFile.webViewLink });
     }
+
+    // Merge with any docs that already existed for this PR.
+    const docs = [...existingDocs, ...newDocs];
 
     // Post a single bot comment on PR encoding the full file -> doc map
     const docList = docs.map((d) => `- [${d.filename}](${d.docUrl})`).join("\n");
@@ -168,12 +196,13 @@ export class DirectAdapter implements SyncAdapter {
     await postPRComment(ghToken, input.repo, input.prNumber, botCommentBody);
 
     // Persist mapping
+    const now = new Date().toISOString();
     const mapping: DocMapping = {
       repo: input.repo,
       prNumber: input.prNumber,
       docs,
-      createdAt: new Date().toISOString(),
-      lastSyncedAt: new Date().toISOString(),
+      createdAt: existingCreatedAt ?? now,
+      lastSyncedAt: now,
       headSha: input.headSha,
       latestSha: input.headSha,
       isStale: false

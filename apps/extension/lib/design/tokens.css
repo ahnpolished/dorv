@@ -59,4 +59,23 @@
   --dorv-warning-subtle: rgba(245, 158, 11, 0.12);
   --dorv-success: #22c55e;
   --dorv-success-subtle: rgba(34, 197, 94, 0.12);
+
+  /* GitHub Primer palette — for buttons injected into github.com */
+  --dorv-gh-border: #d0d7de;
+  --dorv-gh-btn-bg: #f6f8fa;
+  --dorv-gh-btn-bg-hover: #f3f4f6;
+  --dorv-gh-text: #24292f;
+  --dorv-gh-muted-text: #59636e;
+  --dorv-gh-info-bg: #ddf4ff;
+  --dorv-gh-info-border: #54aeff;
+  --dorv-gh-info-text: #0969da;
+  --dorv-gh-success-bg: #dafbe1;
+  --dorv-gh-success-border: #4ac26b;
+  --dorv-gh-success-text: #1a7f37;
+  --dorv-gh-warning-bg: #fff1e5;
+  --dorv-gh-warning-border: #fb8f44;
+  --dorv-gh-warning-text: #9a6700;
+  --dorv-gh-stale-bg: #fff8c5;
+  --dorv-gh-stale-border: #d4a72c;
+  --dorv-gh-error-text: #cf222e;
 }

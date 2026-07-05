@@ -403,6 +403,83 @@ describe("DirectAdapter baseline sync", () => {
     });
   });
 
+  it("HUM-1412: merges docs across separate createDoc calls instead of dropping earlier files", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# README") };
+      }
+      if (urlStr === "https://raw.example/AGENTS.md") {
+        return { ok: true, text: () => Promise.resolve("# AGENTS") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        const body = String(init?.body ?? "");
+        const isReadme = body.includes("README.md");
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve(
+              isReadme
+                ? {
+                    id: "doc-readme",
+                    webViewLink: "https://docs.google.com/document/d/doc-readme/edit"
+                  }
+                : {
+                    id: "doc-agents",
+                    webViewLink: "https://docs.google.com/document/d/doc-agents/edit"
+                  }
+            )
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/") && urlStr.includes("/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments")) {
+        return { ok: true, json: () => Promise.resolve({ id: 100 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const baseInput = {
+      repo: "org/repo",
+      prNumber: 123,
+      title: "Review me",
+      author: "alice",
+      branch: "feature/docs",
+      headSha: "sha1",
+      prUrl: "https://github.com/org/repo/pull/123"
+    };
+
+    await adapter.createDoc({
+      ...baseInput,
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    await adapter.createDoc({
+      ...baseInput,
+      files: [
+        { filename: "AGENTS.md", rawUrl: "https://raw.example/AGENTS.md", status: "modified" }
+      ]
+    });
+
+    const mapping = await docStore.get("org/repo", 123);
+    expect(mapping?.docs.map((d: any) => d.filename).sort()).toEqual(["AGENTS.md", "README.md"]);
+    expect(mapping?.docs.find((d: any) => d.filename === "README.md")?.docId).toBe("doc-readme");
+    expect(mapping?.docs.find((d: any) => d.filename === "AGENTS.md")?.docId).toBe("doc-agents");
+  });
+
   it("renders mermaid fenced blocks as images in the uploaded Google Doc HTML", async () => {
     await authStore.setGitHubToken("mock-gh-token");
     (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>

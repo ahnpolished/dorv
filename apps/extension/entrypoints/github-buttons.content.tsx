@@ -14,7 +14,8 @@ import {
   createDocViaBackground,
   fetchPrInfoViaBackground,
   openOptionsPageViaBackground,
-  syncPRViaBackground
+  syncPRViaBackground,
+  toPullRequestRef
 } from "../lib/adapters/messages.js";
 import {
   fileButtonRootId,
@@ -23,6 +24,7 @@ import {
   hasFileButton
 } from "../lib/github/button-injection.js";
 import type { DocMapping, SyncStatus } from "../lib/adapters/types.js";
+import { IconAlert, IconFile, IconFileAdd, IconGear, IconSync } from "../lib/design/icons.js";
 import animationsCss from "../lib/design/animations.css?inline";
 import tokensCss from "../lib/design/tokens.css?inline";
 
@@ -161,19 +163,15 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       // Fetch PR files + meta through the background service worker.
       // Content-script fetch() stalls on cross-origin API calls even
       // with host_permissions; the background has unrestricted access.
-      const repo = `${ref.owner}/${ref.repo}`;
-      debug("calling fetchPrInfoViaBackground", { repo, prNumber: ref.prNumber });
-      const { files: allFiles, meta } = await fetchPrInfoViaBackground({
-        repo,
-        prNumber: ref.prNumber
-      });
+      const prRef = toPullRequestRef(ref);
+      const { files: allFiles, meta } = await fetchPrInfoViaBackground(prRef);
 
       const file = allFiles.find((f: { filename: string }) => f.filename === filename);
       if (!file) throw new Error(`File "${filename}" not found in PR`);
 
-      debug("calling createDocViaBackground", { repo, file: file.filename });
+      debug("calling createDocViaBackground", { repo: prRef.repo, file: file.filename });
       const result = await createDocViaBackground({
-        repo,
+        repo: prRef.repo,
         prNumber: ref.prNumber,
         files: [file],
         title: meta.title,
@@ -250,8 +248,9 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
           className="dorv-file-btn-el dorv-file-btn-subtle"
           onClick={handleOpenOptions}
           title="Set up dorv"
+          aria-label="Set up dorv"
         >
-          📄
+          <IconGear />
         </button>
       )}
 
@@ -263,9 +262,10 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
             void handleCreate();
           }}
           disabled={isCreating}
-          title={`Create Google Doc for ${filename}`}
+          title={isCreating ? "Creating Google Doc…" : `Create Google Doc for ${filename}`}
+          aria-label={isCreating ? "Creating Google Doc" : `Create Google Doc for ${filename}`}
         >
-          {isCreating ? "⏳" : "📄"}
+          {isCreating ? <IconSync className="dorv-spinning" /> : <IconFileAdd />}
         </button>
       )}
 
@@ -276,8 +276,9 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
             className="dorv-file-btn-el dorv-file-btn-open"
             onClick={handleOpenDoc}
             title={`Open Google Doc for ${filename}`}
+            aria-label={`Open Google Doc for ${filename}`}
           >
-            📄
+            <IconFile />
           </button>
           <button
             type="button"
@@ -286,16 +287,37 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
               void handleSync();
             }}
             disabled={isSyncing}
-            title={`Sync ${filename} to Google Doc`}
+            title={isSyncing ? "Syncing…" : `Sync ${filename} to Google Doc`}
+            aria-label={isSyncing ? "Syncing" : `Sync ${filename} to Google Doc`}
           >
-            {isSyncing ? "⏳" : "🔄"}
+            <IconSync className={isSyncing ? "dorv-spinning" : ""} />
           </button>
+          {view.mapping.isStale && (
+            <span
+              className="dorv-stale-badge"
+              title="Doc content may be out of date with the latest PR changes"
+              aria-label="Doc may be out of date"
+            >
+              <IconAlert />
+            </span>
+          )}
         </span>
       )}
 
       {(createError ?? syncError) && (
-        <span className="dorv-file-error" title={createError ?? syncError}>
-          ⚠️ {createError ?? syncError}
+        <span className="dorv-file-error">
+          <button
+            type="button"
+            className="dorv-file-btn-el dorv-file-btn-retry"
+            onClick={() => {
+              if (createError) void handleCreate();
+              else void handleSync();
+            }}
+            title={createError ?? syncError}
+            aria-label={`Retry: ${createError ?? syncError ?? "unknown error"}`}
+          >
+            <IconAlert />
+          </button>
         </span>
       )}
     </span>
@@ -428,46 +450,76 @@ ${animationsCss}
   vertical-align: middle;
 }
 .dorv-file-btn-el {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--dorv-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--dorv-gh-border);
+  background: var(--dorv-gh-btn-bg);
+  color: var(--dorv-gh-text);
   cursor: pointer;
-  font-size: var(--dorv-text-xs);
-  font-family: var(--dorv-font-sans);
-  line-height: 1;
-  padding: 1px 4px;
-  opacity: 0.5;
-  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+  opacity: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dorv-icon {
+  display: block;
+  flex-shrink: 0;
 }
 .dorv-file-btn-el:hover:not(:disabled) {
-  opacity: 1;
-  background: var(--dorv-light-hover);
-  border-color: var(--dorv-border-strong);
+  background: var(--dorv-gh-btn-bg-hover);
 }
 .dorv-file-btn-el:disabled {
-  opacity: 0.3;
+  opacity: 0.6;
   cursor: default;
 }
 .dorv-file-btn-create {
-  color: var(--dorv-orange);
+  background: var(--dorv-gh-info-bg);
+  border-color: var(--dorv-gh-info-border);
+  color: var(--dorv-gh-info-text);
 }
 .dorv-file-btn-open {
-  color: var(--dorv-text);
+  color: var(--dorv-gh-info-text);
 }
 .dorv-file-btn-sync {
-  color: var(--dorv-success);
+  background: var(--dorv-gh-success-bg);
+  border-color: var(--dorv-gh-success-border);
+  color: var(--dorv-gh-success-text);
 }
 .dorv-file-btn-subtle {
-  color: var(--dorv-muted);
+  color: var(--dorv-gh-muted-text);
+}
+.dorv-file-btn-retry {
+  background: var(--dorv-gh-warning-bg);
+  border-color: var(--dorv-gh-warning-border);
+  color: var(--dorv-gh-warning-text);
 }
 .dorv-file-linked {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 .dorv-file-error {
-  font-size: var(--dorv-text-xs);
+  display: inline-flex;
+  align-items: center;
+}
+.dorv-stale-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--dorv-gh-warning-text);
+  background: var(--dorv-gh-stale-bg);
+  border: 1px solid var(--dorv-gh-stale-border);
+  border-radius: 50%;
   cursor: help;
+}
+.dorv-stale-badge .dorv-icon {
+  width: 12px;
+  height: 12px;
 }
 .dorv-state-enter {
   animation: dorv-fade-in 0.15s ease-out;
