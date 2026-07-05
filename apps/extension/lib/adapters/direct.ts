@@ -735,7 +735,21 @@ export class DirectAdapter implements SyncAdapter {
           for (const reply of thread.replies) {
             if (await this.replyMappingStore.hasByGH(reply.id)) continue;
             if (reply.inReplyToId == null) continue;
-            const parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
+            let parentMapping = await this.mappingStore.getByGH(reply.inReplyToId);
+            if (!parentMapping) {
+              // Parent is a reply, not a root comment — resolve via replyMappingStore.
+              const parentReplyMap = await this.replyMappingStore.getByGH(reply.inReplyToId);
+              if (parentReplyMap) {
+                parentMapping = {
+                  docCommentId: parentReplyMap.docParentCommentId,
+                  docId: parentReplyMap.docId,
+                  repo: mapping.repo,
+                  prNumber: mapping.prNumber,
+                  source: parentReplyMap.source,
+                  ghCommentId: parentReplyMap.ghParentCommentId
+                };
+              }
+            }
             if (!parentMapping || parentMapping.resolvedAt) continue;
             try {
               await this.pushSingleGHReplyToDoc(reply, parentMapping, mapping, gToken, {
