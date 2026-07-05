@@ -27,6 +27,15 @@ claims:
     branch: feature/v0.3.0
     worktree: .worktrees/v0.3.0
     pr: https://github.com/ahnpolished/dorv/pull/78
+  HUM-1410:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-04T12:35:00Z"
+    completed_at: "2026-07-04T12:42:00Z"
+    depends_on: []
+    branch: feature/hum-1410
+    worktree: .worktrees/feature-hum-1410
+    pr: https://github.com/ahnpolished/dorv/pull/79
   HUM-1205:
     agent: codex
     status: done
