@@ -33,7 +33,7 @@ describe("HUM-1230 surface refresh", () => {
     // v0.3.0: per-file compact buttons use emoji + title-based tooltips
     // instead of the removed sidebar panel with SVG sync icon.
     expect(source).toContain("handleSync");
-    expect(source).toContain("dorv-file-btn-sync");
+    expect(source).toContain("dorv-file-btn-set");
   });
 
   it("wires Options page to the branded header and animated save confirmation", () => {

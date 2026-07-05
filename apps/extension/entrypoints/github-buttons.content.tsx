@@ -216,37 +216,41 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
   return (
     <span className="dorv-file-btn dorv-state-enter" data-dorv-file={filename}>
       {view.kind === "no-creds" && (
-        <button
-          type="button"
-          className="dorv-file-btn-el dorv-file-btn-subtle"
-          onClick={handleOpenOptions}
-          title="Set up dorv"
-          aria-label="Set up dorv"
-        >
-          <IconGear />
-        </button>
+        <span className="dorv-file-btn-set">
+          <button
+            type="button"
+            className="dorv-file-btn-el"
+            onClick={handleOpenOptions}
+            title="Set up dorv"
+            aria-label="Set up dorv"
+          >
+            <IconGear />
+          </button>
+        </span>
       )}
 
       {view.kind === "no-doc" && (
-        <button
-          type="button"
-          className="dorv-file-btn-el dorv-file-btn-create"
-          onClick={() => {
-            void handleCreate();
-          }}
-          disabled={isCreating}
-          title={isCreating ? "Creating Google Doc…" : `Create Google Doc for ${filename}`}
-          aria-label={isCreating ? "Creating Google Doc" : `Create Google Doc for ${filename}`}
-        >
-          {isCreating ? <IconSync className="dorv-spinning" /> : <IconFileAdd />}
-        </button>
+        <span className="dorv-file-btn-set">
+          <button
+            type="button"
+            className="dorv-file-btn-el"
+            onClick={() => {
+              void handleCreate();
+            }}
+            disabled={isCreating}
+            title={isCreating ? "Creating Google Doc…" : `Create Google Doc for ${filename}`}
+            aria-label={isCreating ? "Creating Google Doc" : `Create Google Doc for ${filename}`}
+          >
+            {isCreating ? <IconSync className="dorv-spinning" /> : <IconFileAdd />}
+          </button>
+        </span>
       )}
 
       {view.kind === "linked" && (
-        <span className="dorv-file-linked">
+        <span className="dorv-file-btn-set">
           <button
             type="button"
-            className="dorv-file-btn-el dorv-file-btn-open"
+            className="dorv-file-btn-el"
             onClick={handleOpenDoc}
             title={`Open Google Doc for ${filename}`}
             aria-label={`Open Google Doc for ${filename}`}
@@ -255,7 +259,7 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
           </button>
           <button
             type="button"
-            className="dorv-file-btn-el dorv-file-btn-sync"
+            className="dorv-file-btn-el"
             onClick={() => {
               void handleSync();
             }}
@@ -278,7 +282,7 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       )}
 
       {(createError ?? syncError) && (
-        <span className="dorv-file-error">
+        <span className="dorv-file-btn-set">
           <button
             type="button"
             className="dorv-file-btn-el dorv-file-btn-retry"
@@ -326,7 +330,15 @@ function injectFileButton(header: Element, ref: GitHubPullRequestRef, filename: 
 
   const span = document.createElement("span");
   span.id = id;
-  header.appendChild(span);
+
+  // Inject next to the "Copy to clipboard" button rather than at the end
+  // of the file header. GitHub uses aria-label for the copy button.
+  const copyBtn = header.querySelector('[aria-label*="Copy" i]');
+  if (copyBtn?.parentElement) {
+    copyBtn.parentElement.after(span);
+  } else {
+    header.appendChild(span);
+  }
 
   const root = createRoot(span);
   root.render(<FileButton prRef={ref} filename={filename} />);
@@ -422,6 +434,30 @@ ${animationsCss}
   margin-left: 6px;
   vertical-align: middle;
 }
+.dorv-file-btn-set {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  outline: 2px solid rgba(249, 115, 22, 0.35);
+  outline-offset: 0px;
+  position: relative;
+}
+.dorv-file-btn-set::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--dorv-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cpath d='M34 64 A30 30 0 0 1 94 64' fill='none' stroke='%23F97316' stroke-width='12' stroke-linecap='round'/%3E%3Cpath d='M94 64 A30 30 0 0 1 34 64' fill='none' stroke='%23F8FAFC' stroke-width='12' stroke-linecap='round'/%3E%3Cpolyline points='88,52 94,64 82,64' fill='none' stroke='%23F97316' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='40,76 34,64 46,64' fill='none' stroke='%23F8FAFC' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 10px 10px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
 .dorv-file-btn-el {
   display: inline-flex;
   align-items: center;
@@ -430,53 +466,32 @@ ${animationsCss}
   height: 28px;
   padding: 0;
   border-radius: 6px;
-  border: 1px solid var(--dorv-gh-border);
+  border: 1.5px solid var(--dorv-orange);
   background: var(--dorv-gh-btn-bg);
-  color: var(--dorv-gh-text);
+  color: var(--dorv-orange);
   cursor: pointer;
   opacity: 1;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .dorv-icon {
   display: block;
   flex-shrink: 0;
 }
 .dorv-file-btn-el:hover:not(:disabled) {
-  background: var(--dorv-gh-btn-bg-hover);
+  background: var(--dorv-orange);
+  color: var(--dorv-text-on-accent);
 }
 .dorv-file-btn-el:disabled {
   opacity: 0.6;
   cursor: default;
 }
-.dorv-file-btn-create {
-  background: var(--dorv-gh-info-bg);
-  border-color: var(--dorv-gh-info-border);
-  color: var(--dorv-gh-info-text);
-}
-.dorv-file-btn-open {
-  color: var(--dorv-gh-info-text);
-}
-.dorv-file-btn-sync {
-  background: var(--dorv-gh-success-bg);
-  border-color: var(--dorv-gh-success-border);
-  color: var(--dorv-gh-success-text);
-}
-.dorv-file-btn-subtle {
-  color: var(--dorv-gh-muted-text);
-}
 .dorv-file-btn-retry {
-  background: var(--dorv-gh-warning-bg);
-  border-color: var(--dorv-gh-warning-border);
-  color: var(--dorv-gh-warning-text);
+  border-color: var(--dorv-gh-error-text);
+  color: var(--dorv-gh-error-text);
 }
-.dorv-file-linked {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.dorv-file-error {
-  display: inline-flex;
-  align-items: center;
+.dorv-file-btn-retry:hover:not(:disabled) {
+  background: var(--dorv-gh-error-text);
+  color: var(--dorv-text-on-accent);
 }
 .dorv-stale-badge {
   display: inline-flex;
@@ -486,7 +501,7 @@ ${animationsCss}
   height: 20px;
   color: var(--dorv-gh-warning-text);
   background: var(--dorv-gh-stale-bg);
-  border: 1px solid var(--dorv-gh-stale-border);
+  border: 1.5px solid var(--dorv-gh-stale-border);
   border-radius: 50%;
   cursor: help;
 }
