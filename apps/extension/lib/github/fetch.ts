@@ -341,9 +341,22 @@ function normalizeRestThreads(comments: GitHubReviewComment[]): GitHubReviewThre
       quotedLine: buildQuotedLine(rootComment.diffHunk, rootComment.line),
       isResolved: false,
       rootComment,
-      replies: comments.filter((comment) => comment.inReplyToId === rootComment.id)
+      replies: collectNestedReplies(comments, rootComment.id)
     })
   );
+}
+
+/** Collect all replies to a parent comment, including nested replies (replies to replies). */
+function collectNestedReplies(
+  comments: GitHubReviewComment[],
+  parentId: number
+): GitHubReviewComment[] {
+  const direct = comments.filter((comment) => comment.inReplyToId === parentId);
+  const all = [...direct];
+  for (const reply of direct) {
+    all.push(...collectNestedReplies(comments, reply.id));
+  }
+  return all;
 }
 
 function buildReviewThread(input: {
