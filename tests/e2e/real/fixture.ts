@@ -216,21 +216,21 @@ export async function buildRealCreateDocInput(): Promise<CreateDocInput> {
 /** Send CREATE_DOC through the extension runtime, using the same background adapter path as UI. */
 export async function createDocViaExtension(
   extensionContext: BrowserContext,
-  extensionId: string,
+  _extensionId: string,
   input: CreateDocInput
 ): Promise<CreateDocResult> {
-  const page = await extensionContext.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html`, {
-    waitUntil: "domcontentloaded"
-  });
-  const response = await page.evaluate((payload) => {
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
+  const worker =
+    extensionContext.serviceWorkers()[0] ?? (await extensionContext.waitForEvent("serviceworker"));
+  const response = await worker.evaluate((payload) => {
     return new Promise<{ success: boolean; payload?: CreateDocResult; error?: string }>(
       (resolve) => {
         chrome.runtime.sendMessage({ type: "CREATE_DOC", payload }, resolve);
       }
     );
   }, input);
-  await page.close();
   if (!response.success || !response.payload) {
     throw new Error(response.error ?? "CREATE_DOC returned no payload");
   }
@@ -577,20 +577,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { auto: true }
   ],
 
-  triggerSync: async ({ extensionContext, extensionId }, use) => {
+  // Sends SYNC_NOW directly from the background service worker.
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
+  triggerSync: async ({ extensionWorker }, use) => {
     const trigger = async () => {
-      const page = await extensionContext.newPage();
-      await page.goto(`chrome-extension://${extensionId}/options.html`, {
-        waitUntil: "domcontentloaded"
-      });
-      await page.evaluate(() => {
+      await extensionWorker.evaluate(() => {
         return new Promise<void>((resolve) => {
           chrome.runtime.sendMessage({ type: "SYNC_NOW", payload: null }, () => {
             resolve();
           });
         });
       });
-      await page.close();
     };
     await use(trigger);
   }

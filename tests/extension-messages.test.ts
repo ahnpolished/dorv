@@ -181,4 +181,54 @@ describe("extension background messages", () => {
       "Missing GitHub token"
     );
   });
+
+  it("HUM-1409: rejects bare repo names (must be owner/name format)", async () => {
+    // Regression: handleCreate() in github-buttons originally passed a
+    // raw { owner, repo, prNumber } object, discarding the already-computed
+    // "owner/repo" string. The background handler splits on "/" and throws
+    // "Invalid repo format" for bare names like "dorv".
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(
+          (
+            message: {
+              type: "FETCH_PR_INFO";
+              payload: { ref: { repo: string; prNumber: number } };
+            },
+            callback: (response: MessageResponse) => void
+          ) => {
+            // Simulate background handler validation — bare repo name fails
+            const passedRepo = message.payload.ref.repo;
+            const parts = passedRepo.split("/");
+            if (parts.length !== 2 || !parts[0] || !parts[1]) {
+              callback({
+                success: false,
+                error: `Invalid repo format: ${passedRepo}`
+              });
+            } else {
+              callback({ success: true, payload: {} });
+            }
+          }
+        )
+      }
+    } as unknown as typeof chrome;
+
+    // Bare repo name (the original bug: handleCreate passed just "dorv")
+    await expect(fetchPrInfoViaBackground({ repo: "dorv", prNumber: 1 })).rejects.toThrow(
+      "Invalid repo format: dorv"
+    );
+
+    // Valid owner/name format should succeed
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn((_message: unknown, callback: (response: MessageResponse) => void) => {
+          callback({ success: true, payload: { files: [], meta: {} } });
+        })
+      }
+    } as unknown as typeof chrome;
+
+    await expect(
+      fetchPrInfoViaBackground({ repo: "ahnpolished/dorv", prNumber: 1 })
+    ).resolves.toBeDefined();
+  });
 });

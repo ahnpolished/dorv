@@ -27,6 +27,17 @@ export default defineConfig({
       retries: process.env.CI ? 1 : 0
     },
     {
+      // CI-only subset of mocked tests that don't require extension-page
+      // navigation. Chrome v130+ redirects all chrome-extension://...
+      // navigations in Playwright. Full suite → real-browser (Chrome MCP),
+      // see docs/REAL_BROWSER_E2E.md.
+      name: "mocked:ci",
+      testDir: "./tests/e2e/specs",
+      timeout: 60_000,
+      retries: 1,
+      grep: /extension loads|extension ID|TC-011|render nothing/
+    },
+    {
       name: "real",
       testDir: "./tests/e2e/real",
       timeout: 120_000,

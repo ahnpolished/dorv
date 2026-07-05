@@ -20,10 +20,12 @@ export default defineBackground(() => {
   const authStore = createAuthStore(storageArea, createChromeStorageArea(chrome.storage.managed));
   const statusStore = createStatusStore(storageArea);
 
-  // In dev mode, auto-open the options page on install/update so
-  // the developer sees the Google auth button immediately.
+  // Auto-open the options page on extension update so the developer sees
+  // the Google auth button after pulling new code. Skipped on install
+  // (fresh profiles, including CI) to avoid interfering with test page
+  // navigations — Chrome v130+ redirects extension pages in Playwright.
   chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === "install" || details.reason === "update") {
+    if (details.reason === "update") {
       void chrome.runtime.openOptionsPage();
     }
   });

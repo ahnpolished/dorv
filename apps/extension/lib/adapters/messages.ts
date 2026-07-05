@@ -20,7 +20,7 @@ function sendBackgroundMessage<T>(
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response: BackgroundResponse<T> | undefined) => {
       if (chrome.runtime.lastError) {
-        resolve(undefined);
+        reject(new Error(chrome.runtime.lastError.message ?? fallbackError));
         return;
       }
 
