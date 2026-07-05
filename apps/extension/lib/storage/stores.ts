@@ -1,5 +1,6 @@
 import type {
   CommentMapping,
+  DocFileMapping,
   DocMapping,
   IdentityMapping,
   NewSyncedActivity,
@@ -97,7 +98,24 @@ export function createDocStore(storage: StorageArea) {
       return getValue<DocMapping>(storage, prKey("docStore", { repo, prNumber }));
     },
     async upsert(mapping: DocMapping): Promise<void> {
-      await storage.set({ [prKey("docStore", mapping)]: mapping });
+      const key = prKey("docStore", mapping);
+      const existing = await this.get(mapping.repo, mapping.prNumber);
+      if (existing) {
+        // Merge docs[]: replace by filename, append if new.
+        // This preserves previously-linked files when linking an additional
+        // markdown file in the same PR.
+        const mergedDocs: DocFileMapping[] = [...existing.docs];
+        for (const newDoc of mapping.docs) {
+          const idx = mergedDocs.findIndex((d) => d.filename === newDoc.filename);
+          if (idx >= 0) {
+            mergedDocs[idx] = newDoc;
+          } else {
+            mergedDocs.push(newDoc);
+          }
+        }
+        mapping = { ...mapping, docs: mergedDocs };
+      }
+      await storage.set({ [key]: mapping });
       await addActivePr(storage, mapping);
     },
     async listActive(): Promise<PullRequestRef[]> {
