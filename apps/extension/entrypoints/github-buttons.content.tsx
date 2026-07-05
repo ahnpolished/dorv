@@ -131,19 +131,38 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
   }, [ref.owner, ref.repo, ref.prNumber, filename]);
 
   const handleCreate = async () => {
-    console.log("[dorv] handleCreate called for", filename);
+    const debug = (step: string, detail?: unknown) => {
+      const detailStr =
+        detail instanceof Error
+          ? detail.message
+          : typeof detail === "string"
+            ? detail
+            : JSON.stringify(detail ?? "");
+      console.log("[dorv]", step, detail ?? "");
+      try {
+        document.documentElement.dataset.dorvDebug = JSON.stringify({
+          step,
+          detail: detailStr,
+          time: Date.now()
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+    debug("handleCreate called", filename);
     setCreateError(undefined);
     setIsCreating(true);
     try {
-      console.log("[dorv] getting github token...");
+      debug("getting github token");
       const pat = await authStore.getGitHubToken();
-      console.log("[dorv] token present:", !!pat);
+      debug("token present", !!pat);
       if (!pat) throw new Error("Missing GitHub token");
 
       // Fetch PR files + meta through the background service worker.
       // Content-script fetch() stalls on cross-origin API calls even
       // with host_permissions; the background has unrestricted access.
       const repo = `${ref.owner}/${ref.repo}`;
+      debug("calling fetchPrInfoViaBackground", { repo, prNumber: ref.prNumber });
       const { files: allFiles, meta } = await fetchPrInfoViaBackground({
         repo,
         prNumber: ref.prNumber
@@ -152,6 +171,7 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       const file = allFiles.find((f: { filename: string }) => f.filename === filename);
       if (!file) throw new Error(`File "${filename}" not found in PR`);
 
+      debug("calling createDocViaBackground", { repo, file: file.filename });
       const result = await createDocViaBackground({
         repo,
         prNumber: ref.prNumber,
@@ -162,9 +182,16 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
         headSha: meta.headSha,
         prUrl: meta.prUrl
       });
+      debug(
+        "doc created",
+        result.mapping.docs.map((d) => d.docUrl)
+      );
       setView({ kind: "linked", mapping: result.mapping, status: undefined });
     } catch (err: unknown) {
-      setCreateError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[dorv] handleCreate FAILED:", msg, err);
+      debug("handleCreate FAILED", err);
+      setCreateError(msg);
       captureExtensionException(err, {
         surface: "github-buttons",
         tags: { operation: "create_doc_file" }
@@ -268,7 +295,7 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
 
       {(createError ?? syncError) && (
         <span className="dorv-file-error" title={createError ?? syncError}>
-          ⚠️
+          ⚠️ {createError ?? syncError}
         </span>
       )}
     </span>
