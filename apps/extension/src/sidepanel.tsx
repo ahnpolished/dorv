@@ -992,31 +992,39 @@ function SidePanel() {
                 >
                   <div className="comment-meta">
                     <span className="author">{c.author}</span>
-                    <IconButton
-                      icon="ti-anchor"
-                      label="Open Google Doc comment"
-                      href={mapping.docUrl}
-                      disabled={!mapping.docUrl}
-                    />
+                    <div className="comment-actions">
+                      <button
+                        type="button"
+                        className="dorv-icon-btn"
+                        disabled={pushingId === c.id || !c.quotedFileContent}
+                        onClick={() => void handlePush(c)}
+                        data-testid={`dorv-push-btn-${c.id}`}
+                        aria-label={
+                          pushedId === c.id
+                            ? "Pushed"
+                            : pushingId === c.id
+                              ? "Pushing..."
+                              : "Push to GitHub"
+                        }
+                      >
+                        {pushedId === c.id ? (
+                          <CheckIcon />
+                        ) : pushingId === c.id ? (
+                          <i className="ti ti-refresh dorv-spinning" aria-hidden="true" />
+                        ) : (
+                          <i className="ti ti-brand-github" aria-hidden="true" />
+                        )}
+                      </button>
+                      <IconButton
+                        icon="ti-anchor"
+                        label="Open Google Doc comment"
+                        href={mapping.docUrl}
+                        disabled={!mapping.docUrl}
+                      />
+                    </div>
                   </div>
                   <div className="comment-body">{c.content}</div>
                   {c.quotedFileContent && <div className="quote">"{c.quotedFileContent}"</div>}
-                  <button
-                    type="button"
-                    className="push-btn"
-                    disabled={pushingId === c.id || !c.quotedFileContent}
-                    onClick={() => {
-                      void handlePush(c);
-                    }}
-                    data-testid={`dorv-push-btn-${c.id}`}
-                  >
-                    {pushedId === c.id && <CheckIcon />}
-                    {pushedId === c.id
-                      ? "Pushed"
-                      : pushingId === c.id
-                        ? "Pushing..."
-                        : "Push to GitHub"}
-                  </button>
                 </div>
               ))
             )}
