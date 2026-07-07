@@ -3,7 +3,7 @@ export async function postPRComment(
   repo: string,
   prNumber: number,
   body: string
-): Promise<void> {
+): Promise<{ id: number }> {
   const parts = repo.split("/");
   const owner = parts[0];
   const name = parts[1];
@@ -16,6 +16,39 @@ export async function postPRComment(
 
   const resp = await fetch(url, {
     method: "POST",
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ body })
+  });
+
+  if (!resp.ok) {
+    throw new Error(`GitHub API failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+
+  return (await resp.json()) as { id: number };
+}
+
+export async function updatePRComment(
+  token: string,
+  repo: string,
+  commentId: number,
+  body: string
+): Promise<void> {
+  const parts = repo.split("/");
+  const owner = parts[0];
+  const name = parts[1];
+
+  if (!owner || !name) {
+    throw new Error(`Invalid repo format: ${repo}`);
+  }
+
+  const url = `https://api.github.com/repos/${owner}/${name}/issues/comments/${commentId.toString()}`;
+
+  const resp = await fetch(url, {
+    method: "PATCH",
     headers: {
       Authorization: `token ${token}`,
       Accept: "application/vnd.github.v3+json",

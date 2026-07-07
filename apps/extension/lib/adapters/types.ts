@@ -12,10 +12,16 @@ export interface MarkdownFileRef {
   previousFilename?: string;
 }
 
+export interface DocFileVersion {
+  sha: string;
+  revId?: string;
+}
+
 export interface DocFileMapping {
   filename: string;
   docId: string;
   docUrl: string;
+  versions?: DocFileVersion[];
 }
 
 export interface DocMapping extends PullRequestRef {

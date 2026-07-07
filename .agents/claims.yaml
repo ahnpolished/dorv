@@ -541,4 +541,22 @@ claims:
     pr: https://github.com/ahnpolished/dorv/pull/92
     comment: Parallel redundant effort alongside existing claude-code claim on HUM-1417 (branch feature/hum-1417, worktree .worktrees/feature-hum-1417, PR #90). Both are candidates for human reconciliation.
 
+  HUM-1418-pi:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-06T00:00:00Z"
+    depends_on: []
+    branch: feature/hum-1418-pi
+    worktree: .worktrees/feature-hum-1418-pi
+    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1418 (branch feature/hum-1418, worktree .worktrees/feature-hum-1418). Both are candidates for human reconciliation.
+
+  HUM-1413-pi:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-06T00:00:00Z"
+    depends_on: []
+    branch: feature/hum-1413-pi
+    worktree: .worktrees/feature-hum-1413-pi
+    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1413. Read-only investigation; will open PR only if a real gap is found. Otherwise posts independent Linear verdict comment.
+
 wait_queue: {}

@@ -3,7 +3,8 @@ import {
   buildDocUrl,
   buildDocsMarker,
   extractDocsFromBotComment,
-  parseDocId
+  parseDocId,
+  renderFileEntry
 } from "../apps/extension/lib/gdoc/urls.js";
 
 describe("buildDocsMarker / extractDocsFromBotComment", () => {
@@ -48,5 +49,24 @@ describe("buildDocsMarker / extractDocsFromBotComment", () => {
 describe("parseDocId", () => {
   it("extracts the doc id from a docs.google.com URL", () => {
     expect(parseDocId("https://docs.google.com/document/d/xyz789/edit")).toBe("xyz789");
+  });
+});
+
+describe("renderFileEntry", () => {
+  it("renders a plain link when no versions exist", () => {
+    const doc = { filename: "a.md", docId: "d1", docUrl: buildDocUrl("d1") };
+    expect(renderFileEntry(doc)).toBe("- [a.md](https://docs.google.com/document/d/d1/edit)");
+  });
+
+  it("renders inline version links when versions exist", () => {
+    const doc = {
+      filename: "a.md",
+      docId: "d1",
+      docUrl: buildDocUrl("d1"),
+      versions: [{ sha: "abc1234567890" }, { sha: "def7890123456" }]
+    };
+    expect(renderFileEntry(doc)).toBe(
+      "- [a.md](https://docs.google.com/document/d/d1/edit) ([v1 (ref: abc1234)](https://docs.google.com/document/d/d1/edit), [v2 (ref: def7890)](https://docs.google.com/document/d/d1/edit))"
+    );
   });
 });

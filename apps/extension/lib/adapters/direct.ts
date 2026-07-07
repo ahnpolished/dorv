@@ -16,9 +16,10 @@ import {
 } from "../gdoc/drive.js";
 import { renderMarkdownToGDocHtml } from "../gdoc/markdown.js";
 import { generateGDocHtml } from "../gdoc/template.js";
-import { extractDocsFromBotComment, buildDocsMarker } from "../gdoc/urls.js";
+import { extractDocsFromBotComment, buildDocsMarker, renderFileEntry } from "../gdoc/urls.js";
 import {
   postPRComment,
+  updatePRComment,
   createReviewComment,
   createReviewCommentReply
 } from "../github/comments.js";
@@ -113,16 +114,21 @@ export class DirectAdapter implements SyncAdapter {
     if (storedMapping) {
       existingDocs = storedMapping.docs;
       existingCreatedAt = storedMapping.createdAt;
-    } else {
-      // Fallback: recover mapping from a dorv bot comment (survives
-      // extension uninstall, where chrome.storage is cleared).
-      const issueComments = await fetchIssueComments(ghToken, input.repo, input.prNumber);
-      for (const comment of issueComments) {
-        const recovered = extractDocsFromBotComment(comment.body);
-        if (recovered) {
+    }
+
+    // Recover mapping from a dorv bot comment (survives extension uninstall,
+    // where chrome.storage is cleared). Also capture the comment id so we
+    // can edit-in-place instead of posting a duplicate comment.
+    let existingBotCommentId: number | undefined;
+    const issueComments = await fetchIssueComments(ghToken, input.repo, input.prNumber);
+    for (const comment of issueComments) {
+      const recovered = extractDocsFromBotComment(comment.body);
+      if (recovered) {
+        if (existingDocs.length === 0) {
           existingDocs = recovered;
-          break;
         }
+        existingBotCommentId = comment.id;
+        break;
       }
     }
 
@@ -189,18 +195,27 @@ export class DirectAdapter implements SyncAdapter {
       const driveFile = await createGoogleDoc(gToken, docName, fullHtml);
       await grantAnyoneCommentAccess(gToken, driveFile.id, inferOrganizationDomain(driveFile));
 
-      newDocs.push({ filename: file.filename, docId: driveFile.id, docUrl: driveFile.webViewLink });
+      newDocs.push({
+        filename: file.filename,
+        docId: driveFile.id,
+        docUrl: driveFile.webViewLink,
+        versions: [{ sha: input.headSha }]
+      });
     }
 
     // Merge with any docs that already existed for this PR.
     const docs = [...existingDocs, ...newDocs];
 
-    // Post a single bot comment on PR encoding the full file -> doc map
-    const docList = docs.map((d) => `- [${d.filename}](${d.docUrl})`).join("\n");
+    // Post or update a single bot comment on PR encoding the full file -> doc map
+    const docList = docs.map((d) => renderFileEntry(d)).join("\n");
     const botCommentBody = `${buildDocsMarker(docs)}\n🤖 **dorv** has created linked Google Doc${
       docs.length === 1 ? "" : "s"
     } for review:\n\n${docList}`;
-    await postPRComment(ghToken, input.repo, input.prNumber, botCommentBody);
+    if (existingBotCommentId) {
+      await updatePRComment(ghToken, input.repo, existingBotCommentId, botCommentBody);
+    } else {
+      await postPRComment(ghToken, input.repo, input.prNumber, botCommentBody);
+    }
 
     // Persist mapping
     const now = new Date().toISOString();

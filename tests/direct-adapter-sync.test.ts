@@ -409,8 +409,12 @@ describe("DirectAdapter baseline sync", () => {
       cb("mock-g-token")
     );
 
+    let botCommentId = 0;
+    const postedComments: Array<{ method: string; body: string }> = [];
+
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
       const urlStr = String(url);
+      const method = init?.method ?? "GET";
 
       if (urlStr === "https://raw.example/README.md") {
         return { ok: true, text: () => Promise.resolve("# README") };
@@ -443,8 +447,32 @@ describe("DirectAdapter baseline sync", () => {
         return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
       }
 
-      if (urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments")) {
-        return { ok: true, json: () => Promise.resolve({ id: 100 }) };
+      if (
+        urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments") ||
+        urlStr.includes("/api.github.com/repos/org/repo/issues/comments/")
+      ) {
+        if (method === "GET") {
+          if (botCommentId === 0) return { ok: true, json: () => Promise.resolve([]) };
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                {
+                  id: botCommentId,
+                  body: postedComments[0]?.body ?? ""
+                }
+              ])
+          };
+        }
+        if (method === "POST") {
+          botCommentId = 100;
+          postedComments.push({ method: "POST", body: JSON.parse(String(init?.body)).body });
+          return { ok: true, json: () => Promise.resolve({ id: botCommentId }) };
+        }
+        if (method === "PATCH") {
+          postedComments.push({ method: "PATCH", body: JSON.parse(String(init?.body)).body });
+          return { ok: true, json: () => Promise.resolve({ id: botCommentId }) };
+        }
       }
 
       return { ok: true, json: async () => ({}) };
@@ -478,6 +506,11 @@ describe("DirectAdapter baseline sync", () => {
     expect(mapping?.docs.map((d: any) => d.filename).sort()).toEqual(["AGENTS.md", "README.md"]);
     expect(mapping?.docs.find((d: any) => d.filename === "README.md")?.docId).toBe("doc-readme");
     expect(mapping?.docs.find((d: any) => d.filename === "AGENTS.md")?.docId).toBe("doc-agents");
+
+    // Should post once and then update in-place instead of duplicating
+    expect(postedComments).toHaveLength(2);
+    expect(postedComments[0]?.method).toBe("POST");
+    expect(postedComments[1]?.method).toBe("PATCH");
   });
 
   it("renders mermaid fenced blocks as images in the uploaded Google Doc HTML", async () => {
@@ -742,6 +775,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
           json: () =>
             Promise.resolve([
               {
+                id: 100,
                 body: '<!-- dorv-docs={"README.md":"existing-doc-id"} -->\n🤖 **dorv** has created linked Google Doc for review:\n\n- [README.md](https://docs.google.com/document/d/existing-doc-id/edit)'
               }
             ])
@@ -794,6 +828,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
           json: () =>
             Promise.resolve([
               {
+                id: 101,
                 body: "🤖 **dorv** has created a linked Google Doc for review:\n\n[PR #42 - My PR](https://docs.google.com/document/d/legacy-doc-id/edit)"
               }
             ])
@@ -844,6 +879,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
           json: () =>
             Promise.resolve([
               {
+                id: 102,
                 body: "🤖 **dorv** has created a linked Google Doc for review:\n\n[PR #42](https://docs.google.com/document/d/picked-doc-id/edit)"
               }
             ])
@@ -976,11 +1012,13 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
     expect(result.mapping.headSha).toBe("sha-abc");
 
     // Bot comment must carry the hidden marker so future pickup finds it
-    expect(postedBotComment).toContain('<!-- dorv-docs={"README.md":"green-field-doc-id"} -->');
+    expect(postedBotComment).toContain('"README.md":"green-field-doc-id"');
     expect(postedBotComment).toContain("**dorv**");
     expect(postedBotComment).toContain(
       "https://docs.google.com/document/d/green-field-doc-id/edit"
     );
+    // Version history is recorded for the initial creation
+    expect(postedBotComment).toContain("(ref: sha-abc)");
 
     // Mapping must be stored
     const stored = await docStore.get("org/repo", 42);
