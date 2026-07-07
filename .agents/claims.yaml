@@ -524,11 +524,13 @@ claims:
 
   HUM-1415:
     agent: pi
-    status: in_progress
+    status: done
     claimed_at: "2026-07-05T18:40:00Z"
+    completed_at: "2026-07-05T18:45:00Z"
     depends_on: []
     branch: feature/hum-1415
     worktree: .worktrees/feature-hum-1415
+    pr: https://github.com/ahnpolished/dorv/pull/87
 
   HUM-1417-pi:
     agent: pi
@@ -550,11 +552,20 @@ claims:
 
   HUM-1413-pi:
     agent: pi
-    status: in_progress
+    status: done
     claimed_at: "2026-07-06T00:00:00Z"
+    completed_at: "2026-07-07T01:37:00Z"
     depends_on: []
     branch: feature/hum-1413-pi
     worktree: .worktrees/feature-hum-1413-pi
-    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1413. Read-only investigation; will open PR only if a real gap is found. Otherwise posts independent Linear verdict comment.
+    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1413. Read-only investigation concluded the issue is resolved (PR #81 merged, CI green). Independent verdict posted to Linear.
+
+  HUM-1419:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-07T01:40:00Z"
+    depends_on: [HUM-1416, HUM-1418, HUM-1413]
+    branch: feature/hum-1419
+    worktree: .worktrees/feature-hum-1419
 
 wait_queue: {}
