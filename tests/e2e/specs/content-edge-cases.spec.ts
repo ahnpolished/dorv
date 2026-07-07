@@ -154,11 +154,11 @@ test("TC-006: GDoc→GH push places comment on correct file and line", async ({
   await panel.locator("button", { hasText: "Google Doc" }).click();
 
   // Wait for the Push button and click it
-  await expect(panel.locator("button.push-btn, button:has-text('Push')").first()).toBeVisible({
+  await expect(panel.locator('[data-testid^="dorv-push-btn-"]').first()).toBeVisible({
     timeout: TIMEOUT
   });
   panel.on("dialog", (d) => void d.accept());
-  await panel.locator("button.push-btn, button:has-text('Push')").first().click();
+  await panel.locator('[data-testid^="dorv-push-btn-"]').first().click();
 
   // Wait for GH POST to be captured
   await expect
@@ -241,11 +241,11 @@ test("TC-007: GDoc→GH push body contains GDoc author name", async ({
   });
   await panel.locator("button", { hasText: "Google Doc" }).click();
 
-  await expect(panel.locator("button.push-btn, button:has-text('Push')").first()).toBeVisible({
+  await expect(panel.locator('[data-testid^="dorv-push-btn-"]').first()).toBeVisible({
     timeout: TIMEOUT
   });
   panel.on("dialog", (d) => void d.accept());
-  await panel.locator("button.push-btn, button:has-text('Push')").first().click();
+  await panel.locator('[data-testid^="dorv-push-btn-"]').first().click();
 
   await expect
     .poll(() => ghPostBody !== undefined, {

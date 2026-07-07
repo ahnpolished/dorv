@@ -62,8 +62,8 @@ async function main() {
       author: card.querySelector(".author")?.textContent ?? "",
       body: card.querySelector(".comment-body")?.textContent.slice(0, 120) ?? "",
       hasQuote: !!card.querySelector(".quote"),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-      pushDisabled: (card.querySelector(".push-btn") as HTMLButtonElement | null)?.disabled ?? true
+      pushDisabled:
+        card.querySelector<HTMLButtonElement>('[data-testid^="dorv-push-btn-"]')?.disabled ?? true
     }));
     return { heading: heading?.textContent ?? null, comments: cards };
   });
