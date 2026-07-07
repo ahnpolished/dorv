@@ -74,6 +74,18 @@ body {
   font-size: 16px;
 }
 
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comment-actions .dorv-icon-btn {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
 .dorv-eyebrow {
   color: var(--dorv-orange);
   font-size: 11px;
