@@ -9,6 +9,8 @@
  */
 import { defineContentScript } from "wxt/utils/define-content-script";
 
+import animationsCss from "../lib/design/animations.css?inline";
+import tokensCss from "../lib/design/tokens.css?inline";
 import type { GoogleDocComment, PullRequestRef } from "../lib/adapters/types.js";
 import {
   getDocCommentsViaBackground,
@@ -32,8 +34,16 @@ import { captureExtensionException, initSentryForSurface } from "../lib/telemetr
 
 const SURFACE = "gdoc-buttons" as const;
 const DEBOUNCE_MS = 600;
+const CHECK_DISPLAY_MS = 350;
 const BUTTON_ATTR = "data-dorv-button";
 const STYLE_ID = "dorv-gdoc-button-style";
+
+const ICON_GITHUB =
+  '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
+const ICON_SPINNER =
+  '<svg class="dorv-spinning" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 2 A10 10 0 0 1 22 12"/></svg>';
+const ICON_CHECK =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="dorv-check-path" d="M4 12l6 6L20 6"/></svg>';
 
 initSentryForSurface(SURFACE);
 
@@ -47,20 +57,27 @@ function ensureStyleInjected(): void {
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
+    ${tokensCss}
+    ${animationsCss}
     .dorv-push-btn {
-      font-family: "Google Sans", Roboto, Arial, sans-serif;
-      font-size: 11px;
-      font-weight: 500;
-      color: #1a73e8;
-      background: #ffffff;
-      border: 1px solid #1a73e8;
-      border-radius: 4px;
-      padding: 2px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
       margin: 4px 4px 4px 0;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      color: #1a73e8;
       cursor: pointer;
-      line-height: 1.6;
     }
-    .dorv-push-btn:hover {
+    .dorv-push-btn svg {
+      display: block;
+      flex-shrink: 0;
+    }
+    .dorv-push-btn:hover:not(:disabled) {
       background: rgba(26, 115, 232, 0.08);
     }
     .dorv-push-btn:disabled {
@@ -136,23 +153,32 @@ function injectButton(
   button.type = "button";
   button.className = "dorv-push-btn";
   button.setAttribute(BUTTON_ATTR, "true");
-  button.textContent = "Push to GitHub";
+  button.setAttribute("aria-label", "Push to GitHub");
+  button.title = "Push to GitHub";
+  button.innerHTML = ICON_GITHUB;
 
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
     button.disabled = true;
-    button.textContent = "Pushing…";
+    button.setAttribute("aria-label", "Pushing…");
+    button.innerHTML = ICON_SPINNER;
     card.querySelector(".dorv-push-error")?.remove();
 
     pushDocCommentToGHViaBackground({ ref, docId, comment })
       .then(() => {
+        button.setAttribute("aria-label", "Pushed");
+        button.innerHTML = ICON_CHECK;
         markCardSynced(card);
-        renderSyncedIndicator(card);
+        setTimeout(() => {
+          renderSyncedIndicator(card);
+        }, CHECK_DISPLAY_MS);
       })
       .catch((err: unknown) => {
         button.disabled = false;
-        button.textContent = "Push to GitHub";
+        button.setAttribute("aria-label", "Push to GitHub");
+        button.title = "Push to GitHub";
+        button.innerHTML = ICON_GITHUB;
         renderErrorNear(card, "push failed, try again");
         captureExtensionException(err, {
           surface: SURFACE,
