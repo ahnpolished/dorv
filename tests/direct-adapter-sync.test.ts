@@ -52,8 +52,7 @@ describe("DirectAdapter baseline sync", () => {
     const ref = { repo: "org/repo", prNumber: 123 };
     const mapping: DocMapping = {
       ...ref,
-      docId: "doc-1",
-      docUrl: "url-1",
+      docs: [{ filename: "f.ts", docId: "doc-1", docUrl: "url-1" }],
       createdAt: "2026-05-16T12:00:00Z",
       lastSyncedAt: "2026-05-16T12:00:00Z",
       headSha: "sha1",
@@ -77,8 +76,7 @@ describe("DirectAdapter baseline sync", () => {
     const ref = { repo: "org/repo", prNumber: 123 };
     const mapping: DocMapping = {
       ...ref,
-      docId: "doc-1",
-      docUrl: "url-1",
+      docs: [{ filename: "f.ts", docId: "doc-1", docUrl: "url-1" }],
       createdAt: "2026-05-16T12:00:00Z",
       lastSyncedAt: "2026-05-16T12:00:00Z",
       headSha: "sha1",
@@ -143,8 +141,7 @@ describe("DirectAdapter baseline sync", () => {
     const ref = { repo: "org/repo", prNumber: 123 };
     await docStore.upsert({
       ...ref,
-      docId: "doc-1",
-      docUrl: "url-1",
+      docs: [{ filename: "docs/rfc.md", docId: "doc-1", docUrl: "url-1" }],
       createdAt: "2026-05-16T12:00:00Z",
       lastSyncedAt: "2026-05-16T12:00:00Z",
       headSha: "sha1",
@@ -210,8 +207,7 @@ describe("DirectAdapter baseline sync", () => {
     const ref = { repo: "org/repo", prNumber: 123 };
     await docStore.upsert({
       ...ref,
-      docId: "doc-1",
-      docUrl: "url-1",
+      docs: [{ filename: "docs/rfc.md", docId: "doc-1", docUrl: "url-1" }],
       createdAt: "2026-05-16T12:00:00Z",
       lastSyncedAt: "2026-05-16T12:00:00Z",
       headSha: "sha1",
@@ -289,8 +285,7 @@ describe("DirectAdapter baseline sync", () => {
     const ref = { repo: "org/repo", prNumber: 123 };
     await docStore.upsert({
       ...ref,
-      docId: "doc-1",
-      docUrl: "url-1",
+      docs: [{ filename: "docs/rfc.md", docId: "doc-1", docUrl: "url-1" }],
       createdAt: "2026-05-16T12:00:00Z",
       lastSyncedAt: "2026-05-16T12:00:00Z",
       headSha: "sha1",
@@ -406,6 +401,83 @@ describe("DirectAdapter baseline sync", () => {
       role: "commenter",
       allowFileDiscovery: false
     });
+  });
+
+  it("HUM-1412: merges docs across separate createDoc calls instead of dropping earlier files", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# README") };
+      }
+      if (urlStr === "https://raw.example/AGENTS.md") {
+        return { ok: true, text: () => Promise.resolve("# AGENTS") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        const body = String(init?.body ?? "");
+        const isReadme = body.includes("README.md");
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve(
+              isReadme
+                ? {
+                    id: "doc-readme",
+                    webViewLink: "https://docs.google.com/document/d/doc-readme/edit"
+                  }
+                : {
+                    id: "doc-agents",
+                    webViewLink: "https://docs.google.com/document/d/doc-agents/edit"
+                  }
+            )
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/") && urlStr.includes("/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments")) {
+        return { ok: true, json: () => Promise.resolve({ id: 100 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const baseInput = {
+      repo: "org/repo",
+      prNumber: 123,
+      title: "Review me",
+      author: "alice",
+      branch: "feature/docs",
+      headSha: "sha1",
+      prUrl: "https://github.com/org/repo/pull/123"
+    };
+
+    await adapter.createDoc({
+      ...baseInput,
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+
+    await adapter.createDoc({
+      ...baseInput,
+      files: [
+        { filename: "AGENTS.md", rawUrl: "https://raw.example/AGENTS.md", status: "modified" }
+      ]
+    });
+
+    const mapping = await docStore.get("org/repo", 123);
+    expect(mapping?.docs.map((d: any) => d.filename).sort()).toEqual(["AGENTS.md", "README.md"]);
+    expect(mapping?.docs.find((d: any) => d.filename === "README.md")?.docId).toBe("doc-readme");
+    expect(mapping?.docs.find((d: any) => d.filename === "AGENTS.md")?.docId).toBe("doc-agents");
   });
 
   it("renders mermaid fenced blocks as images in the uploaded Google Doc HTML", async () => {
@@ -611,18 +683,24 @@ describe("DirectAdapter baseline sync", () => {
       {
         repo: "org/repo",
         prNumber: 123,
-        docId: "doc-1",
-        docUrl: "https://docs.google.com/document/d/doc-1/edit",
+        docs: [
+          {
+            filename: "README.md",
+            docId: "doc-1",
+            docUrl: "https://docs.google.com/document/d/doc-1/edit"
+          }
+        ],
         createdAt: "t",
         lastSyncedAt: "t",
         headSha: "sha1",
         latestSha: "sha1",
         isStale: false
-      }
+      },
+      "doc-1"
     );
 
     expect(reviewBody).toMatchObject({
-      body: "> From Google Docs -- @humphreyahn -- Please fix this\n\n[View in GDoc](https://docs.google.com/document/d/doc-1/edit)",
+      body: "> From Google Docs -- @humphreyahn -- Please fix this\n\n[View in GDoc](https://docs.google.com/document/d/doc-1/edit)\n\n<!-- dorv-src=doc:doc-comment-1 -->",
       path: "README.md",
       line: 1
     });
@@ -664,7 +742,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
           json: () =>
             Promise.resolve([
               {
-                body: "<!-- dorv-doc-id=existing-doc-id -->\n🤖 **dorv** has created a linked Google Doc for review:\n\n[PR #42 - My PR](https://docs.google.com/document/d/existing-doc-id/edit)"
+                body: '<!-- dorv-docs={"README.md":"existing-doc-id"} -->\n🤖 **dorv** has created linked Google Doc for review:\n\n- [README.md](https://docs.google.com/document/d/existing-doc-id/edit)'
               }
             ])
         };
@@ -686,15 +764,20 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
       ]
     });
 
-    expect(result.mapping.docId).toBe("existing-doc-id");
-    expect(result.mapping.docUrl).toBe("https://docs.google.com/document/d/existing-doc-id/edit");
+    expect(result.mapping.docs).toEqual([
+      {
+        filename: "README.md",
+        docId: "existing-doc-id",
+        docUrl: "https://docs.google.com/document/d/existing-doc-id/edit"
+      }
+    ]);
     expect(result.mapping.headSha).toBe("sha-abc");
 
     const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
     expect(driveUpload).toBeUndefined();
 
     const mapping = await docStore.get("org/repo", 42);
-    expect(mapping?.docId).toBe("existing-doc-id");
+    expect(mapping?.docs[0]?.docId).toBe("existing-doc-id");
   });
 
   it("reuses existing GDoc when dorv bot comment (legacy format, no marker) is in PR comments", async () => {
@@ -733,8 +816,13 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
       ]
     });
 
-    expect(result.mapping.docId).toBe("legacy-doc-id");
-    expect(result.mapping.docUrl).toBe("https://docs.google.com/document/d/legacy-doc-id/edit");
+    expect(result.mapping.docs).toEqual([
+      {
+        filename: "__legacy__",
+        docId: "legacy-doc-id",
+        docUrl: "https://docs.google.com/document/d/legacy-doc-id/edit"
+      }
+    ]);
 
     const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
     expect(driveUpload).toBeUndefined();
@@ -825,7 +913,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
       ]
     });
 
-    expect(result.mapping.docId).toBe("new-doc-id");
+    expect(result.mapping.docs[0]?.docId).toBe("new-doc-id");
     const driveUpload = calls.find((u) => u.includes("/upload/drive/v3/files"));
     expect(driveUpload).toBeDefined();
   });
@@ -884,11 +972,11 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
       ]
     });
 
-    expect(result.mapping.docId).toBe("green-field-doc-id");
+    expect(result.mapping.docs[0]?.docId).toBe("green-field-doc-id");
     expect(result.mapping.headSha).toBe("sha-abc");
 
     // Bot comment must carry the hidden marker so future pickup finds it
-    expect(postedBotComment).toContain("<!-- dorv-doc-id=green-field-doc-id -->");
+    expect(postedBotComment).toContain('<!-- dorv-docs={"README.md":"green-field-doc-id"} -->');
     expect(postedBotComment).toContain("**dorv**");
     expect(postedBotComment).toContain(
       "https://docs.google.com/document/d/green-field-doc-id/edit"
@@ -896,6 +984,6 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
 
     // Mapping must be stored
     const stored = await docStore.get("org/repo", 42);
-    expect(stored?.docId).toBe("green-field-doc-id");
+    expect(stored?.docs[0]?.docId).toBe("green-field-doc-id");
   });
 });

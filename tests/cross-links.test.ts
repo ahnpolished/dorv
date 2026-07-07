@@ -16,8 +16,7 @@ const GH_COMMENT_URL = "https://github.com/org/repo/pull/1#discussion_r42";
 const BASE_MAPPING: DocMapping = {
   repo: "org/repo",
   prNumber: 1,
-  docId: "doc-99",
-  docUrl: DOC_URL,
+  docs: [{ filename: "README.md", docId: "doc-99", docUrl: DOC_URL }],
   createdAt: "t",
   lastSyncedAt: "t",
   headSha: "sha1",
@@ -56,9 +55,15 @@ describe("HUM-1254 cross-links", () => {
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
       const urlStr = String(url);
-      if (urlStr.includes("googleapis.com/drive/v3/files/doc-99/comments")) {
+      if (
+        urlStr.includes("googleapis.com/drive/v3/files/doc-99/comments") &&
+        init?.method === "POST"
+      ) {
         capturedBody = JSON.parse(String(init?.body)).content as string;
         return { ok: true, json: () => Promise.resolve({ id: "gdoc-c-1" }) };
+      }
+      if (urlStr.includes("googleapis.com/drive/v3/files/doc-99/comments")) {
+        return { ok: true, json: () => Promise.resolve({ comments: [] }) };
       }
       return { ok: true, json: async () => ({}) };
     });
@@ -124,7 +129,8 @@ describe("HUM-1254 cross-links", () => {
         updatedAt: "t",
         resolved: false
       } as any,
-      BASE_MAPPING
+      BASE_MAPPING,
+      "doc-99"
     );
 
     expect(capturedBody).toContain("Please clarify");

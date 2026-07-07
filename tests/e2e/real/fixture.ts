@@ -216,21 +216,21 @@ export async function buildRealCreateDocInput(): Promise<CreateDocInput> {
 /** Send CREATE_DOC through the extension runtime, using the same background adapter path as UI. */
 export async function createDocViaExtension(
   extensionContext: BrowserContext,
-  extensionId: string,
+  _extensionId: string,
   input: CreateDocInput
 ): Promise<CreateDocResult> {
-  const page = await extensionContext.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html`, {
-    waitUntil: "domcontentloaded"
-  });
-  const response = await page.evaluate((payload) => {
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
+  const worker =
+    extensionContext.serviceWorkers()[0] ?? (await extensionContext.waitForEvent("serviceworker"));
+  const response = await worker.evaluate((payload) => {
     return new Promise<{ success: boolean; payload?: CreateDocResult; error?: string }>(
       (resolve) => {
         chrome.runtime.sendMessage({ type: "CREATE_DOC", payload }, resolve);
       }
     );
   }, input);
-  await page.close();
   if (!response.success || !response.payload) {
     throw new Error(response.error ?? "CREATE_DOC returned no payload");
   }
@@ -486,78 +486,15 @@ export async function exportDriveDocAsText(fileId: string): Promise<string> {
   return resp.text();
 }
 
-// ── Sidepanel helper ──────────────────────────────────────────────────────────
-
-/**
- * Navigate to the real PR URL, press Alt+Shift+D to trigger the extension's
- * toggle-sidepanel command, and wait for the sidepanel page to appear.
- *
- * In headed Chrome the native sidepanel opens; in --headless=new the
- * openSidePanelForTab fallback opens sidepanel.html as a tab instead.
- * Either way chrome.tabs.query and chrome.identity are patched via an init
- * script so the sidepanel can resolve the PR URL and Google token in tests.
- */
-export async function openSidepanelOnRealPr(
-  extensionContext: BrowserContext,
-  extensionId: string
-): Promise<import("@playwright/test").Page> {
-  // Patch chrome APIs in every new extension page (including the sidepanel).
-  // addInitScript accumulates per-call but the patches are idempotent.
-  await extensionContext.addInitScript(
-    ({ prUrl, googleToken }: { prUrl: string; googleToken: string }) => {
-      if (typeof chrome === "undefined") return;
-      const fakeTab = [{ url: prUrl, id: 1 }];
-      (chrome.tabs as any).query = (
-        _filter: unknown,
-        callback?: (tabs: { url: string; id: number }[]) => void
-      ) => {
-        if (typeof callback === "function") {
-          callback(fakeTab);
-          return;
-        }
-        return Promise.resolve(fakeTab);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (chrome.identity) {
-        (chrome.identity as any).getAuthToken = (
-          _opts: unknown,
-          callback: (token: string) => void
-        ) => {
-          callback(googleToken);
-        };
-      }
-    },
-    { prUrl: REAL_PR_URL, googleToken: GOOGLE_TOKEN }
+/** List every comment on a Drive doc (id + content), for dedup/regression assertions. */
+export async function listDriveComments(docId: string): Promise<{ id: string; content: string }[]> {
+  const resp = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${docId}/comments?pageSize=100&fields=comments(id,content)`,
+    { headers: { Authorization: `Bearer ${GOOGLE_TOKEN}` } }
   );
-
-  const prPage = await extensionContext.newPage();
-
-  // Try keyboard shortcut first (works in --headless=new when the content script
-  // intercepts it and calls chrome.sidePanel.open(), which opens as a tab).
-  // Fall back to direct navigation if the page event doesn't fire — the shortcut
-  // doesn't reliably reach chrome.commands in all headless configurations.
-  let sidepanel: import("@playwright/test").Page;
-  try {
-    [sidepanel] = await Promise.all([
-      extensionContext.waitForEvent("page", {
-        predicate: (p) => p.url().includes(`${extensionId}/sidepanel`),
-        timeout: 8_000
-      }),
-      (async () => {
-        await prPage.goto(REAL_PR_URL, { waitUntil: "domcontentloaded" });
-        await prPage.keyboard.press("Alt+Shift+D");
-      })()
-    ]);
-  } catch {
-    // Keyboard shortcut didn't trigger the sidepanel page event — open directly.
-    sidepanel = await extensionContext.newPage();
-    await sidepanel.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-      waitUntil: "domcontentloaded"
-    });
-  }
-
-  await sidepanel.waitForLoadState("domcontentloaded");
-  return sidepanel;
+  if (!resp.ok) return [];
+  const data = (await resp.json()) as { comments?: { id: string; content: string }[] };
+  return data.comments ?? [];
 }
 
 // ── Playwright fixture definition ─────────────────────────────────────────────
@@ -640,20 +577,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { auto: true }
   ],
 
-  triggerSync: async ({ extensionContext, extensionId }, use) => {
+  // Sends SYNC_NOW directly from the background service worker.
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
+  triggerSync: async ({ extensionWorker }, use) => {
     const trigger = async () => {
-      const page = await extensionContext.newPage();
-      await page.goto(`chrome-extension://${extensionId}/options.html`, {
-        waitUntil: "domcontentloaded"
-      });
-      await page.evaluate(() => {
+      await extensionWorker.evaluate(() => {
         return new Promise<void>((resolve) => {
           chrome.runtime.sendMessage({ type: "SYNC_NOW", payload: null }, () => {
             resolve();
           });
         });
       });
-      await page.close();
     };
     await use(trigger);
   }

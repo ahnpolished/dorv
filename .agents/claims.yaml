@@ -18,6 +18,24 @@
 #   poll_interval_minutes: default 5
 
 claims:
+  V030:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-03T00:00:00Z"
+    completed_at: "2026-07-04T02:00:00Z"
+    depends_on: []
+    branch: feature/v0.3.0
+    worktree: .worktrees/v0.3.0
+    pr: https://github.com/ahnpolished/dorv/pull/78
+  HUM-1410:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-04T12:35:00Z"
+    completed_at: "2026-07-04T12:42:00Z"
+    depends_on: []
+    branch: feature/hum-1410
+    worktree: .worktrees/feature-hum-1410
+    pr: https://github.com/ahnpolished/dorv/pull/79
   HUM-1205:
     agent: codex
     status: done
@@ -503,5 +521,13 @@ claims:
     claimed_at: "2026-05-30T09:20:00Z"
     depends_on: []
     completed_at: "2026-05-30T13:24:00Z"
+
+  HUM-1415:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-05T18:40:00Z"
+    depends_on: []
+    branch: feature/hum-1415
+    worktree: .worktrees/feature-hum-1415
 
 wait_queue: {}

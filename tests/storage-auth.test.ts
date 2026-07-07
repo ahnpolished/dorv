@@ -67,6 +67,48 @@ describe("AuthStore", () => {
       );
     });
 
+    it("fetches google profile from userinfo endpoint", async () => {
+      const mockProfile = {
+        email: "test@example.com",
+        name: "Test User",
+        picture: "https://example.com/avatar.jpg"
+      };
+
+      // Mock fetch for the userinfo call
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockProfile)
+      });
+
+      try {
+        const profile = await authStore.getGoogleProfile("mock-token");
+        expect(profile).toEqual(mockProfile);
+        expect(global.fetch).toHaveBeenCalledWith("https://www.googleapis.com/oauth2/v2/userinfo", {
+          headers: { Authorization: "Bearer mock-token" }
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
+    it("throws when userinfo fetch fails", async () => {
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized"
+      });
+
+      try {
+        await expect(authStore.getGoogleProfile("bad-token")).rejects.toThrow(
+          "Failed to fetch Google profile: 401 Unauthorized"
+        );
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
     it("revokes google token", async () => {
       const mockToken = "stale-token";
       (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {

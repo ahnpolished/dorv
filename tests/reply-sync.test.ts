@@ -17,8 +17,9 @@ vi.stubGlobal("fetch", mockFetch);
 function makeDocMapping(ref: { repo: string; prNumber: number }): DocMapping {
   return {
     ...ref,
-    docId: "doc-1",
-    docUrl: "https://docs.google.com/document/d/doc-1",
+    docs: [
+      { filename: "f.md", docId: "doc-1", docUrl: "https://docs.google.com/document/d/doc-1" }
+    ],
     createdAt: "2026-05-16T12:00:00Z",
     lastSyncedAt: "2026-05-16T12:00:00Z",
     headSha: "sha1",
@@ -66,6 +67,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 10,
         docCommentId: "doc-c-10",
+        docId: "doc-1",
         source: "github"
       });
 
@@ -165,6 +167,171 @@ describe("Reply sync — bidirectional", () => {
       expect(await replyMappingStore.getByGH(20)).toBeUndefined();
     });
 
+    it("pushes a nested GH reply (reply-to-reply) to Drive when parent reply is already mapped", async () => {
+      const ref = { repo: "org/repo", prNumber: 1 };
+      await authStore.setGitHubToken("gh-tok");
+      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await docStore.upsert(makeDocMapping(ref));
+
+      // Root comment mapping
+      await mappingStore.upsert({
+        ...ref,
+        ghCommentId: 10,
+        docCommentId: "doc-c-10",
+        docId: "doc-1",
+        source: "github"
+      });
+      // Parent reply mapping (reply-to-root-comment is already synced)
+      await replyMappingStore.upsert({
+        ...ref,
+        ghReplyId: 11,
+        docReplyId: "doc-reply-11",
+        ghParentCommentId: 10,
+        docParentCommentId: "doc-c-10",
+        docId: "doc-1",
+        source: "github"
+      });
+
+      let driveReplyBody: any;
+      mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.includes("api.github.com")) {
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                {
+                  id: 10,
+                  body: "root comment",
+                  path: "f.md",
+                  line: 5,
+                  in_reply_to_id: null,
+                  user: { login: "alice" },
+                  html_url: "https://github.com/root",
+                  created_at: "t",
+                  updated_at: "t"
+                },
+                {
+                  id: 11,
+                  body: "reply to root",
+                  path: "f.md",
+                  line: 5,
+                  in_reply_to_id: 10,
+                  user: { login: "bob" },
+                  html_url: "https://github.com/r1",
+                  created_at: "t",
+                  updated_at: "t"
+                },
+                {
+                  id: 12,
+                  body: "nested reply to reply",
+                  path: "f.md",
+                  line: 5,
+                  in_reply_to_id: 11,
+                  user: { login: "carol" },
+                  html_url: "https://github.com/r2",
+                  created_at: "t",
+                  updated_at: "t"
+                }
+              ])
+          };
+        }
+        if (url.includes("googleapis.com/drive") && url.includes("/replies")) {
+          driveReplyBody = JSON.parse(String(init?.body));
+          return { ok: true, json: () => Promise.resolve({ id: "drive-reply-nested" }) };
+        }
+        if (url.includes("googleapis.com/drive")) {
+          // fetchGDocComments returns empty
+          return { ok: true, json: () => Promise.resolve({ comments: [] }) };
+        }
+        return { ok: true, json: () => Promise.resolve({}) };
+      });
+
+      await adapter.syncAll();
+
+      const nestedMapping = await replyMappingStore.getByGH(12);
+      expect(nestedMapping).toBeDefined();
+      expect(nestedMapping?.docReplyId).toBe("drive-reply-nested");
+      // ghParentCommentId reflects the GitHub reply chain: nested reply's immediate parent is reply 11
+      expect(nestedMapping?.ghParentCommentId).toBe(11);
+      // docParentCommentId resolves to the root doc comment via the ReplyMapping fallback
+      expect(nestedMapping?.docParentCommentId).toBe("doc-c-10");
+      expect(nestedMapping?.source).toBe("github");
+      expect(driveReplyBody).toEqual({
+        content:
+          "[GitHub: @carol]\n\nnested reply to reply\n\n[View on GitHub](https://github.com/r2)"
+      });
+    });
+
+    it("skips nested GH reply when parent reply's inReplyToId has no mapping in either store", async () => {
+      const ref = { repo: "org/repo", prNumber: 1 };
+      await authStore.setGitHubToken("gh-tok");
+      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await docStore.upsert(makeDocMapping(ref));
+
+      // Root comment mapping exists for id=10
+      await mappingStore.upsert({
+        ...ref,
+        ghCommentId: 10,
+        docCommentId: "doc-c-10",
+        docId: "doc-1",
+        source: "github"
+      });
+
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes("api.github.com")) {
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                {
+                  id: 10,
+                  body: "root comment",
+                  path: "f.md",
+                  line: 5,
+                  in_reply_to_id: null,
+                  user: { login: "alice" },
+                  html_url: "https://github.com/root",
+                  created_at: "t",
+                  updated_at: "t"
+                },
+                {
+                  id: 11,
+                  body: "reply to root",
+                  path: "f.md",
+                  line: 5,
+                  in_reply_to_id: 10,
+                  user: { login: "bob" },
+                  html_url: "https://github.com/r1",
+                  created_at: "t",
+                  updated_at: "t"
+                },
+                {
+                  id: 12,
+                  body: "nested reply to ghost",
+                  path: "f.md",
+                  line: 5,
+                  // inReplyToId=999 — parent is a comment not present in this PR/thread
+                  in_reply_to_id: 999,
+                  user: { login: "carol" },
+                  html_url: "https://github.com/r2",
+                  created_at: "t",
+                  updated_at: "t"
+                }
+              ])
+          };
+        }
+        if (url.includes("googleapis.com/drive")) {
+          return { ok: true, json: () => Promise.resolve({ comments: [] }) };
+        }
+        return { ok: true, json: () => Promise.resolve({}) };
+      });
+
+      await adapter.syncAll();
+
+      // The nested reply should be skipped because inReplyToId=999 has no mapping
+      expect(await replyMappingStore.getByGH(12)).toBeUndefined();
+    });
+
     it("does not double-sync a GH reply", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
@@ -174,6 +341,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 10,
         docCommentId: "doc-c-10",
+        docId: "doc-1",
         source: "github"
       });
       // Pre-populate reply mapping
@@ -183,6 +351,7 @@ describe("Reply sync — bidirectional", () => {
         docReplyId: "existing-reply",
         ghParentCommentId: 10,
         docParentCommentId: "doc-c-10",
+        docId: "doc-1",
         source: "github"
       });
 
@@ -245,6 +414,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 50,
         docCommentId: "doc-c-50",
+        docId: "doc-1",
         source: "github"
       });
 
@@ -302,6 +472,7 @@ describe("Reply sync — bidirectional", () => {
         ...ref,
         ghCommentId: 50,
         docCommentId: "doc-c-50",
+        docId: "doc-1",
         source: "github"
       });
       await replyMappingStore.upsert({
@@ -310,6 +481,7 @@ describe("Reply sync — bidirectional", () => {
         docReplyId: "doc-reply-7",
         ghParentCommentId: 50,
         docParentCommentId: "doc-c-50",
+        docId: "doc-1",
         source: "gdoc"
       });
 

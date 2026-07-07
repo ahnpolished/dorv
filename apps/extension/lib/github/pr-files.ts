@@ -13,12 +13,6 @@ export interface GitHubPullFile {
   previous_filename?: string;
 }
 
-export interface PrSidebarState {
-  visible: boolean;
-  files: MarkdownFileRef[];
-  buttonLabel: string;
-}
-
 export interface GitHubFileClientOptions {
   /**
    * The fetch function to use. If using window.fetch, it MUST be bound to window:
@@ -65,18 +59,6 @@ export function filterMarkdownFiles(files: GitHubPullFile[]): MarkdownFileRef[] 
 
       return mapped;
     });
-}
-
-export function buildPrSidebarState(files: MarkdownFileRef[]): PrSidebarState {
-  if (files.length === 0) {
-    return { visible: false, files: [], buttonLabel: "" };
-  }
-
-  return {
-    visible: true,
-    files,
-    buttonLabel: `Create Google Doc (${files.length.toString()} ${files.length === 1 ? "file" : "files"})`
-  };
 }
 
 export async function fetchPullRequestFiles(

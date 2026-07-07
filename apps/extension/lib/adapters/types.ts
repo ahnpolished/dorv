@@ -12,9 +12,14 @@ export interface MarkdownFileRef {
   previousFilename?: string;
 }
 
-export interface DocMapping extends PullRequestRef {
+export interface DocFileMapping {
+  filename: string;
   docId: string;
   docUrl: string;
+}
+
+export interface DocMapping extends PullRequestRef {
+  docs: DocFileMapping[];
   createdAt: string;
   lastSyncedAt: string;
   headSha: string;
@@ -25,6 +30,7 @@ export interface DocMapping extends PullRequestRef {
 export interface CommentMapping extends PullRequestRef {
   ghCommentId: number;
   docCommentId: string;
+  docId: string;
   source: SyncSource;
   ghThreadId?: string;
   ghUpdatedAt?: string;
@@ -37,6 +43,7 @@ export interface ReplyMapping extends PullRequestRef {
   docReplyId: string;
   ghParentCommentId: number;
   docParentCommentId: string;
+  docId: string;
   source: SyncSource;
   ghUpdatedAt?: string;
 }
@@ -128,6 +135,16 @@ export interface SyncStatus extends PullRequestRef {
   message?: string;
 }
 
+export function findDocForFile(mapping: DocMapping, filename: string): DocFileMapping | undefined {
+  if (!Array.isArray(mapping.docs)) return undefined;
+  return mapping.docs.find((d) => d.filename === filename);
+}
+
+export function findDocById(mapping: DocMapping, docId: string): DocFileMapping | undefined {
+  if (!Array.isArray(mapping.docs)) return undefined;
+  return mapping.docs.find((d) => d.docId === docId);
+}
+
 export interface SyncAdapter {
   getDoc(ref: PullRequestRef): Promise<DocMapping | undefined>;
   createDoc(input: CreateDocInput): Promise<CreateDocResult>;
@@ -135,6 +152,17 @@ export interface SyncAdapter {
   getDocComments(ref: PullRequestRef): Promise<GoogleDocComment[]>;
   getCommentMappings(ref: PullRequestRef): Promise<CommentMapping[]>;
   pushGHCommentToDoc(comment: GitHubReviewComment, mapping: DocMapping): Promise<CommentMapping>;
-  pushDocCommentToGH(comment: GoogleDocComment, mapping: DocMapping): Promise<CommentMapping>;
+  /**
+   * `docId` identifies which doc in `mapping.docs` this comment came from
+   * (`GoogleDocComment` itself doesn't carry that — the caller knows which
+   * doc's comment sidebar it read the comment from).
+   */
+  pushDocCommentToGH(
+    comment: GoogleDocComment,
+    mapping: DocMapping,
+    docId: string
+  ): Promise<CommentMapping>;
+  /** Syncs a single PR on demand (button-triggered). Primary entry point as of v0.3.0. */
+  syncPR(ref: PullRequestRef): Promise<void>;
   syncAll(): Promise<void>;
 }

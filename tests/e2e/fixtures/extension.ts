@@ -113,22 +113,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(patch);
   },
 
-  // Sends SYNC_NOW from the options extension page (which has chrome.runtime access).
-  triggerSync: async ({ extensionContext, extensionId }, use) => {
+  // Sends SYNC_NOW directly from the background service worker.
+  // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+  // so we bypass pages entirely and call chrome.runtime.sendMessage from
+  // the SW context (which has full chrome.runtime access).
+  triggerSync: async ({ extensionWorker }, use) => {
     const trigger = async () => {
-      const page = await extensionContext.newPage();
-      // Navigate to any extension page — options page is convenient
-      await page.goto(`chrome-extension://${extensionId}/options.html`, {
-        waitUntil: "domcontentloaded"
-      });
-      await page.evaluate(() => {
+      await extensionWorker.evaluate(() => {
         return new Promise<void>((resolve) => {
           chrome.runtime.sendMessage({ type: "SYNC_NOW", payload: null }, () => {
             resolve();
           });
         });
       });
-      await page.close();
     };
     await use(trigger);
   }

@@ -1,5 +1,6 @@
 import type {
   CommentMapping,
+  DocFileMapping,
   DocMapping,
   IdentityMapping,
   NewSyncedActivity,
@@ -8,6 +9,7 @@ import type {
   SyncedActivity,
   SyncStatus
 } from "../adapters/types.js";
+import { findDocById } from "../adapters/types.js";
 import type { StorageArea } from "./area.js";
 
 const activePrsKey = "active_prs";
@@ -96,7 +98,24 @@ export function createDocStore(storage: StorageArea) {
       return getValue<DocMapping>(storage, prKey("docStore", { repo, prNumber }));
     },
     async upsert(mapping: DocMapping): Promise<void> {
-      await storage.set({ [prKey("docStore", mapping)]: mapping });
+      const key = prKey("docStore", mapping);
+      const existing = await this.get(mapping.repo, mapping.prNumber);
+      if (existing) {
+        // Merge docs[]: replace by filename, append if new.
+        // This preserves previously-linked files when linking an additional
+        // markdown file in the same PR.
+        const mergedDocs: DocFileMapping[] = [...existing.docs];
+        for (const newDoc of mapping.docs) {
+          const idx = mergedDocs.findIndex((d) => d.filename === newDoc.filename);
+          if (idx >= 0) {
+            mergedDocs[idx] = newDoc;
+          } else {
+            mergedDocs.push(newDoc);
+          }
+        }
+        mapping = { ...mapping, docs: mergedDocs };
+      }
+      await storage.set({ [key]: mapping });
       await addActivePr(storage, mapping);
     },
     async listActive(): Promise<PullRequestRef[]> {
@@ -106,7 +125,7 @@ export function createDocStore(storage: StorageArea) {
       const active = await this.listActive();
       for (const ref of active) {
         const mapping = await this.get(ref.repo, ref.prNumber);
-        if (mapping?.docId === docId) return mapping;
+        if (mapping && findDocById(mapping, docId)) return mapping;
       }
       return undefined;
     }
@@ -312,18 +331,6 @@ export function createStatusStore(storage: StorageArea) {
         updatedAt: new Date().toISOString()
       };
       await this.set({ ...existing, ...update });
-    }
-  };
-}
-
-export function createSettingsStore(storage: StorageArea) {
-  const KEY = "settingsStore:autoOpenSidepanel";
-  return {
-    async getAutoOpenSidepanel(): Promise<boolean> {
-      return (await getValue<boolean>(storage, KEY)) ?? true;
-    },
-    async setAutoOpenSidepanel(value: boolean): Promise<void> {
-      await storage.set({ [KEY]: value });
     }
   };
 }
