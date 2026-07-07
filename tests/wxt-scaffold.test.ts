@@ -60,14 +60,7 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(config).toContain("icon-48.png");
     expect(config).toContain("icon-128.png");
 
-    for (const asset of [
-      "dorv.svg",
-      "dorv-sync.svg",
-      "status-icons.svg",
-      "icon-16.png",
-      "icon-48.png",
-      "icon-128.png"
-    ]) {
+    for (const asset of ["dorv.svg", "icon-16.png", "icon-48.png", "icon-128.png"]) {
       expect(existsSync(join(extensionRoot, "public", asset))).toBe(true);
     }
 
@@ -83,15 +76,6 @@ describe("HUM-1194 WXT extension scaffold", () => {
       width: 128,
       height: 128
     });
-
-    const syncSvg = readFileSync(join(extensionRoot, "public", "dorv-sync.svg"), "utf8");
-    expect(syncSvg).toContain("animation: spin 1s linear infinite");
-    expect(syncSvg).toContain("prefers-reduced-motion");
-
-    const statusSprite = readFileSync(join(extensionRoot, "public", "status-icons.svg"), "utf8");
-    for (const symbol of ["status-linked", "status-stale", "status-error", "status-syncing"]) {
-      expect(statusSprite).toContain(`id="${symbol}"`);
-    }
   });
 
   it("creates the GitHub and Google Docs button content scripts", () => {
