@@ -1,5 +1,5 @@
 /** Icon set for icon-only buttons, sourced from lucide-react (ISC). */
-import { AlertTriangle, FilePlus, FileText, LogIn, RefreshCw } from "lucide-react";
+import { AlertTriangle, FilePlus, FileText, History, LogIn, RefreshCw } from "lucide-react";
 
 const SIZE = 16;
 const STROKE_WIDTH = 1.75;
@@ -32,6 +32,13 @@ export function IconSync({ className }: { className?: string } = {}) {
       strokeWidth={STROKE_WIDTH}
       aria-hidden="true"
     />
+  );
+}
+
+/** Clock-with-arrow — revision history. */
+export function IconHistory() {
+  return (
+    <History className="dorv-icon" size={SIZE} strokeWidth={STROKE_WIDTH} aria-hidden="true" />
   );
 }
 

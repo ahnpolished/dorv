@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 import type { MarkdownFileRef } from "./types.js";
 import type { GitHubPullRequestRef } from "../github/pr-files.js";
+import type { GoogleDriveRevision } from "../gdoc/drive.js";
 
 /**
  * Converts a parsed GitHub URL ref (owner + repo kept separate) into the
@@ -133,6 +134,14 @@ export interface PrFileInfo {
  * `host_permissions`; the background worker has unrestricted network access
  * and handles this reliably.
  */
+export async function getDocRevisionsViaBackground(docId: string): Promise<GoogleDriveRevision[]> {
+  const payload = await sendBackgroundMessage<GoogleDriveRevision[]>(
+    { type: "GET_DOC_REVISIONS", payload: { docId } },
+    "Fetching Google Doc revisions failed."
+  );
+  return payload ?? [];
+}
+
 export async function fetchPrInfoViaBackground(ref: PullRequestRef): Promise<PrFileInfo> {
   const payload = await sendBackgroundMessage<PrFileInfo>(
     { type: "FETCH_PR_INFO", payload: { ref } },

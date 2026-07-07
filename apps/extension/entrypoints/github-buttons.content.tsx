@@ -13,6 +13,7 @@ import { captureExtensionException, initSentryForSurface } from "../lib/telemetr
 import {
   createDocViaBackground,
   fetchPrInfoViaBackground,
+  getDocRevisionsViaBackground,
   openOptionsPageViaBackground,
   syncPRViaBackground,
   toPullRequestRef
@@ -24,7 +25,14 @@ import {
   hasFileButton
 } from "../lib/github/button-injection.js";
 import type { DocMapping, SyncStatus } from "../lib/adapters/types.js";
-import { IconAlert, IconFile, IconFileAdd, IconGear, IconSync } from "../lib/design/icons.js";
+import {
+  IconAlert,
+  IconFile,
+  IconFileAdd,
+  IconGear,
+  IconHistory,
+  IconSync
+} from "../lib/design/icons.js";
 import animationsCss from "../lib/design/animations.css?inline";
 import tokensCss from "../lib/design/tokens.css?inline";
 
@@ -78,6 +86,11 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
   const [isSyncing, setIsSyncing] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
   const [syncError, setSyncError] = useState<string | undefined>();
+  const [revisions, setRevisions] = useState<
+    { id: string; modifiedTime: string; editor: string | undefined }[]
+  >([]);
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -211,6 +224,38 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
     });
   };
 
+  const handleToggleRevisions = async () => {
+    if (showRevisions) {
+      setShowRevisions(false);
+      return;
+    }
+    if (view.kind !== "linked") return;
+    const doc = view.mapping.docs.find((d) => d.filename === filename);
+    if (!doc) return;
+    setRevisionsLoading(true);
+    try {
+      const revs = await getDocRevisionsViaBackground(doc.docId);
+      setRevisions(
+        revs
+          .slice(-5)
+          .reverse()
+          .map((r) => ({
+            id: r.id,
+            modifiedTime: r.modifiedTime,
+            editor: r.lastModifyingUser?.displayName ?? r.lastModifyingUser?.emailAddress
+          }))
+      );
+      setShowRevisions(true);
+    } catch (err: unknown) {
+      captureExtensionException(err, {
+        surface: "github-buttons",
+        tags: { operation: "toggle_revisions" }
+      });
+    } finally {
+      setRevisionsLoading(false);
+    }
+  };
+
   if (view.kind === "hidden" || view.kind === "loading") return null;
 
   return (
@@ -247,38 +292,68 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       )}
 
       {view.kind === "linked" && (
-        <span className="dorv-file-btn-set">
-          <button
-            type="button"
-            className="dorv-file-btn-el"
-            onClick={handleOpenDoc}
-            title={`Open Google Doc for ${filename}`}
-            aria-label={`Open Google Doc for ${filename}`}
-          >
-            <IconFile />
-          </button>
-          <button
-            type="button"
-            className="dorv-file-btn-el"
-            onClick={() => {
-              void handleSync();
-            }}
-            disabled={isSyncing}
-            title={isSyncing ? "Syncing…" : `Sync ${filename} to Google Doc`}
-            aria-label={isSyncing ? "Syncing" : `Sync ${filename} to Google Doc`}
-          >
-            <IconSync className={isSyncing ? "dorv-spinning" : ""} />
-          </button>
-          {view.mapping.isStale && (
-            <span
-              className="dorv-stale-badge"
-              title="Doc content may be out of date with the latest PR changes"
-              aria-label="Doc may be out of date"
+        <>
+          <span className="dorv-file-btn-set">
+            <button
+              type="button"
+              className="dorv-file-btn-el"
+              onClick={handleOpenDoc}
+              title={`Open Google Doc for ${filename}`}
+              aria-label={`Open Google Doc for ${filename}`}
             >
-              <IconAlert />
+              <IconFile />
+            </button>
+            <button
+              type="button"
+              className="dorv-file-btn-el"
+              onClick={() => {
+                void handleSync();
+              }}
+              disabled={isSyncing}
+              title={isSyncing ? "Syncing…" : `Sync ${filename} to Google Doc`}
+              aria-label={isSyncing ? "Syncing" : `Sync ${filename} to Google Doc`}
+            >
+              <IconSync className={isSyncing ? "dorv-spinning" : ""} />
+            </button>
+            <button
+              type="button"
+              className="dorv-file-btn-el"
+              onClick={() => {
+                void handleToggleRevisions();
+              }}
+              disabled={revisionsLoading}
+              title={revisionsLoading ? "Loading history…" : "Show Google Doc edit history"}
+              aria-label={revisionsLoading ? "Loading history" : "Show Google Doc edit history"}
+            >
+              <IconHistory />
+            </button>
+            {view.mapping.isStale && (
+              <span
+                className="dorv-stale-badge"
+                title="Doc content may be out of date with the latest PR changes"
+                aria-label="Doc may be out of date"
+              >
+                <IconAlert />
+              </span>
+            )}
+          </span>
+          {showRevisions && (
+            <span className="dorv-revisions-panel">
+              {revisions.length === 0 ? (
+                <span className="dorv-revisions-empty">No revision history found.</span>
+              ) : (
+                revisions.map((r) => (
+                  <span key={r.id} className="dorv-revisions-row">
+                    <span className="dorv-revisions-time">
+                      {new Date(r.modifiedTime).toLocaleString()}
+                    </span>
+                    {r.editor && <span className="dorv-revisions-editor">by {r.editor}</span>}
+                  </span>
+                ))
+              )}
             </span>
           )}
-        </span>
+        </>
       )}
 
       {(createError ?? syncError) && (
@@ -511,6 +586,43 @@ ${animationsCss}
 }
 .dorv-state-enter {
   animation: dorv-fade-in 0.15s ease-out;
+}
+.dorv-revisions-panel {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 100;
+  background: var(--dorv-light-surface);
+  border: 1.5px solid var(--dorv-orange);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 220px;
+  max-width: 320px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: var(--dorv-gh-text);
+  line-height: 1.4;
+}
+.dorv-revisions-row {
+  display: block;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--dorv-orange-subtle);
+}
+.dorv-revisions-row:last-child {
+  border-bottom: none;
+}
+.dorv-revisions-time {
+  font-weight: 500;
+  display: block;
+}
+.dorv-revisions-editor {
+  color: var(--dorv-gh-muted-text);
+  font-size: 11px;
+}
+.dorv-revisions-empty {
+  color: var(--dorv-gh-muted-text);
+  font-style: italic;
 }
 `;
   document.head.appendChild(style);
