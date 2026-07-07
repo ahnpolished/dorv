@@ -13,7 +13,6 @@ import { captureExtensionException, initSentryForSurface } from "../lib/telemetr
 import {
   createDocViaBackground,
   fetchPrInfoViaBackground,
-  getDocRevisionsViaBackground,
   openOptionsPageViaBackground,
   syncPRViaBackground,
   toPullRequestRef
@@ -25,14 +24,7 @@ import {
   hasFileButton
 } from "../lib/github/button-injection.js";
 import type { DocMapping, SyncStatus } from "../lib/adapters/types.js";
-import {
-  IconAlert,
-  IconFile,
-  IconFileAdd,
-  IconGear,
-  IconHistory,
-  IconSync
-} from "../lib/design/icons.js";
+import { IconAlert, IconFile, IconFileAdd, IconGear, IconSync } from "../lib/design/icons.js";
 import animationsCss from "../lib/design/animations.css?inline";
 import tokensCss from "../lib/design/tokens.css?inline";
 
@@ -86,11 +78,6 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
   const [isSyncing, setIsSyncing] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
   const [syncError, setSyncError] = useState<string | undefined>();
-  const [revisions, setRevisions] = useState<
-    { id: string; modifiedTime: string; editor: string | undefined }[]
-  >([]);
-  const [showRevisions, setShowRevisions] = useState(false);
-  const [revisionsLoading, setRevisionsLoading] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -215,6 +202,11 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
     }
   };
 
+  const versionCount =
+    view.kind === "linked"
+      ? (view.mapping.docs.find((d) => d.filename === filename)?.versions?.length ?? 1)
+      : 1;
+
   const handleOpenOptions = () => {
     openOptionsPageViaBackground().catch((err: unknown) => {
       captureExtensionException(err, {
@@ -222,38 +214,6 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
         tags: { operation: "open_options_page" }
       });
     });
-  };
-
-  const handleToggleRevisions = async () => {
-    if (showRevisions) {
-      setShowRevisions(false);
-      return;
-    }
-    if (view.kind !== "linked") return;
-    const doc = view.mapping.docs.find((d) => d.filename === filename);
-    if (!doc) return;
-    setRevisionsLoading(true);
-    try {
-      const revs = await getDocRevisionsViaBackground(doc.docId);
-      setRevisions(
-        revs
-          .slice(-5)
-          .reverse()
-          .map((r) => ({
-            id: r.id,
-            modifiedTime: r.modifiedTime,
-            editor: r.lastModifyingUser?.displayName ?? r.lastModifyingUser?.emailAddress
-          }))
-      );
-      setShowRevisions(true);
-    } catch (err: unknown) {
-      captureExtensionException(err, {
-        surface: "github-buttons",
-        tags: { operation: "toggle_revisions" }
-      });
-    } finally {
-      setRevisionsLoading(false);
-    }
   };
 
   if (view.kind === "hidden" || view.kind === "loading") return null;
@@ -298,10 +258,11 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
               type="button"
               className="dorv-file-btn-el"
               onClick={handleOpenDoc}
-              title={`Open Google Doc for ${filename}`}
-              aria-label={`Open Google Doc for ${filename}`}
+              title={`Open Google Doc for ${filename}${versionCount > 1 ? ` (${versionCount.toString()} versions)` : ""}`}
+              aria-label={`Open Google Doc for ${filename}${versionCount > 1 ? ` (${versionCount.toString()} versions)` : ""}`}
             >
               <IconFile />
+              {versionCount > 1 && <span className="dorv-version-badge">{versionCount}</span>}
             </button>
             <button
               type="button"
@@ -315,18 +276,6 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
             >
               <IconSync className={isSyncing ? "dorv-spinning" : ""} />
             </button>
-            <button
-              type="button"
-              className="dorv-file-btn-el"
-              onClick={() => {
-                void handleToggleRevisions();
-              }}
-              disabled={revisionsLoading}
-              title={revisionsLoading ? "Loading history…" : "Show Google Doc edit history"}
-              aria-label={revisionsLoading ? "Loading history" : "Show Google Doc edit history"}
-            >
-              <IconHistory />
-            </button>
             {view.mapping.isStale && (
               <span
                 className="dorv-stale-badge"
@@ -337,22 +286,6 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
               </span>
             )}
           </span>
-          {showRevisions && (
-            <span className="dorv-revisions-panel">
-              {revisions.length === 0 ? (
-                <span className="dorv-revisions-empty">No revision history found.</span>
-              ) : (
-                revisions.map((r) => (
-                  <span key={r.id} className="dorv-revisions-row">
-                    <span className="dorv-revisions-time">
-                      {new Date(r.modifiedTime).toLocaleString()}
-                    </span>
-                    {r.editor && <span className="dorv-revisions-editor">by {r.editor}</span>}
-                  </span>
-                ))
-              )}
-            </span>
-          )}
         </>
       )}
 
@@ -587,42 +520,21 @@ ${animationsCss}
 .dorv-state-enter {
   animation: dorv-fade-in 0.15s ease-out;
 }
-.dorv-revisions-panel {
+.dorv-version-badge {
   position: absolute;
-  top: 36px;
-  left: 0;
-  z-index: 100;
-  background: var(--dorv-light-surface);
-  border: 1.5px solid var(--dorv-orange);
-  border-radius: 8px;
-  padding: 8px 12px;
-  min-width: 220px;
-  max-width: 320px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  font-size: 12px;
-  color: var(--dorv-gh-text);
-  line-height: 1.4;
-}
-.dorv-revisions-row {
-  display: block;
-  padding: 3px 0;
-  border-bottom: 1px solid var(--dorv-orange-subtle);
-}
-.dorv-revisions-row:last-child {
-  border-bottom: none;
-}
-.dorv-revisions-time {
-  font-weight: 500;
-  display: block;
-}
-.dorv-revisions-editor {
-  color: var(--dorv-gh-muted-text);
-  font-size: 11px;
-}
-.dorv-revisions-empty {
-  color: var(--dorv-gh-muted-text);
-  font-style: italic;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--dorv-orange);
+  color: var(--dorv-text-on-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 `;
   document.head.appendChild(style);

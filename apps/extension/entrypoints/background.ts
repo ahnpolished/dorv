@@ -7,7 +7,6 @@ import { createStatusStore } from "../lib/storage/stores.js";
 import type { CreateDocInput, GoogleDocComment, PullRequestRef } from "../lib/adapters/types.js";
 import { fetchPullRequestFiles, filterMarkdownFiles } from "../lib/github/pr-files.js";
 import { fetchPullRequestMeta } from "../lib/github/fetch.js";
-import { listGoogleDocRevisions } from "../lib/gdoc/drive.js";
 
 interface ChromeMessage {
   type: string;
@@ -123,17 +122,7 @@ export default defineBackground(() => {
             sendResponse({ success: true });
             break;
           }
-          case "GET_DOC_REVISIONS": {
-            const { docId } = payload as { docId: string };
-            const gToken = await authStore.getGoogleToken(false);
-            if (!gToken) {
-              sendResponse({ success: false, error: "Google account not connected." });
-              break;
-            }
-            const revisions = await listGoogleDocRevisions(gToken, docId);
-            sendResponse({ success: true, payload: revisions });
-            break;
-          }
+
           case "FETCH_PR_INFO": {
             const { ref: fetchRef } = payload as { ref: PullRequestRef };
             const ghPat = await authStore.getGitHubToken();

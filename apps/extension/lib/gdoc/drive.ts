@@ -10,9 +10,8 @@ export interface GoogleDriveRevision {
   lastModifyingUser?: { displayName?: string; emailAddress?: string };
 }
 
-// ponytail: Drive API has no "named version" or per-revision deep-link endpoint for
-// native Google Docs (see HUM-1417 scoping doc). This lists raw revisions read-only —
-// no local storage of version history, always fetched live from Drive.
+// Drive revision lister — kept for diagnostics. Version history for HUM-1417 is
+// tracked in the PR bot-comment marker, not Drive revisions.
 export async function listGoogleDocRevisions(
   token: string,
   fileId: string
