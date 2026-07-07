@@ -4,6 +4,32 @@ export interface GoogleDriveFile {
   owners?: { emailAddress?: string }[];
 }
 
+export interface GoogleDriveRevision {
+  id: string;
+  modifiedTime: string;
+  lastModifyingUser?: { displayName?: string; emailAddress?: string };
+}
+
+// ponytail: Drive API has no "named version" or per-revision deep-link endpoint for
+// native Google Docs (see HUM-1417 scoping doc). This lists raw revisions read-only —
+// no local storage of version history, always fetched live from Drive.
+export async function listGoogleDocRevisions(
+  token: string,
+  fileId: string
+): Promise<GoogleDriveRevision[]> {
+  const resp = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=revisions(id,modifiedTime,lastModifyingUser(displayName,emailAddress))`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!resp.ok) {
+    throw new Error(`Drive API failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+
+  const data = (await resp.json()) as { revisions?: GoogleDriveRevision[] };
+  return data.revisions ?? [];
+}
+
 export async function createGoogleDoc(
   token: string,
   name: string,
