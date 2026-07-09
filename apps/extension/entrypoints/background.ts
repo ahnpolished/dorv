@@ -122,6 +122,7 @@ export default defineBackground(() => {
             sendResponse({ success: true });
             break;
           }
+
           case "FETCH_PR_INFO": {
             const { ref: fetchRef } = payload as { ref: PullRequestRef };
             const ghPat = await authStore.getGitHubToken();

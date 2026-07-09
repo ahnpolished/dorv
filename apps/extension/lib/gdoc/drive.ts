@@ -4,6 +4,31 @@ export interface GoogleDriveFile {
   owners?: { emailAddress?: string }[];
 }
 
+export interface GoogleDriveRevision {
+  id: string;
+  modifiedTime: string;
+  lastModifyingUser?: { displayName?: string; emailAddress?: string };
+}
+
+// Drive revision lister — kept for diagnostics. Version history for HUM-1417 is
+// tracked in the PR bot-comment marker, not Drive revisions.
+export async function listGoogleDocRevisions(
+  token: string,
+  fileId: string
+): Promise<GoogleDriveRevision[]> {
+  const resp = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=revisions(id,modifiedTime,lastModifyingUser(displayName,emailAddress))`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!resp.ok) {
+    throw new Error(`Drive API failed: ${resp.status.toString()} ${await resp.text()}`);
+  }
+
+  const data = (await resp.json()) as { revisions?: GoogleDriveRevision[] };
+  return data.revisions ?? [];
+}
+
 export async function createGoogleDoc(
   token: string,
   name: string,

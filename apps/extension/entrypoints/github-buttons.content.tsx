@@ -202,6 +202,11 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
     }
   };
 
+  const versionCount =
+    view.kind === "linked"
+      ? (view.mapping.docs.find((d) => d.filename === filename)?.versions?.length ?? 1)
+      : 1;
+
   const handleOpenOptions = () => {
     openOptionsPageViaBackground().catch((err: unknown) => {
       captureExtensionException(err, {
@@ -247,38 +252,41 @@ function FileButton({ prRef: ref, filename }: { prRef: GitHubPullRequestRef; fil
       )}
 
       {view.kind === "linked" && (
-        <span className="dorv-file-btn-set">
-          <button
-            type="button"
-            className="dorv-file-btn-el"
-            onClick={handleOpenDoc}
-            title={`Open Google Doc for ${filename}`}
-            aria-label={`Open Google Doc for ${filename}`}
-          >
-            <IconFile />
-          </button>
-          <button
-            type="button"
-            className="dorv-file-btn-el"
-            onClick={() => {
-              void handleSync();
-            }}
-            disabled={isSyncing}
-            title={isSyncing ? "Syncing…" : `Sync ${filename} to Google Doc`}
-            aria-label={isSyncing ? "Syncing" : `Sync ${filename} to Google Doc`}
-          >
-            <IconSync className={isSyncing ? "dorv-spinning" : ""} />
-          </button>
-          {view.mapping.isStale && (
-            <span
-              className="dorv-stale-badge"
-              title="Doc content may be out of date with the latest PR changes"
-              aria-label="Doc may be out of date"
+        <>
+          <span className="dorv-file-btn-set">
+            <button
+              type="button"
+              className="dorv-file-btn-el"
+              onClick={handleOpenDoc}
+              title={`Open Google Doc for ${filename}${versionCount > 1 ? ` (${versionCount.toString()} versions)` : ""}`}
+              aria-label={`Open Google Doc for ${filename}${versionCount > 1 ? ` (${versionCount.toString()} versions)` : ""}`}
             >
-              <IconAlert />
-            </span>
-          )}
-        </span>
+              <IconFile />
+              {versionCount > 1 && <span className="dorv-version-badge">{versionCount}</span>}
+            </button>
+            <button
+              type="button"
+              className="dorv-file-btn-el"
+              onClick={() => {
+                void handleSync();
+              }}
+              disabled={isSyncing}
+              title={isSyncing ? "Syncing…" : `Sync ${filename} to Google Doc`}
+              aria-label={isSyncing ? "Syncing" : `Sync ${filename} to Google Doc`}
+            >
+              <IconSync className={isSyncing ? "dorv-spinning" : ""} />
+            </button>
+            {view.mapping.isStale && (
+              <span
+                className="dorv-stale-badge"
+                title="Doc content may be out of date with the latest PR changes"
+                aria-label="Doc may be out of date"
+              >
+                <IconAlert />
+              </span>
+            )}
+          </span>
+        </>
       )}
 
       {(createError ?? syncError) && (
@@ -511,6 +519,22 @@ ${animationsCss}
 }
 .dorv-state-enter {
   animation: dorv-fade-in 0.15s ease-out;
+}
+.dorv-version-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--dorv-orange);
+  color: var(--dorv-text-on-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 `;
   document.head.appendChild(style);

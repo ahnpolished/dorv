@@ -188,7 +188,7 @@ export async function fetchIssueComments(
   token: string,
   repo: string,
   prNumber: number
-): Promise<{ body: string }[]> {
+): Promise<{ id: number; body: string }[]> {
   const { owner, name } = parseRepo(repo);
   const resp = await fetch(
     `https://api.github.com/repos/${owner}/${name}/issues/${prNumber.toString()}/comments?per_page=100`,
@@ -208,7 +208,7 @@ export async function fetchIssueComments(
   }
   const data = await resp.json();
   if (!Array.isArray(data)) return [];
-  return data as { body: string }[];
+  return data as { id: number; body: string }[];
 }
 
 function isGitHubRateLimitError(error: unknown): boolean {
