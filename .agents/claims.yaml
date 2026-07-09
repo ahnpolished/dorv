@@ -543,11 +543,13 @@ claims:
 
   HUM-1418-pi:
     agent: pi
-    status: in_progress
-    claimed_at: "2026-07-06T00:00:00Z"
+    status: done
+    claimed_at: "2026-07-07T01:35:00Z"
+    completed_at: "2026-07-07T01:35:42Z"
     depends_on: []
     branch: feature/hum-1418-pi
     worktree: .worktrees/feature-hum-1418-pi
+    pr: https://github.com/ahnpolished/dorv/pull/91
     comment: Parallel redundant effort alongside existing claude-code claim on HUM-1418 (branch feature/hum-1418, worktree .worktrees/feature-hum-1418). Both are candidates for human reconciliation.
 
   HUM-1413-pi:
