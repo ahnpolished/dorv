@@ -561,11 +561,20 @@ claims:
     comment: Parallel redundant effort alongside existing claude-code claim on HUM-1413. Read-only investigation concluded the issue is resolved (PR #81 merged, CI green). Independent verdict posted to Linear.
 
   HUM-1419:
-    agent: pi
+    agent: claude-code
     status: in_progress
     claimed_at: "2026-07-07T01:40:00Z"
     depends_on: [HUM-1416, HUM-1418, HUM-1413]
     branch: feature/hum-1419
     worktree: .worktrees/feature-hum-1419
+    comment: >
+      Shared worktree/branch with agent pi (critic/guardrail role, no separate
+      worktree). Scope confirmed with user: v0.3.0 is DirectAdapter-only per
+      CLAUDE.md; HUM-1304/1306/1307 are v0.3.1, out of scope. HUM-1413 fix
+      (PR #81) merged and verified green on PR #78 (the feature/v0.3.0 -> main
+      release PR, still open/unmerged, zero reviews). Deliverables this
+      session: CHANGELOG [0.3.0] entry, docs/qa/v0.3.0-manual-qa.md. Merging
+      PR #78 / running the Release GH Action (publishes to Chrome Web Store)
+      is a user decision, not performed here.
 
 wait_queue: {}

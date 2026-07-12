@@ -2,6 +2,28 @@
 
 All notable changes to dorv are documented here.
 
+## [0.3.0] — 2026-07-12
+
+From-scratch rewrite of the UI and sync orchestration to fix two v0.2.0 P0s: a flickering/non-opening GitHub sidebar, and a sync-storm incident where one PR synced 1000+ duplicate comments to GitHub.
+
+### Changed
+
+- **Side panel removed** — replaced with buttons injected directly into native GitHub PR UI (`github-buttons.content`) and native Google Docs comment cards (`gdoc-buttons.content`) (HUM-1416, HUM-1417)
+- **Background alarm removed** — sync is now exclusively user-triggered via button click (`SYNC_PR`/`CREATE_DOC`/`PUSH_DOC_COMMENT_TO_GH` messages), no more 1–2 minute polling
+- **Multi-doc PRs** — `DocMapping` changed from a single doc per PR to `docs: DocFileMapping[]`, one Google Doc per markdown file (the Google Docs API cannot create tabs programmatically)
+- **Per-file button injection** — buttons appear inline next to each markdown file in the Files Changed tab, using cascade selectors and `MutationObserver` for lazy-loaded diffs
+- **Google auth profile** — added identity.email + profile/email OAuth scopes, profile display (name/email/avatar) on the options page
+
+### Fixed
+
+- **Double-sync P0** — dedup now anchors on remote Drive/GitHub content (list-before-push) instead of a local storage write succeeding, fixing the root cause of the 1000-duplicate incident (`chrome.storage.local` quota-exceeded silently broke the old local-only guard) (HUM-1413)
+- **Content-script API stalls** — `fetchPullRequestFiles`/`fetchPullRequestMeta` now routed through a background `FETCH_PR_INFO` message handler so content scripts don't stall on cross-origin GitHub API calls
+- **Version history** — per-file Google Doc revision history button (`listGoogleDocRevisions`) (HUM-1417)
+
+### Removed
+
+- Side panel UI, background alarm polling, unused legacy files and design docs (HUM-1418)
+
 ## [0.2.0] — 2026-05-30
 
 Stable bidirectional sync with thread lifecycle, Activities feed, real-credential E2E coverage, Sentry error tracking, and storage efficiency.
