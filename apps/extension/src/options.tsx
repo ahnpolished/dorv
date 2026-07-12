@@ -21,7 +21,7 @@ function Options() {
   const [validating, setValidating] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
 
-  const toggleGoogle = () => {
+  const toggleGoogle = (auto = false) => {
     if (googleConnected) {
       setGoogleLoading(true);
       void authStore.revokeGoogleToken().then(() => {
@@ -32,38 +32,29 @@ function Options() {
     } else {
       setGoogleLoading(true);
       setNotice(undefined);
-      console.log("[dorv:options] Requesting Google token (interactive)...");
-      console.log("[dorv:options] Extension ID:", chrome.runtime.id);
       void authStore
         .getGoogleToken(true)
         .then(async (token) => {
-          console.log("[dorv:options] getGoogleToken resolved, token present:", !!token);
-          if (token) {
-            console.log("[dorv:options] Token prefix:", token.slice(0, 10) + "...");
-          }
           const connected = !!token;
           setGoogleConnected(connected);
           if (connected && token) {
             try {
-              console.log("[dorv:options] Fetching Google profile...");
               const profile = await authStore.getGoogleProfile(token);
-              console.log("[dorv:options] Profile fetched:", profile.email);
               setGoogleProfile(profile);
-            } catch (profileErr) {
-              console.warn("[dorv:options] Profile fetch failed:", profileErr);
+            } catch {
               // profile scope not yet granted (re-auth needed)
             }
-          } else {
-            console.log(
-              "[dorv:options] No token received — user may have cancelled or OAuth failed."
-            );
           }
           setGoogleLoading(false);
         })
         .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          console.error("[dorv:options] getGoogleToken rejected:", message);
-          setNotice(`Google sign-in failed: ${message}`);
+          // Auto-triggered sign-in on page load fails silently if the user
+          // simply hasn't connected yet — only surface errors from an
+          // explicit click on the connect button.
+          if (!auto) {
+            const message = err instanceof Error ? err.message : String(err);
+            setNotice(`Google sign-in failed: ${message}`);
+          }
           setGoogleLoading(false);
         });
     }
@@ -92,13 +83,13 @@ function Options() {
           }
         } else {
           // No cached token — auto-trigger interactive sign-in once
-          toggleGoogle();
+          toggleGoogle(true);
           setLoading(false);
           return;
         }
       } catch {
         // No cached token — auto-trigger interactive sign-in
-        toggleGoogle();
+        toggleGoogle(true);
         setLoading(false);
         return;
       }
