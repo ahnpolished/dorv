@@ -21,6 +21,7 @@ import {
   extractCardAuthor,
   extractCardBody,
   extractCardCommentId,
+  findBadgeContainer,
   findCommentCards,
   isCardSynced,
   markCardSynced,
@@ -122,13 +123,18 @@ function findMatchedComment(
   return author && text ? matchCardToComment({ author, text }, comments) : undefined;
 }
 
+/** Prefer the hover-revealed action bar (next to "Mark as resolved" / "More options"); falls back to the card itself. */
+function getInjectionTarget(card: Element): Element {
+  return findBadgeContainer(card) ?? card;
+}
+
 function renderErrorNear(card: Element, message: string): void {
   const existing = card.querySelector(".dorv-push-error");
   existing?.remove();
   const el = document.createElement("span");
   el.className = "dorv-push-error";
   el.textContent = `dorv: ${message}`;
-  card.append(el);
+  getInjectionTarget(card).append(el);
 }
 
 function renderSyncedIndicator(card: Element): void {
@@ -138,7 +144,7 @@ function renderSyncedIndicator(card: Element): void {
   const el = document.createElement("span");
   el.className = "dorv-push-synced";
   el.textContent = "✓ synced to GitHub";
-  card.append(el);
+  getInjectionTarget(card).append(el);
 }
 
 function injectButton(
@@ -188,7 +194,7 @@ function injectButton(
       });
   });
 
-  card.append(button);
+  getInjectionTarget(card).prepend(button);
 }
 
 async function scanAndInject(ref: PullRequestRef, docId: string): Promise<void> {

@@ -513,6 +513,118 @@ describe("DirectAdapter baseline sync", () => {
     expect(postedComments[1]?.method).toBe("PATCH");
   });
 
+  it("serializes concurrent createDoc calls for the same PR so the bot comment stays a singleton", async () => {
+    // Two file buttons on the same PR clicked close together used to race:
+    // both read GitHub issue comments before either had posted, so both saw
+    // no existing bot comment and both POSTed, creating a duplicate.
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
+      cb("mock-g-token")
+    );
+
+    let botCommentId = 0;
+    const postedComments: Array<{ method: string; body: string }> = [];
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# README") };
+      }
+      if (urlStr === "https://raw.example/AGENTS.md") {
+        return { ok: true, text: () => Promise.resolve("# AGENTS") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        const body = String(init?.body ?? "");
+        const isReadme = body.includes("README.md");
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve(
+              isReadme
+                ? {
+                    id: "doc-readme",
+                    webViewLink: "https://docs.google.com/document/d/doc-readme/edit"
+                  }
+                : {
+                    id: "doc-agents",
+                    webViewLink: "https://docs.google.com/document/d/doc-agents/edit"
+                  }
+            )
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/") && urlStr.includes("/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (
+        urlStr.includes("/api.github.com/repos/org/repo/issues/123/comments") ||
+        urlStr.includes("/api.github.com/repos/org/repo/issues/comments/")
+      ) {
+        if (method === "GET") {
+          if (botCommentId === 0) return { ok: true, json: () => Promise.resolve([]) };
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                {
+                  id: botCommentId,
+                  body: postedComments[postedComments.length - 1]?.body ?? ""
+                }
+              ])
+          };
+        }
+        if (method === "POST") {
+          botCommentId = 100;
+          postedComments.push({ method: "POST", body: JSON.parse(String(init?.body)).body });
+          return { ok: true, json: () => Promise.resolve({ id: botCommentId }) };
+        }
+        if (method === "PATCH") {
+          postedComments.push({ method: "PATCH", body: JSON.parse(String(init?.body)).body });
+          return { ok: true, json: () => Promise.resolve({ id: botCommentId }) };
+        }
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const baseInput = {
+      repo: "org/repo",
+      prNumber: 123,
+      title: "Review me",
+      author: "alice",
+      branch: "feature/docs",
+      headSha: "sha1",
+      prUrl: "https://github.com/org/repo/pull/123"
+    };
+
+    // Fire both file-button creates concurrently, no await between them.
+    await Promise.all([
+      adapter.createDoc({
+        ...baseInput,
+        files: [
+          { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+        ]
+      }),
+      adapter.createDoc({
+        ...baseInput,
+        files: [
+          { filename: "AGENTS.md", rawUrl: "https://raw.example/AGENTS.md", status: "modified" }
+        ]
+      })
+    ]);
+
+    const mapping = await docStore.get("org/repo", 123);
+    expect(mapping?.docs.map((d: any) => d.filename).sort()).toEqual(["AGENTS.md", "README.md"]);
+
+    // Exactly one POST (singleton created) followed by edits-in-place, never a second POST.
+    expect(postedComments.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(postedComments.filter((c) => c.method === "PATCH")).toHaveLength(1);
+  });
+
   it("renders mermaid fenced blocks as images in the uploaded Google Doc HTML", async () => {
     await authStore.setGitHubToken("mock-gh-token");
     (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>

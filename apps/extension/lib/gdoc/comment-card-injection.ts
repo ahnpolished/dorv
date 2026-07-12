@@ -207,6 +207,20 @@ export function matchCardToComment(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+/** Class of the hover-revealed action bar holding "Mark as resolved" / "More options". */
+const BADGE_CONTAINER_SELECTOR = ".docos-approver-badge-container";
+
+/**
+ * Finds the hover-revealed action bar (alongside "Mark as resolved" and
+ * "More options") within a card, so our button can sit next to them instead
+ * of at the bottom of the card. Returns `undefined` if Google hasn't
+ * rendered it (e.g. class name drift) — callers should fall back to
+ * appending directly on the card.
+ */
+export function findBadgeContainer(card: Element): Element | undefined {
+  return card.querySelector(BADGE_CONTAINER_SELECTOR) ?? undefined;
+}
+
 /** Marks a card as synced (idempotent, cheap to check on re-scans). */
 export function markCardSynced(card: Element): void {
   card.setAttribute(SYNCED_ATTR, "true");

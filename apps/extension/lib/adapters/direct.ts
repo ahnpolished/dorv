@@ -83,6 +83,7 @@ export class DirectAdapter implements SyncAdapter {
   private syncLockStore;
 
   private activeSyncAllPromise: Promise<void> | undefined;
+  private createDocChain = new Map<string, Promise<unknown>>();
 
   constructor(
     private authStore: AuthStore,
@@ -101,7 +102,29 @@ export class DirectAdapter implements SyncAdapter {
     return this.docStore.get(ref.repo, ref.prNumber);
   }
 
+  /**
+   * Per-PR files each have their own "Create Google Doc" button, so two file
+   * buttons clicked close together can race here: both read GitHub issue
+   * comments before either has posted the bot comment, so both find no
+   * existing comment and both POST, creating a duplicate instead of one
+   * singleton comment being reused/edited. Chain calls per PR so they run
+   * one at a time, same pattern as syncAll's activeSyncAllPromise.
+   */
   async createDoc(input: CreateDocInput): Promise<CreateDocResult> {
+    const key = `${input.repo}#${input.prNumber.toString()}`;
+    const prior = this.createDocChain.get(key) ?? Promise.resolve();
+    const run = prior.catch(() => undefined).then(() => this.createDocInternal(input));
+    this.createDocChain.set(key, run);
+    try {
+      return await run;
+    } finally {
+      if (this.createDocChain.get(key) === run) {
+        this.createDocChain.delete(key);
+      }
+    }
+  }
+
+  private async createDocInternal(input: CreateDocInput): Promise<CreateDocResult> {
     const ghToken = await this.authStore.getGitHubToken();
     if (!ghToken) {
       throw new Error("GitHub PAT not configured. Please set it in extension options.");

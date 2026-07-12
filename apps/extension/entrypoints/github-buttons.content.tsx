@@ -339,11 +339,12 @@ function injectFileButton(header: Element, ref: GitHubPullRequestRef, filename: 
   const span = document.createElement("span");
   span.id = id;
 
-  // Inject next to the "Copy to clipboard" button rather than at the end
-  // of the file header. GitHub uses aria-label for the copy button.
+  // Inject directly after the "Copy to clipboard" button so it lands in the
+  // same toolbar row. Using copyBtn.parentElement.after() instead placed it
+  // after the *entire* toolbar, pushing it outside the row.
   const copyBtn = header.querySelector('[aria-label*="Copy" i]');
-  if (copyBtn?.parentElement) {
-    copyBtn.parentElement.after(span);
+  if (copyBtn) {
+    copyBtn.after(span);
   } else {
     header.appendChild(span);
   }
@@ -441,24 +442,26 @@ ${animationsCss}
   gap: 2px;
   margin-left: 6px;
   vertical-align: middle;
+  align-self: center;
 }
 .dorv-file-btn-set {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px;
   border-radius: 8px;
-  outline: 2px solid rgba(249, 115, 22, 0.35);
-  outline-offset: 0px;
+  /* ponytail: box-shadow instead of outline+padding keeps the layout box at
+     28px (matching sibling GitHub toolbar buttons) so the ring is painted
+     without growing the box the row clips against. */
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.35);
   position: relative;
 }
 .dorv-file-btn-set::before {
   content: "";
   position: absolute;
-  top: -6px;
-  left: -6px;
-  width: 14px;
-  height: 14px;
+  top: -3px;
+  left: -3px;
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
   background: var(--dorv-bg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cpath d='M34 64 A30 30 0 0 1 94 64' fill='none' stroke='%23F97316' stroke-width='12' stroke-linecap='round'/%3E%3Cpath d='M94 64 A30 30 0 0 1 34 64' fill='none' stroke='%23F8FAFC' stroke-width='12' stroke-linecap='round'/%3E%3Cpolyline points='88,52 94,64 82,64' fill='none' stroke='%23F97316' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='40,76 34,64 46,64' fill='none' stroke='%23F8FAFC' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");

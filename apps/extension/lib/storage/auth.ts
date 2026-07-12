@@ -53,7 +53,27 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
     },
     async getGoogleToken(interactive: boolean): Promise<string | undefined> {
       return new Promise((resolve, reject) => {
+        let settled = false;
+        // ponytail: some Chromium forks (e.g. Arc) never invoke the getAuthToken
+        // callback when chrome.identity isn't backed by a real OAuth flow — bound
+        // the wait so "Please wait..." can't hang forever.
+        const timeoutId = interactive
+          ? setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              reject(
+                new Error(
+                  "Google sign-in timed out. This browser may not support chrome.identity (try Chrome instead of Arc)."
+                )
+              );
+            }, 15000)
+          : undefined;
+
         chrome.identity.getAuthToken({ interactive }, (token) => {
+          if (settled) return;
+          settled = true;
+          if (timeoutId) clearTimeout(timeoutId);
+
           if (chrome.runtime.lastError) {
             if (!interactive) {
               resolve(undefined);
