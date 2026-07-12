@@ -567,6 +567,7 @@ claims:
     depends_on: [HUM-1416, HUM-1418, HUM-1413]
     branch: feature/hum-1419
     worktree: .worktrees/feature-hum-1419
+    pr: https://github.com/ahnpolished/dorv/pull/103
     comment: >
       Shared worktree/branch with agent pi (critic/guardrail role, no separate
       worktree). Scope confirmed with user: v0.3.0 is DirectAdapter-only per
