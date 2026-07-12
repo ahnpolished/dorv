@@ -86,7 +86,8 @@ function getTokenViaWebAuthFlow(): Promise<string | undefined> {
 export function createAuthStore(storage: StorageArea, managedStorage?: StorageArea): AuthStore {
   const keys = {
     githubPat: "github_pat",
-    backendUrl: "backend_url"
+    backendUrl: "backend_url",
+    googleToken: "google_token"
   };
 
   return {
@@ -126,8 +127,18 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
       if (chromeNative) {
         return getTokenViaChromeIdentity(interactive);
       }
-      if (!interactive) return undefined;
-      return getTokenViaWebAuthFlow();
+      // Non-Chrome browsers (Arc, Brave, Edge, …) use launchWebAuthFlow.
+      // That flow does NOT cache the token in chrome.identity, so we persist
+      // it ourselves in storage so that passive (non-interactive) lookups work.
+      if (!interactive) {
+        const cached = await storage.get([keys.googleToken]);
+        return cached[keys.googleToken] as string | undefined;
+      }
+      const token = await getTokenViaWebAuthFlow();
+      if (token) {
+        await storage.set({ [keys.googleToken]: token });
+      }
+      return token;
     },
     async getGoogleProfile(token: string): Promise<GoogleProfile> {
       const resp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -154,6 +165,8 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
     },
 
     async revokeGoogleToken(): Promise<void> {
+      // Always clear our fallback storage, even if chrome.identity has nothing cached.
+      await storage.remove([keys.googleToken]);
       return new Promise((resolve) => {
         chrome.identity.getAuthToken({ interactive: false }, (token) => {
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
