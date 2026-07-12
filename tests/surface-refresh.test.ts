@@ -11,11 +11,12 @@ function read(path: string): string {
 }
 
 describe("HUM-1230 surface refresh", () => {
-  it("keeps hardcoded hex colors out of surface component files", () => {
+  it("keeps hardcoded hex colors out of tokenized surface component files", () => {
+    // gdoc-buttons.content.tsx intentionally uses hardcoded Google Sans /
+    // #1a73e8 colors — the Docs-side surface deliberately does not share the
+    // GitHub-side design token system (see AGENTS.md UI bar).
     for (const path of [
-      "entrypoints/github-sidebar.content.tsx",
-      "src/sidepanel.tsx",
-      "src/sidepanel.css",
+      "entrypoints/github-buttons.content.tsx",
       "src/options.tsx",
       "src/options.css"
     ]) {
@@ -23,26 +24,16 @@ describe("HUM-1230 surface refresh", () => {
     }
   });
 
-  it("wires PR sidebar to shared tokens, animations, skeletons, state entry, and mono paths", () => {
-    const source = read("entrypoints/github-sidebar.content.tsx");
+  it("wires GitHub action buttons to shared tokens, animations, state entry, and per-file sync", () => {
+    const source = read("entrypoints/github-buttons.content.tsx");
 
     expect(source).toContain("tokensCss");
     expect(source).toContain("animationsCss");
     expect(source).toContain("dorv-state-enter");
-    expect(source).toContain("dorv-skeleton");
-    expect(source).toContain("dorv-file-path");
-    expect(source).toContain("dorv-sync.svg");
-  });
-
-  it("wires DocSidebar to tokenized controls, nav buttons, skeletons, and push success", () => {
-    const source = read("src/sidepanel.tsx");
-
-    expect(source).toContain('className="dorv-icon-btn"');
-    expect(source).toContain("ti-brand-github");
-    expect(source).toContain("ti-file-description");
-    expect(source).toContain("dorv-skeleton");
-    expect(source).toContain("dorv-check-path");
-    expect(source).not.toContain("style={{");
+    // v0.3.0: per-file compact buttons use emoji + title-based tooltips
+    // instead of the removed sidebar panel with SVG sync icon.
+    expect(source).toContain("handleSync");
+    expect(source).toContain("dorv-file-btn-set");
   });
 
   it("wires Options page to the branded header and animated save confirmation", () => {

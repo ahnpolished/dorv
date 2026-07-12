@@ -7,8 +7,13 @@ import { setupPageRoutes } from "../fixtures/mock-apis.js";
 const DOC_MAPPING = {
   repo: TEST_PR.ref,
   prNumber: TEST_PR.prNumber,
-  docId: "fake-doc-id-123",
-  docUrl: "https://docs.google.com/document/d/fake-doc-id-123/edit",
+  docs: [
+    {
+      filename: "README.md",
+      docId: "fake-doc-id-123",
+      docUrl: "https://docs.google.com/document/d/fake-doc-id-123/edit"
+    }
+  ],
   createdAt: "2026-05-17T10:00:00Z",
   lastSyncedAt: "2026-05-17T10:00:00Z",
   headSha: "abc123def456",
@@ -21,6 +26,7 @@ const GH_COMMENT_MAPPING = {
   prNumber: TEST_PR.prNumber,
   ghCommentId: 1001,
   docCommentId: "doc-comment-101",
+  docId: "fake-doc-id-123",
   source: "github"
 };
 

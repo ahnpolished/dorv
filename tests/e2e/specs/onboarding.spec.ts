@@ -1,10 +1,20 @@
 /**
  * AC: Onboarding — user completes GitHub + Google setup.
- * Flow: open PR page → see needs-setup sidebar → open sidepanel → complete setup.
+ *
+ * v0.3.0 note: this used to drive a multi-step sidepanel onboarding wizard
+ * ("Connect GitHub" -> "Connect Google" -> "You're set", `input.pat-input` /
+ * `button.onboarding-btn`) that no longer exists — the sidepanel was
+ * deleted. Onboarding is now a single settings page (`options.html`,
+ * `apps/extension/src/options.tsx`): a GitHub PAT input + "Validate & Save"
+ * button, and a "Connect Google Account" button. The entry point on the PR
+ * page is the github-buttons content script's "Set up dorv to sync review
+ * docs" button, which calls `chrome.runtime.openOptionsPage()`.
+ *
+ * Flow: open PR page -> see "Set up dorv" button (no creds) -> click it ->
+ * options page opens -> validate GitHub PAT -> connect Google.
  */
 import { expect, test } from "../fixtures/extension.js";
-import { FAKE_MD_FILES } from "../fixtures/mock-apis.js";
-import type { Route } from "@playwright/test";
+import { setupPageRoutes, FAKE_MD_FILES } from "../fixtures/mock-apis.js";
 
 const PR_6 = {
   owner: "ahnpolished",
@@ -13,7 +23,7 @@ const PR_6 = {
   url: "https://github.com/ahnpolished/dorv/pull/6"
 };
 
-const SIDEBAR_HOST = "dorv-pr-sidebar-root";
+const BUTTON_HOST = "dorv-gh-buttons";
 const TIMEOUT = 10_000;
 
 test("set up dorv — completes GitHub and Google onboarding starting from PR page", async ({
@@ -21,61 +31,51 @@ test("set up dorv — completes GitHub and Google onboarding starting from PR pa
   extensionId,
   extensionWorker
 }) => {
-  // Mock the GitHub PR page HTML so the content script runs
-  await extensionContext.route(PR_6.url, (route: Route) => {
+  await setupPageRoutes(extensionContext, { files: FAKE_MD_FILES, ghReviewComments: [] });
+
+  // Validate & Save posts to GET /user to check the PAT is valid.
+  await extensionContext.route("https://api.github.com/user", (route) => {
     void route.fulfill({
       status: 200,
-      contentType: "text/html",
-      body: `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>PR #6 · ${PR_6.owner}/${PR_6.repo}</title></head>
-<body>
-  <div class="Layout-sidebar">
-    <div id="partial-discussion-sidebar"></div>
-  </div>
-</body>
-</html>`
+      contentType: "application/json",
+      body: JSON.stringify({ login: "e2e-test-user" })
     });
   });
 
-  // Mock PR files so the sidebar renders (no credentials → needs-setup state)
-  await extensionContext.route(
-    `https://api.github.com/repos/${PR_6.owner}/${PR_6.repo}/pulls/${PR_6.prNumber.toString()}/files*`,
-    (route: Route) => {
-      void route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(FAKE_MD_FILES)
-      });
-    }
-  );
-
-  // Navigate to the PR page — content script injects the needs-setup sidebar
+  // Navigate to the PR page — content script injects the "Set up dorv" button
+  // (no-creds state) since no github_pat is stored yet.
   const prPage = await extensionContext.newPage();
   await prPage.goto(PR_6.url);
-  await prPage.waitForSelector(SIDEBAR_HOST, { timeout: TIMEOUT });
-  await prPage.waitForTimeout(2_000);
+  await prPage.waitForSelector(BUTTON_HOST, { timeout: TIMEOUT });
 
-  // Open the sidepanel for onboarding
-  const panel = await extensionContext.newPage();
-  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-    waitUntil: "domcontentloaded"
+  const setupButton = prPage.locator(BUTTON_HOST).locator("button", {
+    hasText: "Set up dorv"
+  });
+  await expect(setupButton).toBeVisible({ timeout: TIMEOUT });
+
+  // Clicking calls chrome.runtime.openOptionsPage(), which opens options.html
+  // as a new extension page.
+  const [optionsPage] = await Promise.all([
+    extensionContext.waitForEvent("page", {
+      predicate: (p) => p.url().includes(`${extensionId}/options.html`),
+      timeout: TIMEOUT
+    }),
+    setupButton.click()
+  ]);
+  await optionsPage.waitForLoadState("domcontentloaded");
+
+  // Step 1: GitHub PAT
+  await expect(optionsPage.locator("h2", { hasText: "GitHub Authentication" })).toBeVisible({
+    timeout: TIMEOUT
+  });
+  await optionsPage.locator('input[type="password"]').fill("ghp_e2e_onboarding_test_token");
+  await optionsPage.locator("button", { hasText: "Validate & Save" }).click();
+  await expect(optionsPage.locator("p.save-confirmation")).toContainText("validated and saved", {
+    timeout: TIMEOUT
   });
 
-  // Step 1: Connect GitHub
-  await panel.waitForSelector("h1", { timeout: TIMEOUT });
-  await expect(panel.locator("h1")).toContainText("Connect GitHub");
-  await panel.waitForTimeout(1_500);
-
-  await panel.locator("input.pat-input").fill("ghp_e2e_onboarding_test_token");
-  await panel.waitForTimeout(1_000);
-  await panel.locator("button.onboarding-btn", { hasText: "Continue" }).click();
-
-  // Step 2: Connect Google — patch chrome.identity in the sidepanel page context
-  await expect(panel.locator("h1")).toContainText("Connect Google", { timeout: TIMEOUT });
-  await panel.waitForTimeout(1_500);
-
-  await panel.evaluate(() => {
+  // Step 2: Google — patch chrome.identity in the options page context
+  await optionsPage.evaluate(() => {
     const identity = chrome.identity as {
       getAuthToken: (opts: unknown, cb: (t: string) => void) => void;
     };
@@ -83,12 +83,10 @@ test("set up dorv — completes GitHub and Google onboarding starting from PR pa
       cb("fake-google-token-e2e");
     };
   });
-  await panel.locator("button.onboarding-btn", { hasText: "Sign in with Google" }).click();
-
-  // Done state
-  await expect(panel.locator("h1")).toContainText("You're set", { timeout: TIMEOUT });
-  await panel.waitForTimeout(2_000);
-  await panel.locator("button.onboarding-btn", { hasText: "Get started" }).click();
+  await optionsPage.locator("button", { hasText: "Connect Google Account" }).click();
+  await expect(optionsPage.locator("button", { hasText: "Sign Out from Google" })).toBeVisible({
+    timeout: TIMEOUT
+  });
 
   // Clean up storage
   await extensionWorker.evaluate(
@@ -99,5 +97,5 @@ test("set up dorv — completes GitHub and Google onboarding starting from PR pa
   );
 
   await prPage.close();
-  await panel.close();
+  await optionsPage.close();
 });

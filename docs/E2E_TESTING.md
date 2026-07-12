@@ -1,5 +1,7 @@
 # E2E Testing — Architecture & Best Practices
 
+> **v0.3.0 note**: the sidepanel (`sidepanel.html`, `Alt+Shift+D` toggle, `chrome.sidePanel`) described throughout this doc was deleted in the v0.3.0 rewrite. The extension now injects buttons directly into the native GitHub PR page (`github-buttons.content.tsx`, shadow host `<dorv-gh-buttons>`) and the native Google Docs comment sidebar (`gdoc-buttons.content.tsx`); onboarding moved to `options.html`. The Playwright mechanics below (`launchPersistentContext`, service-worker access, PAT/identity mocking, headless-vs-headed constraints) are still accurate for the extension in general — only the sidepanel-specific bits (rows/sections that mention `sidepanel`, `debug-sidepanel.ts`, `Alt+Shift+D`) are stale. A broader rewrite of this doc is tracked separately; this note exists so the stale bits aren't read as current architecture.
+
 Chrome extension testing has hard constraints that don't apply to web apps. This doc explains the current setup, the known limitations, and the recommended architecture for each test scenario.
 
 ---

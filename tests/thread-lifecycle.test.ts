@@ -17,8 +17,13 @@ vi.stubGlobal("fetch", mockFetch);
 const REF = { repo: "org/repo", prNumber: 123 };
 const DOC_MAPPING: DocMapping = {
   ...REF,
-  docId: "doc-1",
-  docUrl: "https://docs.google.com/document/d/doc-1/edit",
+  docs: [
+    {
+      filename: "docs/rfc.md",
+      docId: "doc-1",
+      docUrl: "https://docs.google.com/document/d/doc-1/edit"
+    }
+  ],
   createdAt: "2026-05-16T12:00:00Z",
   lastSyncedAt: "2026-05-16T12:00:00Z",
   headSha: "sha1",
@@ -120,6 +125,7 @@ describe("GitHub thread lifecycle sync", () => {
       ...REF,
       ghCommentId: 10,
       docCommentId: "doc-root-old",
+      docId: "doc-1",
       source: "github",
       ghThreadId: "thread-1",
       threadSnapshot: ORIGINAL_SNAPSHOT
@@ -130,6 +136,7 @@ describe("GitHub thread lifecycle sync", () => {
       docReplyId: "doc-reply-old",
       ghParentCommentId: 10,
       docParentCommentId: "doc-root-old",
+      docId: "doc-1",
       source: "github"
     });
 
@@ -192,6 +199,7 @@ describe("GitHub thread lifecycle sync", () => {
       ...REF,
       ghCommentId: 10,
       docCommentId: "doc-root-10",
+      docId: "doc-1",
       source: "github",
       ghThreadId: "thread-1",
       threadSnapshot: ORIGINAL_SNAPSHOT
@@ -241,6 +249,7 @@ describe("GitHub thread lifecycle sync", () => {
       ...REF,
       ghCommentId: 10,
       docCommentId: "doc-root-10",
+      docId: "doc-1",
       source: "github",
       ghThreadId: "thread-1",
       threadSnapshot: ORIGINAL_SNAPSHOT,

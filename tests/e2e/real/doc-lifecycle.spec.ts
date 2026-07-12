@@ -21,7 +21,6 @@
 import {
   test,
   expect,
-  openSidepanelOnRealPr,
   exportDriveDocAsText,
   buildRealCreateDocInput,
   createDocViaExtension,
@@ -29,12 +28,16 @@ import {
   fetchPrIssueComments,
   fetchPrIssueCommentsWithIds,
   deleteGhIssueComment,
-  fetchRealPrMeta,
-  fetchRealMarkdownFiles,
+  GITHUB_PAT,
   REAL_REPO,
   REAL_PR_NUMBER
 } from "./fixture.js";
 import { readStateForPr, writeStateForPr } from "./state.js";
+import type { DocMapping } from "../../../apps/extension/lib/adapters/types.js";
+import {
+  extractDocsFromBotComment,
+  buildDocsMarker
+} from "../../../apps/extension/lib/gdoc/urls.js";
 
 const DOC_STORE_KEY = `docStore:${REAL_REPO}#${REAL_PR_NUMBER.toString()}`;
 
@@ -59,6 +62,9 @@ test.describe("doc lifecycle", () => {
       return;
     }
 
+    // createDocViaExtension already drives doc creation through the
+    // extension's message-passing API (CREATE_DOC), the same code path the
+    // new button-injection UI uses — no UI interaction is needed here.
     const input = await buildRealCreateDocInput();
     const result = await createDocViaExtension(extensionContext, extensionId, input);
 
@@ -69,43 +75,33 @@ test.describe("doc lifecycle", () => {
         })
     );
 
-    const mapping = storage[DOC_STORE_KEY] as
-      | {
-          docId?: string;
-          docUrl?: string;
-          repo?: string;
-          prNumber?: number;
-        }
-      | undefined;
+    const mapping = storage[DOC_STORE_KEY] as DocMapping | undefined;
 
     expect(mapping, "doc mapping must be saved to storage").toBeDefined();
-    expect(mapping?.docId, "mapping must have a docId").toBeTruthy();
-    expect(mapping?.docUrl, "mapping must have a docUrl").toMatch(/docs\.google\.com/);
-    expect(mapping?.docId).toBe(result.mapping.docId);
+    expect(Array.isArray(mapping?.docs), "mapping must have a docs array").toBe(true);
+    expect(mapping?.docs.length, "mapping must have at least one doc").toBeGreaterThan(0);
+    for (const doc of mapping?.docs ?? []) {
+      expect(doc.docId, `doc for ${doc.filename} must have a docId`).toBeTruthy();
+      expect(doc.docUrl, `doc for ${doc.filename} must have a docUrl`).toMatch(/docs\.google\.com/);
+    }
+    expect(mapping?.docs.map((d) => d.docId).sort()).toEqual(
+      result.mapping.docs.map((d) => d.docId).sort()
+    );
 
-    const panel = await openSidepanelOnRealPr(extensionContext, extensionId);
-    await expect(panel.locator(".tabs")).toBeVisible({ timeout: 30_000 });
-
-    // Verify tabs are visible (TC-001 step 5)
-    await expect(panel.locator("button", { hasText: "GitHub" })).toBeVisible();
-    await expect(panel.locator("button", { hasText: "Google Doc" })).toBeVisible();
-    await expect(panel.locator("button", { hasText: "Activities" })).toBeVisible();
-
-    const docId = mapping?.docId;
-    const docUrl = mapping?.docUrl;
-    if (!docId || !docUrl) {
-      throw new Error("doc mapping was missing docId or docUrl after creation");
+    // The test PR (see fixture.ts REAL_PR_NUMBER default) has exactly one
+    // markdown file, so mapping.docs[0] is "the" doc for downstream specs.
+    const firstDoc = result.mapping.docs[0];
+    if (!firstDoc) {
+      throw new Error("doc mapping was missing docs after creation");
     }
 
     // Persist for downstream spec files
     writeStateForPr(REAL_REPO, REAL_PR_NUMBER, {
-      docId,
-      docUrl,
+      docId: firstDoc.docId,
+      docUrl: firstDoc.docUrl,
       docStoreKey: DOC_STORE_KEY,
       docMapping: storage[DOC_STORE_KEY] as Record<string, unknown>
     });
-
-    await panel.close();
   });
 
   test("TC-009: mermaid blocks become mermaid.ink image URLs in exported doc", async ({
@@ -169,19 +165,62 @@ test.describe("doc lifecycle", () => {
     const largePrRepo = process.env.DORV_LARGE_PR_REPO ?? REAL_REPO;
     const largeDocStoreKey = `docStore:${largePrRepo}#${largePrNumber.toString()}`;
 
-    const panel = await openSidepanelOnRealPr(extensionContext, extensionId);
+    const prResp = await fetch(
+      `https://api.github.com/repos/${largePrRepo}/pulls/${largePrNumber.toString()}`,
+      { headers: { Authorization: `Bearer ${GITHUB_PAT}`, Accept: "application/vnd.github+json" } }
+    );
+    if (!prResp.ok) {
+      test.skip(true, `Could not fetch PR #${largePrNumber.toString()} from ${largePrRepo}`);
+      return;
+    }
+    const prData = (await prResp.json()) as {
+      head: { sha: string; ref: string };
+      html_url: string;
+      title: string;
+      user?: { login?: string };
+    };
+    const filesResp = await fetch(
+      `https://api.github.com/repos/${largePrRepo}/pulls/${largePrNumber.toString()}/files`,
+      { headers: { Authorization: `Bearer ${GITHUB_PAT}`, Accept: "application/vnd.github+json" } }
+    );
+    const filesData = filesResp.ok
+      ? ((await filesResp.json()) as { filename?: unknown; raw_url?: unknown; status?: unknown }[])
+      : [];
+    const files = filesData
+      .filter(
+        (f): f is { filename: string; raw_url: string; status: string } =>
+          typeof f.filename === "string" &&
+          typeof f.raw_url === "string" &&
+          typeof f.status === "string" &&
+          /\.mdx?$/iu.test(f.filename)
+      )
+      .map((f) => ({ filename: f.filename, rawUrl: f.raw_url, status: f.status }));
+    if (files.length === 0) {
+      test.skip(true, `PR #${largePrNumber.toString()} has no markdown files`);
+      return;
+    }
+    const input = {
+      repo: largePrRepo,
+      prNumber: largePrNumber,
+      title: prData.title,
+      author: prData.user?.login ?? "unknown",
+      branch: prData.head.ref,
+      headSha: prData.head.sha,
+      prUrl: prData.html_url,
+      files
+    };
 
-    const createBtn = panel.locator("button.onboarding-btn", { hasText: /Create Google Doc/ });
-
-    // Allow extra time for large files
-    await expect(createBtn).toBeVisible({ timeout: 30_000 });
+    // Time the createDocViaExtension call itself — there is no UI button to
+    // click-and-wait-for-disappearance anymore, so the elapsed time around
+    // the message round-trip is the equivalent large-file timing signal.
     const startMs = Date.now();
-    await createBtn.click();
-    await expect(createBtn).not.toBeVisible({ timeout: 90_000 });
+    const result = await createDocViaExtension(extensionContext, extensionId, input);
     const elapsed = Date.now() - startMs;
 
-    // Creation must complete under the 90 s timeout (soft assertion: warn if > 30 s)
+    // Creation must complete well under a reasonable timeout (soft assertion: log if > 30s)
     console.log(`[TC-008] Large-file doc created in ${elapsed.toString()} ms`);
+    expect(elapsed, "large-file doc creation must complete within 90s").toBeLessThan(90_000);
+    expect(result.mapping.docs.length).toBeGreaterThan(0);
 
     const storage = await extensionWorker.evaluate<Record<string, unknown>>(
       () =>
@@ -189,10 +228,8 @@ test.describe("doc lifecycle", () => {
           chrome.storage.local.get(null, resolve);
         })
     );
-    const mapping = storage[largeDocStoreKey] as { docId?: string } | undefined;
-    expect(mapping?.docId, "large-file doc must have a docId").toBeTruthy();
-
-    await panel.close();
+    const mapping = storage[largeDocStoreKey] as DocMapping | undefined;
+    expect(mapping?.docs.length, "large-file doc must have at least one doc").toBeGreaterThan(0);
   });
 
   test("TC-010: reuses existing GDoc from bot comment without creating a new Drive file", async ({
@@ -204,10 +241,11 @@ test.describe("doc lifecycle", () => {
 
     // Find existing dorv bot comments on the PR before calling createDoc.
     // TC-001 must have run at least once to post the initial bot comment.
+    // extractDocsFromBotComment understands both the current multi-doc
+    // marker (`<!-- dorv-docs={...} -->`) and the legacy single-doc marker,
+    // so this picks up bot comments left by either shape.
     const commentBodies = await fetchPrIssueComments();
-    const botComments = commentBodies.filter(
-      (b) => b.includes("<!-- dorv-doc-id=") || b.includes("**dorv**")
-    );
+    const botComments = commentBodies.filter((b) => extractDocsFromBotComment(b) !== undefined);
 
     if (botComments.length === 0) {
       test.skip(true, "No dorv bot comment found — run TC-001 first to create the initial GDoc");
@@ -216,14 +254,7 @@ test.describe("doc lifecycle", () => {
 
     // Extract all docIds referenced by existing bot comments so we can verify pickup.
     const existingDocIds = new Set(
-      botComments
-        .map((b) => {
-          const markerMatch = /<!--\s*dorv-doc-id=([a-zA-Z0-9_-]+)\s*-->/.exec(b);
-          if (markerMatch?.[1]) return markerMatch[1];
-          const urlMatch = /\/document\/d\/([a-zA-Z0-9_-]+)/.exec(b);
-          return urlMatch?.[1];
-        })
-        .filter((id): id is string => Boolean(id))
+      botComments.flatMap((b) => (extractDocsFromBotComment(b) ?? []).map((d) => d.docId))
     );
 
     // Clear storage mapping so createDoc sees no locally-cached doc
@@ -239,13 +270,15 @@ test.describe("doc lifecycle", () => {
     const input = await buildRealCreateDocInput();
     const result = await createDocViaExtension(extensionContext, extensionId, input);
 
-    // The returned docId must be one of the pre-existing bot comment docIds
-    expect(
-      existingDocIds.has(result.mapping.docId),
-      `expected picked-up docId (${result.mapping.docId}) to match an existing bot comment; ` +
-        `known ids: ${[...existingDocIds].join(", ")}`
-    ).toBe(true);
-    expect(result.mapping.docUrl).toMatch(/docs\.google\.com/);
+    // Every doc in the returned mapping must be one of the pre-existing bot comment docIds
+    for (const doc of result.mapping.docs) {
+      expect(
+        existingDocIds.has(doc.docId),
+        `expected picked-up docId (${doc.docId}) to match an existing bot comment; ` +
+          `known ids: ${[...existingDocIds].join(", ")}`
+      ).toBe(true);
+      expect(doc.docUrl).toMatch(/docs\.google\.com/);
+    }
 
     // Verify mapping was persisted to extension storage
     const storageAfter = await extensionWorker.evaluate<Record<string, unknown>>(
@@ -254,13 +287,15 @@ test.describe("doc lifecycle", () => {
           chrome.storage.local.get(null, resolve);
         })
     );
-    const mapping = storageAfter[DOC_STORE_KEY] as { docId?: string } | undefined;
-    expect(mapping?.docId).toBe(result.mapping.docId);
+    const mapping = storageAfter[DOC_STORE_KEY] as DocMapping | undefined;
+    expect(mapping?.docs.map((d) => d.docId).sort()).toEqual(
+      result.mapping.docs.map((d) => d.docId).sort()
+    );
 
     // No new bot comment must have been posted
     const commentBodiesAfter = await fetchPrIssueComments();
     const botCommentsAfter = commentBodiesAfter.filter(
-      (b) => b.includes("<!-- dorv-doc-id=") || b.includes("**dorv**")
+      (b) => extractDocsFromBotComment(b) !== undefined
     );
     expect(botCommentsAfter.length, "pickup must not post a new bot comment").toBe(
       commentCountBefore
@@ -288,7 +323,7 @@ test.describe("doc lifecycle", () => {
     // Delete any existing dorv bot comments so this is truly green-field
     const existingComments = await fetchPrIssueCommentsWithIds(gfPrNumber);
     const existingBotComments = existingComments.filter(
-      (c) => c.body.includes("<!-- dorv-doc-id=") || c.body.includes("**dorv**")
+      (c) => extractDocsFromBotComment(c.body) !== undefined
     );
     for (const c of existingBotComments) {
       await deleteGhIssueComment(c.id);
@@ -301,29 +336,65 @@ test.describe("doc lifecycle", () => {
       });
     }, gfDocStoreKey);
 
-    // Build input for the green-field PR
-    const [meta, files] = await Promise.all([fetchRealPrMeta(), fetchRealMarkdownFiles()]);
-    const input = {
-      repo: REAL_REPO,
-      prNumber: gfPrNumber,
-      title: meta.title,
-      author: meta.author,
-      branch: meta.branch,
-      headSha: meta.headSha,
-      prUrl: `https://github.com/${REAL_REPO}/pull/${gfPrNumber.toString()}`,
-      files
+    // Build input for the green-field PR (fetched directly rather than via
+    // fetchRealPrMeta/fetchRealMarkdownFiles, which are cached against
+    // REAL_PR_NUMBER, not gfPrNumber).
+
+    const prResp = await fetch(
+      `https://api.github.com/repos/${REAL_REPO}/pulls/${gfPrNumber.toString()}`,
+      { headers: { Authorization: `Bearer ${GITHUB_PAT}`, Accept: "application/vnd.github+json" } }
+    );
+    if (!prResp.ok) {
+      test.skip(true, `Could not fetch PR #${gfPrNumber.toString()}`);
+      return;
+    }
+    const prData = (await prResp.json()) as {
+      head: { sha: string; ref: string };
+      html_url: string;
+      title: string;
+      user?: { login?: string };
     };
+    const filesResp = await fetch(
+      `https://api.github.com/repos/${REAL_REPO}/pulls/${gfPrNumber.toString()}/files`,
+      { headers: { Authorization: `Bearer ${GITHUB_PAT}`, Accept: "application/vnd.github+json" } }
+    );
+    const filesData = filesResp.ok
+      ? ((await filesResp.json()) as { filename?: unknown; raw_url?: unknown; status?: unknown }[])
+      : [];
+    const files = filesData
+      .filter(
+        (f): f is { filename: string; raw_url: string; status: string } =>
+          typeof f.filename === "string" &&
+          typeof f.raw_url === "string" &&
+          typeof f.status === "string" &&
+          /\.mdx?$/iu.test(f.filename)
+      )
+      .map((f) => ({ filename: f.filename, rawUrl: f.raw_url, status: f.status }));
 
     if (files.length === 0) {
       test.skip(true, `PR #${gfPrNumber.toString()} has no markdown files`);
       return;
     }
 
+    const input = {
+      repo: REAL_REPO,
+      prNumber: gfPrNumber,
+      title: prData.title,
+      author: prData.user?.login ?? "unknown",
+      branch: prData.head.ref,
+      headSha: prData.head.sha,
+      prUrl: prData.html_url,
+      files
+    };
+
     const result = await createDocViaExtension(extensionContext, extensionId, input);
 
-    // A fresh Drive doc must have been created
-    expect(result.mapping.docId, "new doc must have an id").toBeTruthy();
-    expect(result.mapping.docUrl).toMatch(/docs\.google\.com/);
+    // A fresh Drive doc must have been created for every markdown file
+    expect(result.mapping.docs.length).toBe(files.length);
+    for (const doc of result.mapping.docs) {
+      expect(doc.docId, "new doc must have an id").toBeTruthy();
+      expect(doc.docUrl).toMatch(/docs\.google\.com/);
+    }
 
     // Mapping must be in extension storage
     const storage = await extensionWorker.evaluate<Record<string, unknown>>(
@@ -332,16 +403,20 @@ test.describe("doc lifecycle", () => {
           chrome.storage.local.get(null, resolve);
         })
     );
-    const stored = storage[gfDocStoreKey] as { docId?: string } | undefined;
-    expect(stored?.docId).toBe(result.mapping.docId);
+    const stored = storage[gfDocStoreKey] as DocMapping | undefined;
+    expect(stored?.docs.map((d) => d.docId).sort()).toEqual(
+      result.mapping.docs.map((d) => d.docId).sort()
+    );
 
-    // Bot comment must have been posted and must carry the hidden marker
+    // Bot comment must have been posted and must carry the new multi-doc marker
     const postedComments = await fetchPrIssueCommentsWithIds(gfPrNumber);
     const botComment = postedComments.find(
-      (c) => c.body.includes("<!-- dorv-doc-id=") && c.body.includes("**dorv**")
+      (c) => c.body.includes("<!-- dorv-docs=") && c.body.includes("**dorv**")
     );
     expect(botComment, "bot comment with hidden marker must be posted").toBeDefined();
-    expect(botComment?.body).toContain(`<!-- dorv-doc-id=${result.mapping.docId} -->`);
-    expect(botComment?.body).toContain(result.mapping.docUrl);
+    expect(botComment?.body).toContain(buildDocsMarker(result.mapping.docs));
+    for (const doc of result.mapping.docs) {
+      expect(botComment?.body).toContain(doc.docUrl);
+    }
   });
 });

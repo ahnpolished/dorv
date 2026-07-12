@@ -1,21 +1,17 @@
 /**
  * Real-credential auth smoke tests — no persistent artifacts created.
  *
- * TC-013: Sidepanel Responsiveness — no horizontal overflow at 320/480/720 px
+ * TC-013: Extension Loads — background service worker responds to a
+ *         message round-trip (replaces the old sidepanel-viewport-overflow
+ *         check now that there is no sidepanel; button-injection UI has
+ *         its own coverage in tests/github-button-injection.test.ts).
  * TC-011: Token Expiry — graceful error state when Google token is empty
  *
  * Run:  DORV_GITHUB_PAT=... DORV_GOOGLE_TOKEN=... pnpm e2e:real --grep "TC-01[13]"
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import {
-  test,
-  expect,
-  openSidepanelOnRealPr,
-  fetchRealPrMeta,
-  REAL_REPO,
-  REAL_PR_NUMBER
-} from "./fixture.js";
+import { test, expect, fetchRealPrMeta, REAL_REPO, REAL_PR_NUMBER } from "./fixture.js";
 
 function isGitHubRateLimitMessage(message: string): boolean {
   return (
@@ -26,29 +22,26 @@ function isGitHubRateLimitMessage(message: string): boolean {
 }
 
 test.describe("auth smoke", () => {
-  test("TC-013: sidepanel has no horizontal overflow at narrow widths", async ({
-    extensionContext,
-    extensionId
+  test("TC-013: background responds to a GET_SYNC_STATUS message round-trip", async ({
+    extensionContext
   }) => {
-    const panel = await openSidepanelOnRealPr(extensionContext, extensionId);
-
-    // Wait for onboarding check to pass and initial render
-    await panel.waitForSelector(".dorv-sidepanel", { timeout: 15_000 });
-
-    for (const width of [320, 480, 720]) {
-      await panel.setViewportSize({ width, height: 800 });
-      // Give React one frame to reflow
-      await panel.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
-      const { scrollWidth, innerWidth } = await panel.evaluate(() => ({
-        scrollWidth: document.body.scrollWidth,
-        innerWidth: window.innerWidth
-      }));
-      expect(scrollWidth, `horizontal overflow at ${width.toString()}px`).toBeLessThanOrEqual(
-        innerWidth + 2
-      );
-    }
-
-    await panel.close();
+    // Chrome v130+ redirects ALL extension-page navigations in Playwright,
+    // so we send messages directly from the SW context.
+    const worker =
+      extensionContext.serviceWorkers()[0] ??
+      (await extensionContext.waitForEvent("serviceworker"));
+    const response = await worker.evaluate(
+      ([repo, prNumber]) => {
+        return new Promise<{ success: boolean }>((resolve) => {
+          chrome.runtime.sendMessage(
+            { type: "GET_SYNC_STATUS", payload: { repo, prNumber } },
+            resolve
+          );
+        });
+      },
+      [REAL_REPO, REAL_PR_NUMBER] as const
+    );
+    expect(response.success, "background must respond successfully to GET_SYNC_STATUS").toBe(true);
   });
 
   test("TC-011: empty Google token results in error sync state", async ({
@@ -87,8 +80,13 @@ test.describe("auth smoke", () => {
         {
           repo,
           prNumber,
-          docId: "expired-token-smoke-doc-id",
-          docUrl: "https://docs.google.com/document/d/expired-token-smoke-doc-id/edit",
+          docs: [
+            {
+              filename: "expired-token-smoke.md",
+              docId: "expired-token-smoke-doc-id",
+              docUrl: "https://docs.google.com/document/d/expired-token-smoke-doc-id/edit"
+            }
+          ],
           createdAt: new Date().toISOString(),
           lastSyncedAt: new Date().toISOString(),
           headSha: meta.headSha,

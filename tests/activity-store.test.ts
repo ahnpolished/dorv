@@ -95,6 +95,7 @@ describe("HUM-1279 activities storage", () => {
         prNumber: 42,
         ghCommentId: 1001,
         docCommentId: "doc-comment-1",
+        docId: "doc-1",
         source: "github"
       },
       {
@@ -102,6 +103,7 @@ describe("HUM-1279 activities storage", () => {
         prNumber: 42,
         ghCommentId: 1002,
         docCommentId: "doc-comment-2",
+        docId: "doc-1",
         source: "gdoc"
       }
     ];

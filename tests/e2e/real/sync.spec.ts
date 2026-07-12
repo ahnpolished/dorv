@@ -5,7 +5,6 @@
 import {
   test,
   expect,
-  openSidepanelOnRealPr,
   fetchCommentTarget,
   createGhReviewComment,
   createGhCommentReply,
@@ -52,6 +51,8 @@ async function seedDocMapping(extensionWorker: ExtensionWorker): Promise<RealE2E
 
   // Restore the full storage snapshot if available, but always force the
   // current auth + mapping keys because prior test snapshots may be partial.
+  const docs = (state.docMapping as any).docs as { docId: string }[] | undefined;
+  const firstDocId = docs?.[0]?.docId ?? (state.docMapping as any).docId;
   const storageSnapshot = {
     ...((state as any).storageSnapshot || {}),
     github_pat: GITHUB_PAT,
@@ -59,7 +60,7 @@ async function seedDocMapping(extensionWorker: ExtensionWorker): Promise<RealE2E
       { repo: (state.docMapping as any).repo, prNumber: (state.docMapping as any).prNumber }
     ],
     [state.docStoreKey]: state.docMapping,
-    [`docStore:${(state.docMapping as any).docId}`]: state.docMapping
+    [`docStore:${firstDocId}`]: state.docMapping
   };
 
   await extensionWorker.evaluate((data: any) => {
@@ -361,34 +362,11 @@ test.describe("sync", () => {
     expect(matching.length, "No duplicate GDoc comments").toBe(1);
   });
 
-  test("TC-014: Sync now button shows dorv-spinning during active sync", async ({
-    extensionContext,
-    extensionId,
-    extensionWorker
-  }) => {
-    test.setTimeout(180_000);
-    await seedDocMapping(extensionWorker);
-    const panel = await openSidepanelOnRealPr(extensionContext, extensionId);
-
-    const mainPanel = panel.locator("[data-testid='dorv-main-panel']");
-    const errorPanel = panel.locator("[data-testid='dorv-error']");
-    await expect(mainPanel.or(errorPanel)).toBeVisible({ timeout: 30_000 });
-    if (await errorPanel.isVisible().catch(() => false)) {
-      const message = (await errorPanel.textContent()) ?? "unknown sidepanel error";
-      if (message.includes("rate limit") || message.includes("API rate limit exceeded")) {
-        test.skip(true, `GitHub rate limited: ${message}`);
-        return;
-      }
-      throw new Error(`Sidepanel failed before sync button rendered: ${message}`);
-    }
-
-    const syncBtn = panel.locator("[data-testid='dorv-sync-now-btn']");
-    await expect(syncBtn).toBeVisible({ timeout: 30_000 });
-
-    await syncBtn.click();
-    const spinner = panel.locator("[data-testid='dorv-refresh-icon']");
-    await expect(spinner).toHaveClass(/dorv-spinning/, { timeout: 10_000 });
-    await expect(spinner).not.toHaveClass(/dorv-spinning/, { timeout: 120_000 });
-    await panel.close();
-  });
+  // TC-014 ("Sync now button shows dorv-spinning during active sync") deleted:
+  // it asserted sidepanel-specific spinner testids (`dorv-sync-now-btn`,
+  // `dorv-refresh-icon`, `.dorv-spinning`) that no longer exist. The new
+  // github-buttons.content.tsx sync button has its own isSyncing/disabled
+  // state but no data-testid hooks, and is covered by
+  // tests/github-button-injection.test.ts — no reasonable real-e2e
+  // equivalent without inventing new selectors outside this task's scope.
 });

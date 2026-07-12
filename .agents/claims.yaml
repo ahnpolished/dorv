@@ -18,6 +18,24 @@
 #   poll_interval_minutes: default 5
 
 claims:
+  V030:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-03T00:00:00Z"
+    completed_at: "2026-07-04T02:00:00Z"
+    depends_on: []
+    branch: feature/v0.3.0
+    worktree: .worktrees/v0.3.0
+    pr: https://github.com/ahnpolished/dorv/pull/78
+  HUM-1410:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-04T12:35:00Z"
+    completed_at: "2026-07-04T12:42:00Z"
+    depends_on: []
+    branch: feature/hum-1410
+    worktree: .worktrees/feature-hum-1410
+    pr: https://github.com/ahnpolished/dorv/pull/79
   HUM-1205:
     agent: codex
     status: done
@@ -503,5 +521,44 @@ claims:
     claimed_at: "2026-05-30T09:20:00Z"
     depends_on: []
     completed_at: "2026-05-30T13:24:00Z"
+
+  HUM-1415:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-05T18:40:00Z"
+    depends_on: []
+    branch: feature/hum-1415
+    worktree: .worktrees/feature-hum-1415
+
+  HUM-1417-pi:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-06T00:00:00Z"
+    completed_at: "2026-07-07T01:40:00Z"
+    depends_on: []
+    branch: feature/hum-1417-pi
+    worktree: .worktrees/feature-hum-1417-pi
+    pr: https://github.com/ahnpolished/dorv/pull/92
+    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1417 (branch feature/hum-1417, worktree .worktrees/feature-hum-1417, PR #90). Both are candidates for human reconciliation.
+
+  HUM-1418-pi:
+    agent: pi
+    status: done
+    claimed_at: "2026-07-07T01:35:00Z"
+    completed_at: "2026-07-07T01:35:42Z"
+    depends_on: []
+    branch: feature/hum-1418-pi
+    worktree: .worktrees/feature-hum-1418-pi
+    pr: https://github.com/ahnpolished/dorv/pull/91
+    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1418 (branch feature/hum-1418, worktree .worktrees/feature-hum-1418). Both are candidates for human reconciliation.
+
+  HUM-1413-pi:
+    agent: pi
+    status: in_progress
+    claimed_at: "2026-07-06T00:00:00Z"
+    depends_on: []
+    branch: feature/hum-1413-pi
+    worktree: .worktrees/feature-hum-1413-pi
+    comment: Parallel redundant effort alongside existing claude-code claim on HUM-1413. Read-only investigation; will open PR only if a real gap is found. Otherwise posts independent Linear verdict comment.
 
 wait_queue: {}

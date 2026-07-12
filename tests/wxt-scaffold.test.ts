@@ -32,14 +32,14 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(extensionPackage.scripts.zip).toBe("wxt zip");
   });
 
-  it("configures manifest permissions, hosts, oauth, and side panel", () => {
+  it("configures manifest permissions, hosts, and oauth", () => {
     const config = readFileSync(join(extensionRoot, "wxt.config.ts"), "utf8");
 
     expect(config).toContain("@wxt-dev/module-react");
     expect(config).toContain("storage");
     expect(config).toContain("identity");
-    expect(config).toContain("alarms");
-    expect(config).toContain("sidePanel");
+    expect(config).not.toContain("alarms");
+    expect(config).not.toContain("sidePanel");
     expect(config).toContain("https://github.com/*");
     expect(config).toContain("https://docs.google.com/*");
     expect(config).toContain("https://api.github.com/*");
@@ -47,11 +47,9 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(config).toContain("https://www.googleapis.com/auth/drive.file");
     expect(config).not.toContain("https://www.googleapis.com/auth/documents");
     expect(config).toContain("GOOGLE_CLIENT_ID");
-    expect(config).toContain("side_panel");
-    expect(config).toContain("sidepanel.html");
-    expect(config).toContain("commands");
-    expect(config).toContain("toggle-sidepanel");
-    expect(config).toContain("Alt+Shift+D");
+    expect(config).not.toContain("side_panel");
+    expect(config).not.toContain("sidepanel.html");
+    expect(config).not.toContain("toggle-sidepanel");
   });
 
   it("configures extension icon assets", () => {
@@ -62,14 +60,7 @@ describe("HUM-1194 WXT extension scaffold", () => {
     expect(config).toContain("icon-48.png");
     expect(config).toContain("icon-128.png");
 
-    for (const asset of [
-      "dorv.svg",
-      "dorv-sync.svg",
-      "status-icons.svg",
-      "icon-16.png",
-      "icon-48.png",
-      "icon-128.png"
-    ]) {
+    for (const asset of ["dorv.svg", "icon-16.png", "icon-48.png", "icon-128.png"]) {
       expect(existsSync(join(extensionRoot, "public", asset))).toBe(true);
     }
 
@@ -85,20 +76,10 @@ describe("HUM-1194 WXT extension scaffold", () => {
       width: 128,
       height: 128
     });
-
-    const syncSvg = readFileSync(join(extensionRoot, "public", "dorv-sync.svg"), "utf8");
-    expect(syncSvg).toContain("animation: spin 1s linear infinite");
-    expect(syncSvg).toContain("prefers-reduced-motion");
-
-    const statusSprite = readFileSync(join(extensionRoot, "public", "status-icons.svg"), "utf8");
-    for (const symbol of ["status-linked", "status-stale", "status-error", "status-syncing"]) {
-      expect(statusSprite).toContain(`id="${symbol}"`);
-    }
   });
 
-  it("creates the GitHub content script and Google Docs side panel entrypoints", () => {
-    expect(existsSync(join(extensionRoot, "entrypoints", "github-sidebar.content.tsx"))).toBe(true);
-    expect(existsSync(join(extensionRoot, "entrypoints", "sidepanel.html"))).toBe(true);
-    expect(existsSync(join(extensionRoot, "src", "sidepanel.tsx"))).toBe(true);
+  it("creates the GitHub and Google Docs button content scripts", () => {
+    expect(existsSync(join(extensionRoot, "entrypoints", "github-buttons.content.tsx"))).toBe(true);
+    expect(existsSync(join(extensionRoot, "entrypoints", "gdoc-buttons.content.tsx"))).toBe(true);
   });
 });

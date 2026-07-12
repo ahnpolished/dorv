@@ -69,7 +69,7 @@ jobs:
         run: pnpm e2e:build
 
       - name: Run E2E tests
-        run: xvfb-run --auto-servernum pnpm e2e
+        run: xvfb-run --auto-servernum pnpm e2e:ci
 
       - name: Upload Playwright report
         if: failure()
