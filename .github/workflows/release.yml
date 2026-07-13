@@ -122,23 +122,27 @@ jobs:
           ACCESS_TOKEN: ${{ steps.chrome_token.outputs.access_token }}
           ZIP_PATH: ${{ steps.artifact.outputs.zip_path }}
         run: |
-          curl -fsS \
+          http_code="$(curl -sS -w '%{http_code}' -o response.json \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
             -H "x-goog-api-version: 2" \
             -X POST \
             -T "$ZIP_PATH" \
-            "https://chromewebstore.googleapis.com/upload/v2/publishers/${{ secrets.CWS_PUBLISHER_ID }}/items/${{ secrets.CWS_EXTENSION_ID }}:upload"
+            "https://chromewebstore.googleapis.com/upload/v2/publishers/${{ secrets.CWS_PUBLISHER_ID }}/items/${{ secrets.CWS_EXTENSION_ID }}:upload")"
+          cat response.json
+          if [ "$http_code" -ge 400 ]; then exit 1; fi
 
       - name: Publish extension to Chrome Web Store
         if: ${{ inputs.publish_to_chrome }}
         env:
           ACCESS_TOKEN: ${{ steps.chrome_token.outputs.access_token }}
         run: |
-          curl -fsS \
+          http_code="$(curl -sS -w '%{http_code}' -o response.json \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
             -H "x-goog-api-version: 2" \
             -X POST \
-            "https://chromewebstore.googleapis.com/v2/publishers/${{ secrets.CWS_PUBLISHER_ID }}/items/${{ secrets.CWS_EXTENSION_ID }}:publish"
+            "https://chromewebstore.googleapis.com/v2/publishers/${{ secrets.CWS_PUBLISHER_ID }}/items/${{ secrets.CWS_EXTENSION_ID }}:publish")"
+          cat response.json
+          if [ "$http_code" -ge 400 ]; then exit 1; fi
 
       - name: Create GitHub release
         env:
