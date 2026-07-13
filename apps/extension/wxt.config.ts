@@ -45,7 +45,9 @@ export default defineConfig({
         "128": "icon-128.png"
       }
     },
-    key: process.env.DORV_EXTENSION_KEY ?? DEV_EXTENSION_KEY
+    // Omit in CI: Chrome Web Store assigns and keeps its own key for the
+    // published item, and uploading a mismatched key is rejected.
+    ...(process.env.CI ? {} : { key: process.env.DORV_EXTENSION_KEY ?? DEV_EXTENSION_KEY })
   },
   webExt: {
     openDevtools: true,
