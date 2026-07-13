@@ -20,6 +20,16 @@ const SYNCED_ATTR = "data-dorv-synced";
 /** Primary selector for one comment/suggestion thread card. */
 const THREAD_SELECTOR = ".docos-docoview-replycontainer";
 
+/** Structural fallback selectors — these target the comment card wrapper
+ *  and are less specific than the primary docos selector but catch
+ *  variants Google has shipped over the years. */
+const THREAD_FALLBACK_SELECTORS = [
+  ".docos-docoview-tesla-conflict",
+  ".docos-docoview-rootreply",
+  ".docos-anchoredreplyview",
+  ".docos-replyview-comment"
+];
+
 /** Candidate selectors for the author element within a card, most specific first. */
 const AUTHOR_SELECTORS = [
   ".docos-anchoredreplyview-author.docos-author",
@@ -57,6 +67,11 @@ export function findCommentCards(root: ParentNode): Element[] {
   const primary = Array.from(root.querySelectorAll(THREAD_SELECTOR));
   if (primary.length > 0) return primary;
 
+  for (const sel of THREAD_FALLBACK_SELECTORS) {
+    const fallback = Array.from(root.querySelectorAll(sel));
+    if (fallback.length > 0) return fallback;
+  }
+
   return findCommentCardsByStructure(root);
 }
 
@@ -73,7 +88,7 @@ function findCommentCardsByStructure(root: ParentNode): Element[] {
 }
 
 function looksLikeCommentCard(el: Element): boolean {
-  if (el.children.length === 0 || el.children.length > 12) return false;
+  if (el.children.length === 0 || el.children.length > 30) return false;
   const text = normalize(el.textContent);
   if (text.length < 3 || text.length > 2000) return false;
   const author = extractCardAuthor(el);
@@ -207,18 +222,24 @@ export function matchCardToComment(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-/** Class of the hover-revealed action bar holding "Mark as resolved" / "More options". */
-const BADGE_CONTAINER_SELECTOR = ".docos-approver-badge-container";
+/** Candidate selectors for the action bar holding "Mark as resolved" / "More options". */
+const BADGE_CONTAINER_SELECTORS = [
+  ".docos-anchoredreplyview-buttonholder",
+  ".docos-replyview-actionbar",
+  ".docos-approver-badge-container"
+];
 
 /**
- * Finds the hover-revealed action bar (alongside "Mark as resolved" and
- * "More options") within a card, so our button can sit next to them instead
- * of at the bottom of the card. Returns `undefined` if Google hasn't
- * rendered it (e.g. class name drift) — callers should fall back to
- * appending directly on the card.
+ * Finds the action bar (alongside "Mark as resolved" and
+ * "More options") within a card. Returns `undefined` if none of the
+ * known selectors match — callers fall back to the card itself.
  */
 export function findBadgeContainer(card: Element): Element | undefined {
-  return card.querySelector(BADGE_CONTAINER_SELECTOR) ?? undefined;
+  for (const sel of BADGE_CONTAINER_SELECTORS) {
+    const el = card.querySelector(sel);
+    if (el) return el;
+  }
+  return undefined;
 }
 
 /** Marks a card as synced (idempotent, cheap to check on re-scans). */

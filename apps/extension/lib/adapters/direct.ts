@@ -921,12 +921,12 @@ export class DirectAdapter implements SyncAdapter {
     docUrl: string
   ): Promise<string> {
     const author = await this.formatGDocAuthor(comment.author);
-    return `> From Google Docs -- ${author} -- ${comment.content}\n\n[View in GDoc](${docUrl})\n\n${buildGHSourceMarker(comment.id)}`;
+    return `> From Google Docs -- ${author} -- ${comment.content}\n\n[View in GDoc](${docUrl}?disco=${comment.id})\n\n${buildGHSourceMarker(comment.id)}`;
   }
 
   private async formatDocReplyBodyForGH(reply: GoogleDocReply, docUrl: string): Promise<string> {
     const author = await this.formatGDocAuthor(reply.author);
-    return `> From Google Docs -- ${author} -- ${reply.content}\n\n[View in GDoc](${docUrl})\n\n${buildGHSourceMarker(reply.id)}`;
+    return `> From Google Docs -- ${author} -- ${reply.content}\n\n[View in GDoc](${docUrl}?disco=${reply.id})\n\n${buildGHSourceMarker(reply.id)}`;
   }
 }
 

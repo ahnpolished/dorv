@@ -845,7 +845,7 @@ describe("DirectAdapter baseline sync", () => {
     );
 
     expect(reviewBody).toMatchObject({
-      body: "> From Google Docs -- @humphreyahn -- Please fix this\n\n[View in GDoc](https://docs.google.com/document/d/doc-1/edit)\n\n<!-- dorv-src=doc:doc-comment-1 -->",
+      body: "> From Google Docs -- @humphreyahn -- Please fix this\n\n[View in GDoc](https://docs.google.com/document/d/doc-1/edit?disco=doc-comment-1)\n\n<!-- dorv-src=doc:doc-comment-1 -->",
       path: "README.md",
       line: 1
     });

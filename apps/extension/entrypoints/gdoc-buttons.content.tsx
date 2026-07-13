@@ -35,12 +35,13 @@ import { captureExtensionException, initSentryForSurface } from "../lib/telemetr
 
 const SURFACE = "gdoc-buttons" as const;
 const DEBOUNCE_MS = 600;
+const MAX_DEBOUNCE_MS = 3000;
 const CHECK_DISPLAY_MS = 350;
 const BUTTON_ATTR = "data-dorv-button";
 const STYLE_ID = "dorv-gdoc-button-style";
 
 const ICON_GITHUB =
-  '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
+  '<svg viewBox="0 0 16 16" width="14" height="14" fill="#f97316" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
 const ICON_SPINNER =
   '<svg class="dorv-spinning" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 2 A10 10 0 0 1 22 12"/></svg>';
 const ICON_CHECK =
@@ -66,13 +67,21 @@ function ensureStyleInjected(): void {
       justify-content: center;
       width: 22px;
       height: 22px;
-      margin: 4px 4px 4px 0;
+      margin: 0 2px;
       padding: 0;
       border: none;
       border-radius: 4px;
       background: none;
       color: #1a73e8;
       cursor: pointer;
+      align-self: center;
+      vertical-align: middle;
+    }
+    /* When injected directly into the card (no action bar found), float right
+       so it sits near the header instead of top-left. */
+    .docos-docoview-replycontainer > .dorv-push-btn {
+      float: right;
+      margin: 8px 8px 0 0;
     }
     .dorv-push-btn svg {
       display: block;
@@ -123,9 +132,13 @@ function findMatchedComment(
   return author && text ? matchCardToComment({ author, text }, comments) : undefined;
 }
 
-/** Prefer the hover-revealed action bar (next to "Mark as resolved" / "More options"); falls back to the card itself. */
+/** Prefer the visible action bar (next to "Mark as resolved" / "More options"); falls back to the card itself so the button is never trapped inside a hidden hover-only container. */
 function getInjectionTarget(card: Element): Element {
-  return findBadgeContainer(card) ?? card;
+  const badge = findBadgeContainer(card);
+  if (badge && (badge as HTMLElement).offsetHeight > 0) {
+    return badge;
+  }
+  return card;
 }
 
 function renderErrorNear(card: Element, message: string): void {
@@ -194,11 +207,12 @@ function injectButton(
       });
   });
 
-  getInjectionTarget(card).prepend(button);
+  getInjectionTarget(card).append(button);
 }
 
 async function scanAndInject(ref: PullRequestRef, docId: string): Promise<void> {
   const cards = findCommentCards(document.body).filter((card) => !isCardSynced(card));
+  console.log("[dorv-gdoc] scanAndInject: cards found =", cards.length);
   if (cards.length === 0) return;
 
   // Fetching Google Doc comments requires a Google OAuth token via
@@ -213,6 +227,7 @@ async function scanAndInject(ref: PullRequestRef, docId: string): Promise<void> 
     getDocCommentsViaBackground(ref),
     adapter.getCommentMappings(ref)
   ]);
+  console.log("[dorv-gdoc] comments fetched =", comments.length, "mappings =", mappings.length);
 
   const syncedDocCommentIds = new Set(
     mappings.filter((m) => m.source === "gdoc").map((m) => m.docCommentId)
@@ -220,7 +235,15 @@ async function scanAndInject(ref: PullRequestRef, docId: string): Promise<void> 
 
   for (const card of cards) {
     const comment = findMatchedComment(card, comments);
-    if (!comment) continue;
+    if (!comment) {
+      console.log(
+        "[dorv-gdoc] no matched comment for card",
+        extractCardAuthor(card),
+        "|",
+        extractCardBody(card)?.slice(0, 40)
+      );
+      continue;
+    }
 
     if (syncedDocCommentIds.has(comment.id)) {
       markCardSynced(card);
@@ -228,6 +251,7 @@ async function scanAndInject(ref: PullRequestRef, docId: string): Promise<void> 
       continue;
     }
 
+    console.log("[dorv-gdoc] injecting button for comment", comment.id);
     injectButton(card, ref, docId, comment);
   }
 }
@@ -256,11 +280,36 @@ export default defineContentScript({
     ensureStyleInjected();
 
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
     let running = false;
     const scheduleScan = () => {
       if (timer !== null) clearTimeout(timer);
+      maxWaitTimer ??= setTimeout(() => {
+        maxWaitTimer = null;
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (running) return;
+        running = true;
+        void scanAndInject(ref, docId)
+          .catch((err: unknown) => {
+            captureExtensionException(err, {
+              surface: SURFACE,
+              tags: { operation: "scan_and_inject" },
+              extra: { docId }
+            });
+          })
+          .finally(() => {
+            running = false;
+          });
+      }, MAX_DEBOUNCE_MS);
       timer = setTimeout(() => {
         timer = null;
+        if (maxWaitTimer !== null) {
+          clearTimeout(maxWaitTimer);
+          maxWaitTimer = null;
+        }
         if (running) return;
         running = true;
         void scanAndInject(ref, docId)
@@ -287,6 +336,7 @@ export default defineContentScript({
     ctx.onInvalidated(() => {
       observer.disconnect();
       if (timer !== null) clearTimeout(timer);
+      if (maxWaitTimer !== null) clearTimeout(maxWaitTimer);
     });
   }
 });

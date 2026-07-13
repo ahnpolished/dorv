@@ -134,6 +134,6 @@ describe("HUM-1254 cross-links", () => {
     );
 
     expect(capturedBody).toContain("Please clarify");
-    expect(capturedBody).toContain(`[View in GDoc](${DOC_URL})`);
+    expect(capturedBody).toContain(`[View in GDoc](${DOC_URL}?disco=gdoc-c-1)`);
   });
 });
