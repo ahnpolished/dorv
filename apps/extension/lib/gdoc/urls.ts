@@ -31,7 +31,10 @@ export function renderFileEntry(doc: DocFileMapping): string {
     return `- [${doc.filename}](${doc.docUrl})`;
   }
   const links = versions
-    .map((v, i) => `[v${(i + 1).toString()} (ref: ${v.sha.slice(0, 7)})](${doc.docUrl})`)
+    .map(
+      (v, i) =>
+        `[v${(i + 1).toString()} (ref: ${v.sha.slice(0, 7)})](${v.docId ? buildDocUrl(v.docId) : doc.docUrl})`
+    )
     .join(", ");
   return `- [${doc.filename}](${doc.docUrl}) (${links})`;
 }
@@ -66,7 +69,12 @@ export function extractDocsFromBotComment(body: string): DocFileMapping[] | unde
             docUrl: buildDocUrl(String(docId))
           };
           const v = versionsByFile[filename];
-          if (v) doc.versions = v;
+          if (v) {
+            doc.versions = v.map((ver) => ({
+              sha: ver.sha,
+              docId: ver.docId ?? String(docId) // backward-compat for versions without docId
+            }));
+          }
           return doc;
         });
       if (docs.length > 0) return docs;

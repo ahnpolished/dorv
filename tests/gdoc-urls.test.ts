@@ -63,10 +63,30 @@ describe("renderFileEntry", () => {
       filename: "a.md",
       docId: "d1",
       docUrl: buildDocUrl("d1"),
-      versions: [{ sha: "abc1234567890" }, { sha: "def7890123456" }]
+      versions: [
+        { sha: "abc1234567890", docId: "d1" },
+        { sha: "def7890123456", docId: "d2" }
+      ]
     };
     expect(renderFileEntry(doc)).toBe(
-      "- [a.md](https://docs.google.com/document/d/d1/edit) ([v1 (ref: abc1234)](https://docs.google.com/document/d/d1/edit), [v2 (ref: def7890)](https://docs.google.com/document/d/d1/edit))"
+      "- [a.md](https://docs.google.com/document/d/d1/edit) ([v1 (ref: abc1234)](https://docs.google.com/document/d/d1/edit), [v2 (ref: def7890)](https://docs.google.com/document/d/d2/edit))"
     );
+  });
+
+  it("round-trips versions with docIds through marker and extraction", () => {
+    const docs = [
+      {
+        filename: "a.md",
+        docId: "docA123",
+        docUrl: buildDocUrl("docA123"),
+        versions: [
+          { sha: "abc1234567890", docId: "oldA" },
+          { sha: "def7890123456", docId: "olderA" }
+        ]
+      }
+    ];
+    const marker = buildDocsMarker(docs);
+    const recovered = extractDocsFromBotComment(marker);
+    expect(recovered).toEqual(docs);
   });
 });

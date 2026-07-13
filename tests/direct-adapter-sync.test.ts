@@ -1137,3 +1137,724 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
     expect(stored?.docs[0]?.docId).toBe("green-field-doc-id");
   });
 });
+
+describe("DirectAdapter refreshDocsIfStale", () => {
+  let storage: StorageArea;
+  let adapter: DirectAdapter;
+  let authStore: AuthStore;
+  let docStore: any;
+  let activityStore: any;
+
+  beforeEach(() => {
+    storage = createMemoryStorageArea();
+    authStore = createAuthStore(storage);
+    docStore = createDocStore(storage);
+    activityStore = createActivityStore(storage);
+    adapter = new DirectAdapter(authStore, storage);
+    mockFetch.mockReset();
+    (global as any).chrome = {
+      runtime: { lastError: null },
+      identity: {
+        getAuthToken: vi.fn((_opts: any, cb: any) => cb("mock-g-token")),
+        removeCachedAuthToken: vi.fn()
+      }
+    };
+  });
+
+  it("creates a new doc, archives the old one in versions, and clears stale", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+
+    let patchedBody: string | undefined;
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+
+      // Order matters: /pulls/123/files must be checked BEFORE /pulls/123
+      if (urlStr.includes("/pulls/123/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                filename: "README.md",
+                raw_url: "https://raw.example/README.md",
+                status: "modified"
+              }
+            ])
+        };
+      }
+
+      if (urlStr.includes("/pulls/123")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              title: "My PR",
+              user: { login: "alice" },
+              head: { ref: "feature/x", sha: "new-sha-123" },
+              html_url: "https://github.com/org/repo/pull/123"
+            })
+        };
+      }
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# Updated README") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "new-doc-id",
+              webViewLink: "https://docs.google.com/document/d/new-doc-id/edit"
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/new-doc-id/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/issues/123/comments") && method === "GET") {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 200,
+                body: '<!-- dorv-docs={"README.md":"old-doc-id"} -->\n🤖 **dorv** has created linked Google Doc for review:\n\n- [README.md](https://docs.google.com/document/d/old-doc-id/edit)'
+              }
+            ])
+        };
+      }
+
+      if (urlStr.includes("/issues/comments/200") && method === "PATCH") {
+        patchedBody = JSON.parse(String(init?.body)).body as string;
+        return { ok: true, json: () => Promise.resolve({ id: 200 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    const mapping = {
+      ...ref,
+      docs: [
+        {
+          filename: "README.md",
+          docId: "old-doc-id",
+          docUrl: "https://docs.google.com/document/d/old-doc-id/edit"
+        }
+      ],
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "old-sha-456",
+      latestSha: "old-sha-456",
+      isStale: false
+    };
+    await docStore.upsert(mapping);
+
+    // Call refresh directly to bypass sync lock / stale detection complexity in tests
+    await (adapter as any).refreshDocsIfStale(ref, mapping, "mock-gh-token", "mock-g-token");
+
+    const updated = await docStore.get("org/repo", 123);
+    expect(updated?.isStale).toBe(false);
+    expect(updated?.headSha).toBe("new-sha-123");
+    expect(updated?.latestSha).toBe("new-sha-123");
+    expect(updated?.docs[0]?.docId).toBe("new-doc-id");
+
+    // The bot comment is updated in-place: the primary link becomes the new
+    // doc URL, and the full version history — oldest to newest — is appended
+    // in parens, with the highest version number pointing at the latest doc.
+    expect(patchedBody).toContain(
+      "[README.md](https://docs.google.com/document/d/new-doc-id/edit)"
+    );
+    expect(patchedBody).toContain(
+      "[v1 (ref: old-sha)](https://docs.google.com/document/d/old-doc-id/edit)"
+    );
+    expect(patchedBody).toContain(
+      "[v2 (ref: new-sha)](https://docs.google.com/document/d/new-doc-id/edit)"
+    );
+    expect(updated?.docs[0]?.versions).toEqual([
+      { sha: "old-sha-456", docId: "old-doc-id" },
+      { sha: "new-sha-123", docId: "new-doc-id" }
+    ]);
+  });
+
+  it("does not duplicate the self-tagged version createDoc records when a single refresh follows", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+
+    let uploadCount = 0;
+    let postedBotComment = "";
+    let patchedBody: string | undefined;
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+
+      if (urlStr.includes("/pulls/123/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                filename: "README.md",
+                raw_url: "https://raw.example/README.md",
+                status: "modified"
+              }
+            ])
+        };
+      }
+      if (urlStr.includes("/pulls/123")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              title: "My PR",
+              user: { login: "alice" },
+              head: { ref: "feature/x", sha: "sha-2" },
+              html_url: "https://github.com/org/repo/pull/123"
+            })
+        };
+      }
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# Updated README") };
+      }
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        uploadCount += 1;
+        const docId = uploadCount === 1 ? "doc-1" : "doc-2";
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: docId,
+              webViewLink: `https://docs.google.com/document/d/${docId}/edit`
+            })
+        };
+      }
+      if (urlStr.includes("/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+      if (urlStr.includes("/issues/123/comments") && method === "GET") {
+        return { ok: true, json: () => Promise.resolve([{ id: 500, body: postedBotComment }]) };
+      }
+      if (urlStr.includes("/issues/123/comments") && method === "POST") {
+        postedBotComment = JSON.parse(String(init?.body)).body as string;
+        return { ok: true, json: () => Promise.resolve({ id: 500 }) };
+      }
+      if (urlStr.includes("/issues/comments/500") && method === "PATCH") {
+        patchedBody = JSON.parse(String(init?.body)).body as string;
+        return { ok: true, json: () => Promise.resolve({ id: 500 }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+
+    // Real createDoc self-tags the freshly created doc: versions = [{sha: sha-1, docId: doc-1}].
+    const created = await adapter.createDoc({
+      repo: ref.repo,
+      prNumber: ref.prNumber,
+      title: "My PR",
+      author: "alice",
+      branch: "feature/x",
+      headSha: "sha-1",
+      prUrl: "https://github.com/org/repo/pull/123",
+      files: [
+        { filename: "README.md", rawUrl: "https://raw.example/README.md", status: "modified" }
+      ]
+    });
+    expect(created.mapping.docs[0]?.versions).toEqual([{ sha: "sha-1", docId: "doc-1" }]);
+
+    // One refresh follows (sha-1 -> sha-2). The old doc's self-tag from
+    // createDoc must not be duplicated into a second, identical entry.
+    const mapping = created.mapping;
+    await (adapter as any).refreshDocsIfStale(ref, mapping, "mock-gh-token", "mock-g-token");
+
+    const updated = await docStore.get("org/repo", 123);
+    expect(updated?.docs[0]?.docId).toBe("doc-2");
+    // doc-1's own self-tag (from createDoc) is reused as v1, not duplicated —
+    // and doc-2, the latest, lands at v2: highest version = latest doc.
+    expect(updated?.docs[0]?.versions).toEqual([
+      { sha: "sha-1", docId: "doc-1" },
+      { sha: "sha-2", docId: "doc-2" }
+    ]);
+
+    expect(patchedBody).toContain("[README.md](https://docs.google.com/document/d/doc-2/edit)");
+    expect(patchedBody).toContain(
+      "[v1 (ref: sha-1)](https://docs.google.com/document/d/doc-1/edit)"
+    );
+    expect(patchedBody).toContain(
+      "[v2 (ref: sha-2)](https://docs.google.com/document/d/doc-2/edit)"
+    );
+    // v1 must not appear a second time under a different version number.
+    expect(patchedBody?.match(/doc-1\/edit/g)?.length).toBe(1);
+
+    // A second refresh (sha-2 -> sha-3): the latest doc must still be the
+    // highest version number, not just true for a single refresh.
+    const secondMapping = updated;
+    if (!secondMapping) throw new Error("test setup: mapping missing");
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+      if (urlStr.includes("/pulls/123/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                filename: "README.md",
+                raw_url: "https://raw.example/README.md",
+                status: "modified"
+              }
+            ])
+        };
+      }
+      if (urlStr.includes("/pulls/123")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              title: "My PR",
+              user: { login: "alice" },
+              head: { ref: "feature/x", sha: "sha-3" },
+              html_url: "https://github.com/org/repo/pull/123"
+            })
+        };
+      }
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# Updated README") };
+      }
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "doc-3",
+              webViewLink: "https://docs.google.com/document/d/doc-3/edit"
+            })
+        };
+      }
+      if (urlStr.includes("/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+      if (urlStr.includes("/issues/123/comments") && method === "GET") {
+        return { ok: true, json: () => Promise.resolve([{ id: 500, body: postedBotComment }]) };
+      }
+      if (urlStr.includes("/issues/comments/500") && method === "PATCH") {
+        patchedBody = JSON.parse(String(init?.body)).body as string;
+        return { ok: true, json: () => Promise.resolve({ id: 500 }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+    await (adapter as any).refreshDocsIfStale(ref, secondMapping, "mock-gh-token", "mock-g-token");
+
+    const twiceRefreshed = await docStore.get("org/repo", 123);
+    expect(twiceRefreshed?.docs[0]?.docId).toBe("doc-3");
+    expect(twiceRefreshed?.docs[0]?.versions).toEqual([
+      { sha: "sha-1", docId: "doc-1" },
+      { sha: "sha-2", docId: "doc-2" },
+      { sha: "sha-3", docId: "doc-3" }
+    ]);
+    // Latest doc (doc-3) must be the highest version number.
+    expect(patchedBody).toContain(
+      "[v3 (ref: sha-3)](https://docs.google.com/document/d/doc-3/edit)"
+    );
+  });
+
+  it("findDocById resolves a doc archived in versions[]", async () => {
+    const mapping = {
+      repo: "org/repo",
+      prNumber: 123,
+      docs: [
+        {
+          filename: "README.md",
+          docId: "new-doc-id",
+          docUrl: "https://docs.google.com/document/d/new-doc-id/edit",
+          versions: [{ sha: "old-sha", docId: "old-doc-id" }]
+        }
+      ],
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "new-sha",
+      latestSha: "new-sha",
+      isStale: false
+    };
+
+    const { findDocById } = await import("../apps/extension/lib/adapters/types.js");
+    expect(findDocById(mapping, "old-doc-id")?.docId).toBe("old-doc-id");
+    expect(findDocById(mapping, "new-doc-id")?.docId).toBe("new-doc-id");
+  });
+
+  it("marks stale but does not refresh when Google token is missing", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) => cb(undefined));
+
+    mockFetch.mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes("/pulls/123")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              title: "My PR",
+              user: { login: "alice" },
+              head: { ref: "feature/x", sha: "new-sha-789" },
+              html_url: "https://github.com/org/repo/pull/123"
+            })
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    const mapping = {
+      ...ref,
+      docs: [
+        {
+          filename: "README.md",
+          docId: "doc-1",
+          docUrl: "https://docs.google.com/document/d/doc-1/edit"
+        }
+      ],
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "old-sha",
+      latestSha: "old-sha",
+      isStale: false
+    };
+    await docStore.upsert(mapping);
+
+    await adapter.syncPR(ref);
+
+    const updated = await docStore.get("org/repo", 123);
+    expect(updated?.isStale).toBe(true);
+    expect(updated?.latestSha).toBe("new-sha-789");
+    expect(updated?.docs[0]?.docId).toBe("doc-1");
+  });
+
+  it("refreshes a PR that was previously marked stale once the Google token becomes available", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+
+      if (urlStr.includes("/pulls/123/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                filename: "README.md",
+                raw_url: "https://raw.example/README.md",
+                status: "modified"
+              }
+            ])
+        };
+      }
+
+      if (urlStr.includes("/pulls/123")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              title: "My PR",
+              user: { login: "alice" },
+              head: { ref: "feature/x", sha: "new-sha-789" },
+              html_url: "https://github.com/org/repo/pull/123"
+            })
+        };
+      }
+
+      if (urlStr === "https://raw.example/README.md") {
+        return { ok: true, text: () => Promise.resolve("# Updated README") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "new-doc-id",
+              webViewLink: "https://docs.google.com/document/d/new-doc-id/edit"
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/new-doc-id/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/issues/123/comments") && method === "GET") {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 200,
+                body: '<!-- dorv-docs={"README.md":"doc-1"} -->\n🤖 **dorv** has created linked Google Doc for review:\n\n- [README.md](https://docs.google.com/document/d/doc-1/edit)'
+              }
+            ])
+        };
+      }
+
+      if (urlStr.includes("/issues/comments/200") && method === "PATCH") {
+        return { ok: true, json: () => Promise.resolve({ id: 200 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    const mapping = {
+      ...ref,
+      docs: [
+        {
+          filename: "README.md",
+          docId: "doc-1",
+          docUrl: "https://docs.google.com/document/d/doc-1/edit"
+        }
+      ],
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "old-sha",
+      latestSha: "new-sha-789",
+      isStale: true
+    };
+    await docStore.upsert(mapping);
+
+    await adapter.syncPR(ref);
+
+    const updated = await docStore.get("org/repo", 123);
+    expect(updated?.isStale).toBe(false);
+    expect(updated?.headSha).toBe("new-sha-789");
+    expect(updated?.docs[0]?.docId).toBe("new-doc-id");
+    expect(updated?.docs[0]?.versions).toEqual([
+      { sha: "old-sha", docId: "doc-1" },
+      { sha: "new-sha-789", docId: "new-doc-id" }
+    ]);
+  });
+
+  it("skips a file removed from the PR during refresh", async () => {
+    await authStore.setGitHubToken("mock-gh-token");
+
+    mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      const method = init?.method ?? "GET";
+
+      // Order matters: /pulls/123/files must be checked BEFORE /pulls/123
+      if (urlStr.includes("/pulls/123/files")) {
+        // README.md is gone, only AGENTS.md remains
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                filename: "AGENTS.md",
+                raw_url: "https://raw.example/AGENTS.md",
+                status: "modified"
+              }
+            ])
+        };
+      }
+
+      if (urlStr.includes("/pulls/123")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              title: "My PR",
+              user: { login: "alice" },
+              head: { ref: "feature/x", sha: "new-sha-999" },
+              html_url: "https://github.com/org/repo/pull/123"
+            })
+        };
+      }
+
+      if (urlStr === "https://raw.example/AGENTS.md") {
+        return { ok: true, text: () => Promise.resolve("# Updated AGENTS") };
+      }
+
+      if (urlStr.includes("/upload/drive/v3/files")) {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: "new-agents-doc",
+              webViewLink: "https://docs.google.com/document/d/new-agents-doc/edit"
+            })
+        };
+      }
+
+      if (urlStr.includes("/drive/v3/files/new-agents-doc/permissions")) {
+        return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+      }
+
+      if (urlStr.includes("/issues/123/comments") && method === "GET") {
+        return {
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 200,
+                body: '<!-- dorv-docs={"README.md":"readme-doc","AGENTS.md":"agents-doc"} -->\n🤖 **dorv** ...'
+              }
+            ])
+        };
+      }
+
+      if (urlStr.includes("/issues/comments/200") && method === "PATCH") {
+        return { ok: true, json: () => Promise.resolve({ id: 200 }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const ref = { repo: "org/repo", prNumber: 123 };
+    const mapping = {
+      ...ref,
+      docs: [
+        {
+          filename: "README.md",
+          docId: "readme-doc",
+          docUrl: "https://docs.google.com/document/d/readme-doc/edit"
+        },
+        {
+          filename: "AGENTS.md",
+          docId: "agents-doc",
+          docUrl: "https://docs.google.com/document/d/agents-doc/edit"
+        }
+      ],
+      createdAt: "2026-05-16T12:00:00Z",
+      lastSyncedAt: "2026-05-16T12:00:00Z",
+      headSha: "old-sha",
+      latestSha: "old-sha",
+      isStale: false
+    };
+    await docStore.upsert(mapping);
+
+    await adapter.syncPR(ref);
+
+    const updated = await docStore.get("org/repo", 123);
+    expect(updated?.isStale).toBe(false);
+    const readmeDoc = updated?.docs.find((d: any) => d.filename === "README.md");
+    const agentsDoc = updated?.docs.find((d: any) => d.filename === "AGENTS.md");
+    expect(readmeDoc?.docId).toBe("readme-doc"); // unchanged — file removed
+    expect(agentsDoc?.docId).toBe("new-agents-doc"); // refreshed
+  });
+
+  it.each([3, 4, 5])(
+    "keeps an independent version chain per file across multiple refreshes (%i markdown files)",
+    async (fileCount) => {
+      await authStore.setGitHubToken("mock-gh-token");
+
+      const filenames = Array.from({ length: fileCount }, (_, i) => `doc${i.toString()}.md`);
+      let uploadCallIndex = 0;
+      let currentSha = "s0";
+
+      mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
+        const urlStr = String(url);
+        const method = init?.method ?? "GET";
+
+        if (urlStr.includes("/pulls/123/files")) {
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve(
+                filenames.map((filename) => ({
+                  filename,
+                  raw_url: `https://raw.example/${filename}`,
+                  status: "modified"
+                }))
+              )
+          };
+        }
+        if (urlStr.includes("/pulls/123")) {
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                title: "My PR",
+                user: { login: "alice" },
+                head: { ref: "feature/x", sha: currentSha },
+                html_url: "https://github.com/org/repo/pull/123"
+              })
+          };
+        }
+        if (urlStr.startsWith("https://raw.example/")) {
+          return { ok: true, text: () => Promise.resolve("# content") };
+        }
+        if (urlStr.includes("/upload/drive/v3/files")) {
+          // Uploads happen sequentially in filename order, fileCount at a
+          // time per round — derive (round, fileIndex) from call order so
+          // each file gets its own docId per round.
+          const round = Math.floor(uploadCallIndex / fileCount);
+          const fileIndex = uploadCallIndex % fileCount;
+          uploadCallIndex += 1;
+          const docId = `d${fileIndex.toString()}-${round.toString()}`;
+          return {
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                id: docId,
+                webViewLink: `https://docs.google.com/document/d/${docId}/edit`
+              })
+          };
+        }
+        if (urlStr.includes("/permissions")) {
+          return { ok: true, json: () => Promise.resolve({ id: "perm-1" }) };
+        }
+        if (urlStr.includes("/issues/123/comments") && method === "GET") {
+          return { ok: true, json: () => Promise.resolve([]) };
+        }
+        return { ok: true, json: async () => ({}) };
+      });
+
+      const ref = { repo: "org/repo", prNumber: 123 };
+      const created = await adapter.createDoc({
+        repo: ref.repo,
+        prNumber: ref.prNumber,
+        title: "My PR",
+        author: "alice",
+        branch: "feature/x",
+        headSha: currentSha,
+        prUrl: "https://github.com/org/repo/pull/123",
+        files: filenames.map((filename) => ({
+          filename,
+          rawUrl: `https://raw.example/${filename}`,
+          status: "modified"
+        }))
+      });
+
+      // Round 0: every file self-tagged with its own creation doc.
+      for (const [i, filename] of filenames.entries()) {
+        const doc = created.mapping.docs.find((d) => d.filename === filename);
+        expect(doc?.docId).toBe(`d${i.toString()}-0`);
+        expect(doc?.versions).toEqual([{ sha: "s0", docId: `d${i.toString()}-0` }]);
+      }
+
+      currentSha = "s1";
+      let mapping = created.mapping;
+      await (adapter as any).refreshDocsIfStale(ref, mapping, "mock-gh-token", "mock-g-token");
+      mapping = (await docStore.get(ref.repo, ref.prNumber))!;
+
+      currentSha = "s2";
+      await (adapter as any).refreshDocsIfStale(ref, mapping, "mock-gh-token", "mock-g-token");
+      mapping = (await docStore.get(ref.repo, ref.prNumber))!;
+
+      // Every file must independently carry all three rounds, in order,
+      // with the highest version number pointing at that file's latest doc —
+      // no cross-contamination between files' version chains.
+      for (const [i, filename] of filenames.entries()) {
+        const doc = mapping.docs.find((d) => d.filename === filename);
+        expect(doc?.docId).toBe(`d${i.toString()}-2`);
+        expect(doc?.versions).toEqual([
+          { sha: "s0", docId: `d${i.toString()}-0` },
+          { sha: "s1", docId: `d${i.toString()}-1` },
+          { sha: "s2", docId: `d${i.toString()}-2` }
+        ]);
+      }
+    }
+  );
+});

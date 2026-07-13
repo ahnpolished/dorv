@@ -14,6 +14,7 @@ export interface MarkdownFileRef {
 
 export interface DocFileVersion {
   sha: string;
+  docId?: string;
   revId?: string;
 }
 
@@ -148,7 +149,20 @@ export function findDocForFile(mapping: DocMapping, filename: string): DocFileMa
 
 export function findDocById(mapping: DocMapping, docId: string): DocFileMapping | undefined {
   if (!Array.isArray(mapping.docs)) return undefined;
-  return mapping.docs.find((d) => d.docId === docId);
+  const current = mapping.docs.find((d) => d.docId === docId);
+  if (current) return current;
+  for (const doc of mapping.docs) {
+    const versions = doc.versions;
+    if (versions?.some((ver) => ver.docId === docId)) {
+      return {
+        filename: doc.filename,
+        docId,
+        docUrl: `https://docs.google.com/document/d/${docId}/edit`,
+        versions
+      };
+    }
+  }
+  return undefined;
 }
 
 export interface SyncAdapter {
@@ -157,6 +171,7 @@ export interface SyncAdapter {
   getGHComments(ref: PullRequestRef): Promise<GitHubReviewComment[]>;
   getDocComments(ref: PullRequestRef): Promise<GoogleDocComment[]>;
   getCommentMappings(ref: PullRequestRef): Promise<CommentMapping[]>;
+  getReplyMappings(ref: PullRequestRef): Promise<ReplyMapping[]>;
   pushGHCommentToDoc(comment: GitHubReviewComment, mapping: DocMapping): Promise<CommentMapping>;
   /**
    * `docId` identifies which doc in `mapping.docs` this comment came from
@@ -168,6 +183,12 @@ export interface SyncAdapter {
     mapping: DocMapping,
     docId: string
   ): Promise<CommentMapping>;
+  pushDocReplyToGH(
+    reply: GoogleDocReply,
+    parentComment: GoogleDocComment,
+    mapping: DocMapping,
+    docId: string
+  ): Promise<ReplyMapping>;
   /** Syncs a single PR on demand (button-triggered). Primary entry point as of v0.3.0. */
   syncPR(ref: PullRequestRef): Promise<void>;
   syncAll(): Promise<void>;

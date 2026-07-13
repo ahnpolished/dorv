@@ -110,6 +110,44 @@ describe("HUM-1193 typed storage stores", () => {
     await expect(statusStore.get("ahnpolished/dorv", 42)).resolves.toEqual(status);
   });
 
+  it("lists reply mappings by PR via listByPR", async () => {
+    const replyStore = createReplyMappingStore(createMemoryStorageArea());
+    const ref = { repo: "ahnpolished/dorv", prNumber: 42 };
+
+    await replyStore.upsert({
+      ...ref,
+      ghReplyId: 2001,
+      docReplyId: "doc-reply-1",
+      ghParentCommentId: 1001,
+      docParentCommentId: "doc-comment-1",
+      docId: "doc-123",
+      source: "github"
+    });
+    await replyStore.upsert({
+      ...ref,
+      ghReplyId: 2002,
+      docReplyId: "doc-reply-2",
+      ghParentCommentId: 1001,
+      docParentCommentId: "doc-comment-1",
+      docId: "doc-123",
+      source: "gdoc"
+    });
+    await replyStore.upsert({
+      repo: "other/repo",
+      prNumber: 99,
+      ghReplyId: 3001,
+      docReplyId: "doc-reply-3",
+      ghParentCommentId: 1001,
+      docParentCommentId: "doc-comment-1",
+      docId: "doc-456",
+      source: "github"
+    });
+
+    const list = await replyStore.listByPR(ref.repo, ref.prNumber);
+    expect(list).toHaveLength(2);
+    expect(list.map((m) => m.ghReplyId).sort()).toEqual([2001, 2002]);
+  });
+
   it("stores Google author to GitHub login mappings", async () => {
     const store = createIdentityStore(createMemoryStorageArea());
 

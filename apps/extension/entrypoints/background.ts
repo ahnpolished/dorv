@@ -60,6 +60,7 @@ export default defineBackground(() => {
             break;
           }
           case "SYNC_PR": {
+            const syncPrT0 = performance.now();
             const backendUrl = await authStore.getBackendUrl();
             const adapter = resolveAdapter({
               backendUrl,
@@ -67,6 +68,11 @@ export default defineBackground(() => {
               storageArea
             });
             await adapter.syncPR(payload as PullRequestRef);
+            console.log(
+              "[dorv:bg] SYNC_PR completed in",
+              Math.round(performance.now() - syncPrT0),
+              "ms"
+            );
             sendResponse({ success: true });
             break;
           }
@@ -88,6 +94,50 @@ export default defineBackground(() => {
               break;
             }
             const result = await adapter.pushDocCommentToGH(comment, mapping, docId);
+            sendResponse({ success: true, payload: result });
+            break;
+          }
+          case "PUSH_DOC_REPLY_TO_GH": {
+            const { ref, docId, comment, reply } = payload as {
+              ref: PullRequestRef;
+              docId: string;
+              comment: GoogleDocComment;
+              reply: { id: string; content: string; author: string; createdAt: string };
+            };
+            console.log(
+              "[dorv:bg] PUSH_DOC_REPLY_TO_GH received — reply.id=",
+              reply.id,
+              "parentComment.id=",
+              comment.id,
+              "docId=",
+              docId,
+              "repo=",
+              ref.repo,
+              "pr=",
+              ref.prNumber
+            );
+            const backendUrl = await authStore.getBackendUrl();
+            const adapter = resolveAdapter({
+              backendUrl,
+              authStore,
+              storageArea
+            });
+            const mapping = await adapter.getDoc(ref);
+            if (!mapping) {
+              console.error(
+                "[dorv:bg] PUSH_DOC_REPLY_TO_GH — no mapping found for",
+                ref.repo,
+                ref.prNumber
+              );
+              sendResponse({ success: false, error: "PR is not linked to a Google Doc." });
+              break;
+            }
+            console.log(
+              "[dorv:bg] PUSH_DOC_REPLY_TO_GH — mapping found, docs=",
+              mapping.docs.map((d) => ({ filename: d.filename, docId: d.docId }))
+            );
+            const result = await adapter.pushDocReplyToGH(reply, comment, mapping, docId);
+            console.log("[dorv:bg] PUSH_DOC_REPLY_TO_GH — success, ghReplyId=", result.ghReplyId);
             sendResponse({ success: true, payload: result });
             break;
           }

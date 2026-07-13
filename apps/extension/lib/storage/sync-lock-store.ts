@@ -22,14 +22,32 @@ export function createSyncLockStore(storage: StorageArea) {
       if (existing) {
         const age = Date.now() - new Date(existing.startedAt).getTime();
         if (age < ttlMs) {
+          console.log(
+            "[dorv:syncLock] acquire FAILED — lock held for",
+            age,
+            "ms (ttl=",
+            ttlMs,
+            ")",
+            ref.repo,
+            ref.prNumber
+          );
           return false;
         }
+        console.log(
+          "[dorv:syncLock] acquire STEAL — stale lock age=",
+          age,
+          "ms",
+          ref.repo,
+          ref.prNumber
+        );
       }
       await storage.set({ [key]: { startedAt: new Date().toISOString() } satisfies SyncLock });
+      console.log("[dorv:syncLock] acquire OK", ref.repo, ref.prNumber);
       return true;
     },
     async release(ref: PullRequestRef): Promise<void> {
       await storage.remove([lockKey(ref)]);
+      console.log("[dorv:syncLock] release", ref.repo, ref.prNumber);
     }
   };
 }

@@ -6,9 +6,12 @@ import {
   extractCardBody,
   extractCardCommentId,
   findCommentCards,
+  findReplyById,
+  findReplyElements,
   isCardSynced,
   markCardSynced,
-  matchCardToComment
+  matchCardToComment,
+  matchCardToReply
 } from "../apps/extension/lib/gdoc/comment-card-injection.js";
 import type { GoogleDocComment } from "../apps/extension/lib/adapters/types.js";
 
@@ -178,6 +181,92 @@ describe("matchCardToComment", () => {
   });
 });
 
+describe("findReplyById", () => {
+  const comments: GoogleDocComment[] = [
+    makeComment({
+      id: "c1",
+      author: "Alice",
+      content: "Root one",
+      replies: [
+        { id: "r1", content: "Reply one", author: "Bob", createdAt: "t" },
+        { id: "r2", content: "Reply two", author: "Carol", createdAt: "t" }
+      ]
+    }),
+    makeComment({
+      id: "c2",
+      author: "Dave",
+      content: "Root two",
+      replies: [{ id: "r3", content: "Reply three", author: "Eve", createdAt: "t" }]
+    })
+  ];
+
+  it("finds a reply by id and returns its parent comment + index", () => {
+    const found = findReplyById("r2", comments);
+    expect(found).toBeDefined();
+    expect(found?.comment.id).toBe("c1");
+    expect(found?.replyIndex).toBe(1);
+  });
+
+  it("returns undefined when the reply id does not exist", () => {
+    expect(findReplyById("r99", comments)).toBeUndefined();
+  });
+});
+
+describe("matchCardToReply", () => {
+  const comments: GoogleDocComment[] = [
+    makeComment({
+      id: "c1",
+      author: "Alice",
+      content: "Root",
+      replies: [
+        { id: "r1", content: "First reply", author: "Bob", createdAt: "t" },
+        { id: "r2", content: "Second reply", author: "Carol", createdAt: "t" }
+      ]
+    }),
+    makeComment({
+      id: "c2",
+      author: "Dave",
+      content: "Other root",
+      replies: [{ id: "r3", content: "Third reply", author: "Eve", createdAt: "t" }]
+    })
+  ];
+
+  it("matches a reply card unambiguously by author + text", () => {
+    const match = matchCardToReply({ author: "Carol", text: "Second reply" }, comments);
+    expect(match).toBeDefined();
+    expect(match?.comment.id).toBe("c1");
+    expect(match?.replyIndex).toBe(1);
+  });
+
+  it("is case-insensitive and whitespace-normalizing", () => {
+    const match = matchCardToReply({ author: "BOB", text: "FIRST   reply" }, comments);
+    expect(match?.comment.id).toBe("c1");
+    expect(match?.replyIndex).toBe(0);
+  });
+
+  it("returns undefined when no reply matches", () => {
+    expect(matchCardToReply({ author: "Ghost", text: "nothing" }, comments)).toBeUndefined();
+  });
+
+  it("returns undefined when the match is ambiguous", () => {
+    const dup = [
+      makeComment({
+        id: "c1",
+        author: "Alice",
+        content: "Root",
+        replies: [{ id: "r1", content: "same text", author: "Bob", createdAt: "t" }]
+      }),
+      makeComment({
+        id: "c2",
+        author: "Alice",
+        content: "Other root",
+        replies: [{ id: "r2", content: "same text", author: "Bob", createdAt: "t" }]
+      })
+    ];
+    expect(matchCardToReply({ author: "Bob", text: "same text" }, dup)).toBeUndefined();
+  });
+});
+
 describe("markCardSynced / isCardSynced", () => {
   it("round-trips the synced marker", () => {
     const card = makeCard(`<div class="docos-docoview-replycontainer"></div>`);
@@ -191,5 +280,47 @@ describe("markCardSynced / isCardSynced", () => {
     markCardSynced(card);
     markCardSynced(card);
     expect(isCardSynced(card)).toBe(true);
+  });
+});
+
+describe("findReplyElements", () => {
+  it("returns individual .docos-replyview-comment children when present", () => {
+    const card = makeCard(`
+      <div class="docos-docoview-replycontainer">
+        <div class="docos-replyview-comment">
+          <span class="docos-author">Alice</span>
+          <span class="docos-body">Root comment</span>
+        </div>
+        <div class="docos-replyview-comment">
+          <span class="docos-author">Bob</span>
+          <span class="docos-body">Reply one</span>
+        </div>
+        <div class="docos-replyview-comment">
+          <span class="docos-author">Carol</span>
+          <span class="docos-body">Reply two</span>
+        </div>
+      </div>
+    `);
+    const elements = findReplyElements(card);
+    expect(elements).toHaveLength(3);
+    const [e0, e1, e2] = elements;
+    expect(e0).toBeDefined();
+    expect(e1).toBeDefined();
+    expect(e2).toBeDefined();
+    if (e0) expect(extractCardAuthor(e0)).toBe("Alice");
+    if (e1) expect(extractCardAuthor(e1)).toBe("Bob");
+    if (e2) expect(extractCardAuthor(e2)).toBe("Carol");
+  });
+
+  it("falls back to the card itself when no reply elements exist", () => {
+    const card = makeCard(`
+      <div class="docos-docoview-replycontainer">
+        <div class="docos-author">Jane Doe</div>
+        <div class="docos-replyview-body">Single comment</div>
+      </div>
+    `);
+    const elements = findReplyElements(card);
+    expect(elements).toHaveLength(1);
+    expect(elements[0]).toBe(card);
   });
 });

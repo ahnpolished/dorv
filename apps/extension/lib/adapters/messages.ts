@@ -3,7 +3,9 @@ import type {
   CreateDocInput,
   CreateDocResult,
   GoogleDocComment,
-  PullRequestRef
+  GoogleDocReply,
+  PullRequestRef,
+  ReplyMapping
 } from "./types.js";
 import type { MarkdownFileRef } from "./types.js";
 import type { GitHubPullRequestRef } from "../github/pr-files.js";
@@ -113,6 +115,25 @@ export async function pushDocCommentToGHViaBackground(input: {
     throw new Error("Pushing comment to GitHub returned no result.");
   }
 
+  return payload;
+}
+
+export async function pushDocReplyToGHViaBackground(input: {
+  ref: PullRequestRef;
+  docId: string;
+  comment: GoogleDocComment;
+  reply: GoogleDocReply;
+}): Promise<ReplyMapping> {
+  console.log("[dorv:msg] sending PUSH_DOC_REPLY_TO_GH — reply.id=", input.reply.id);
+  const payload = await sendBackgroundMessage<ReplyMapping>(
+    { type: "PUSH_DOC_REPLY_TO_GH", payload: input },
+    "Pushing reply to GitHub failed."
+  );
+
+  if (!payload) {
+    throw new Error("Pushing reply to GitHub returned no result.");
+  }
+  console.log("[dorv:msg] PUSH_DOC_REPLY_TO_GH response — ghReplyId=", payload.ghReplyId);
   return payload;
 }
 

@@ -222,7 +222,7 @@ export class DirectAdapter implements SyncAdapter {
         filename: file.filename,
         docId: driveFile.id,
         docUrl: driveFile.webViewLink,
-        versions: [{ sha: input.headSha }]
+        versions: [{ sha: input.headSha, docId: driveFile.id }]
       });
     }
 
@@ -285,6 +285,10 @@ export class DirectAdapter implements SyncAdapter {
 
   async getCommentMappings(ref: PullRequestRef): Promise<CommentMapping[]> {
     return this.mappingStore.listByPR(ref.repo, ref.prNumber);
+  }
+
+  async getReplyMappings(ref: PullRequestRef): Promise<ReplyMapping[]> {
+    return this.replyMappingStore.listByPR(ref.repo, ref.prNumber);
   }
 
   /**
@@ -567,9 +571,17 @@ export class DirectAdapter implements SyncAdapter {
     mapping: DocMapping,
     docId: string
   ): Promise<CommentMapping> {
+    const t0 = performance.now();
     // Fast path: local mapping already records this comment as synced.
     const existingLocal = await this.mappingStore.getByDoc(comment.id);
-    if (existingLocal) return existingLocal;
+    if (existingLocal) {
+      console.log(
+        "[dorv:pushDocCommentToGH] FAST PATH — already synced, took",
+        Math.round(performance.now() - t0),
+        "ms"
+      );
+      return existingLocal;
+    }
 
     const ghToken = await this.authStore.getGitHubToken();
     if (!ghToken) {
@@ -660,6 +672,12 @@ export class DirectAdapter implements SyncAdapter {
     };
 
     await this.mappingStore.upsert(commentMapping);
+    console.log(
+      "[dorv:pushDocCommentToGH] DONE ghCommentId=",
+      ghCommentId,
+      "totalMs=",
+      Math.round(performance.now() - t0)
+    );
     await this.activityStore.append({
       repo: mapping.repo,
       prNumber: mapping.prNumber,
@@ -673,6 +691,156 @@ export class DirectAdapter implements SyncAdapter {
       createdAt: new Date().toISOString()
     });
     return commentMapping;
+  }
+
+  async pushDocReplyToGH(
+    reply: GoogleDocReply,
+    parentComment: GoogleDocComment,
+    mapping: DocMapping,
+    docId: string
+  ): Promise<ReplyMapping> {
+    const t0 = performance.now();
+    console.log(
+      "[dorv:pushDocReplyToGH] START reply.id=",
+      reply.id,
+      "parentComment.id=",
+      parentComment.id,
+      "docId=",
+      docId
+    );
+
+    // Fast path: local mapping already records this reply as synced.
+    const existingLocal = await this.replyMappingStore.getByDoc(reply.id);
+    if (existingLocal) {
+      console.log(
+        "[dorv:pushDocReplyToGH] FAST PATH — already synced locally, ghReplyId=",
+        existingLocal.ghReplyId,
+        "took",
+        Math.round(performance.now() - t0),
+        "ms"
+      );
+      return existingLocal;
+    }
+
+    const ghToken = await this.authStore.getGitHubToken();
+    if (!ghToken) {
+      console.error("[dorv:pushDocReplyToGH] ABORT — no GitHub token");
+      throw new Error("GitHub token missing during reply push");
+    }
+
+    const parentMapping = await this.mappingStore.getByDoc(parentComment.id);
+    if (!parentMapping) {
+      console.error(
+        "[dorv:pushDocReplyToGH] ABORT — parent comment not mapped to GH yet. parentComment.id=",
+        parentComment.id
+      );
+      throw new Error("Parent comment has not been synced to GitHub yet");
+    }
+    console.log(
+      "[dorv:pushDocReplyToGH] parentMapping found — ghCommentId=",
+      parentMapping.ghCommentId,
+      "docCommentId=",
+      parentMapping.docCommentId
+    );
+
+    const targetDoc = findDocById(mapping, docId) ?? this.resolveTargetDoc(mapping, "");
+    if (!targetDoc) {
+      console.error(
+        "[dorv:pushDocReplyToGH] ABORT — no targetDoc for docId=",
+        docId,
+        "mapping.docs=",
+        mapping.docs.map((d) => d.docId)
+      );
+      throw new Error(`No linked file found for Google Doc ${docId}`);
+    }
+    console.log(
+      "[dorv:pushDocReplyToGH] targetDoc — filename=",
+      targetDoc.filename,
+      "docUrl=",
+      targetDoc.docUrl
+    );
+
+    // Remote dedup: fetch GH threads and check for an existing marker.
+    const t1 = performance.now();
+    console.log("[dorv:pushDocReplyToGH] fetching GH threads for remote dedup...");
+    const threads = await fetchReviewThreads(ghToken, mapping.repo, mapping.prNumber);
+    const ghMarkerIndex = buildGHMarkerIndex(threads);
+    const existingGhId = ghMarkerIndex.get(reply.id);
+    console.log(
+      "[dorv:pushDocReplyToGH] remote dedup — threads=",
+      threads.length,
+      "existingGhId=",
+      existingGhId,
+      "took",
+      Math.round(performance.now() - t1),
+      "ms"
+    );
+
+    // GDoc replies are flat — all replies belong to the thread root.
+    // Post the reply to the root GH comment so it appears at the thread level.
+    const inReplyToId = parentMapping.ghCommentId;
+
+    const docUrl = targetDoc.docUrl;
+    let ghReplyId: number;
+    if (existingGhId) {
+      ghReplyId = existingGhId;
+      console.log("[dorv:pushDocReplyToGH] using existing GH reply id", ghReplyId);
+    } else {
+      console.log("[dorv:pushDocReplyToGH] creating new GH reply — inReplyToId=", inReplyToId);
+      const body = await this.formatDocReplyBodyForGH(reply, docUrl);
+      console.log("[dorv:pushDocReplyToGH] body preview=", body.slice(0, 80));
+      const t2 = performance.now();
+      const result = await createReviewCommentReply(
+        ghToken,
+        mapping.repo,
+        mapping.prNumber,
+        inReplyToId,
+        body
+      );
+      ghReplyId = result.id;
+      console.log(
+        "[dorv:pushDocReplyToGH] created GH reply id",
+        ghReplyId,
+        "took",
+        Math.round(performance.now() - t2),
+        "ms"
+      );
+    }
+
+    const replyMapping: ReplyMapping = {
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      ghReplyId,
+      docReplyId: reply.id,
+      ghParentCommentId: inReplyToId,
+      docParentCommentId: parentMapping.docCommentId,
+      docId: parentMapping.docId,
+      source: "gdoc"
+    };
+
+    await this.replyMappingStore.upsert(replyMapping);
+    const totalMs = Math.round(performance.now() - t0);
+    console.log(
+      "[dorv:pushDocReplyToGH] DONE — replyMapping stored. ghReplyId=",
+      ghReplyId,
+      "docReplyId=",
+      reply.id,
+      "totalMs=",
+      totalMs
+    );
+
+    await this.activityStore.append({
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      direction: "gdoc_to_github",
+      kind: "reply_synced",
+      ghCommentId: ghReplyId,
+      docCommentId: reply.id,
+      path: targetDoc.filename,
+      snippet: activitySnippet(reply.content),
+      createdAt: new Date().toISOString()
+    });
+    return replyMapping;
   }
 
   private async pushSingleDocReplyToGH(
@@ -732,6 +900,127 @@ export class DirectAdapter implements SyncAdapter {
     await Promise.all(active.map((ref) => this.syncPR(ref)));
   }
 
+  /**
+   * When the PR head SHA has advanced, create a fresh Google Doc for each
+   * linked markdown file with the latest content, archive the old doc into
+   * the versions array, update the bot comment, and clear the stale flag.
+   * Existing comments stay on the old doc; the new doc starts clean.
+   */
+  private async refreshDocsIfStale(
+    ref: PullRequestRef,
+    mapping: DocMapping,
+    ghToken: string,
+    gToken: string
+  ): Promise<void> {
+    const repoParts = mapping.repo.split("/");
+    const [repoOwner, repoName] = repoParts;
+    if (!repoOwner || !repoName) return;
+
+    const meta = await fetchPullRequestMeta(
+      { owner: repoOwner, repo: repoName, prNumber: ref.prNumber },
+      { fetch: fetch.bind(globalThis), token: ghToken }
+    );
+    const newSha = meta.headSha;
+
+    const prFiles = await fetchPullRequestFiles(
+      { owner: repoOwner, repo: repoName, prNumber: ref.prNumber },
+      { fetch: fetch.bind(globalThis), token: ghToken }
+    );
+    const mdFiles = filterMarkdownFiles(prFiles);
+
+    const refreshedDocs: DocFileMapping[] = [];
+    for (const doc of mapping.docs) {
+      const file = mdFiles.find((f) => f.filename === doc.filename);
+      if (!file) {
+        // File removed from PR — keep the old doc as-is, no new version.
+        refreshedDocs.push(doc);
+        continue;
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 30_000);
+      const resp = await fetch(file.rawUrl, {
+        headers: { Authorization: `token ${ghToken}` },
+        signal: controller.signal
+      }).finally(() => {
+        clearTimeout(timeout);
+      });
+
+      if (!resp.ok) {
+        console.warn(`[dorv:refresh] fetch failed for ${file.filename}: ${resp.status.toString()}`);
+        refreshedDocs.push(doc);
+        continue;
+      }
+
+      const content = await resp.text();
+      const html = await renderMarkdownToGDocHtml(content);
+      const fullHtml = generateGDocHtml({
+        title: meta.title,
+        author: meta.author,
+        prUrl: meta.prUrl,
+        files: [{ filename: file.filename, html }]
+      });
+
+      const docName = `PR #${ref.prNumber.toString()} - ${meta.title} - ${file.filename}`;
+      const driveFile = await createGoogleDoc(gToken, docName, fullHtml);
+      await grantAnyoneCommentAccess(gToken, driveFile.id, inferOrganizationDomain(driveFile));
+
+      // doc.versions may already end with this exact doc's own self-tag
+      // (createDoc records one at creation time) — don't double-archive it.
+      // Invariant: versions[] is oldest-first, and the just-created doc is
+      // always appended last, so the highest version number is the latest doc.
+      const priorVersions = doc.versions ?? [];
+      const lastPrior = priorVersions[priorVersions.length - 1];
+      const archivedEntry = { sha: mapping.headSha, docId: doc.docId };
+      const withOld =
+        lastPrior?.sha === archivedEntry.sha && lastPrior.docId === archivedEntry.docId
+          ? priorVersions
+          : [...priorVersions, archivedEntry];
+      const versions = [...withOld, { sha: newSha, docId: driveFile.id }];
+
+      refreshedDocs.push({
+        filename: doc.filename,
+        docId: driveFile.id,
+        docUrl: driveFile.webViewLink,
+        versions
+      });
+    }
+
+    mapping.docs = refreshedDocs;
+    mapping.headSha = newSha;
+    mapping.latestSha = newSha;
+    mapping.isStale = false;
+
+    // Update bot comment in-place
+    const issueComments = await fetchIssueComments(ghToken, mapping.repo, ref.prNumber);
+    let botCommentId: number | undefined;
+    for (const comment of issueComments) {
+      if (extractDocsFromBotComment(comment.body)) {
+        botCommentId = comment.id;
+        break;
+      }
+    }
+    const docList = mapping.docs.map((d) => renderFileEntry(d)).join("\n");
+    const botCommentBody = `${buildDocsMarker(mapping.docs)}\n🤖 **dorv** has created linked Google Doc${
+      mapping.docs.length === 1 ? "" : "s"
+    } for review:\n\n${docList}`;
+    if (botCommentId) {
+      await updatePRComment(ghToken, mapping.repo, botCommentId, botCommentBody);
+    }
+
+    await this.docStore.upsert(mapping);
+    await this.activityStore.append({
+      repo: mapping.repo,
+      prNumber: mapping.prNumber,
+      direction: "github_to_gdoc",
+      kind: "comment_synced",
+      snippet: `Refreshed docs to ${newSha.slice(0, 7)}`,
+      createdAt: new Date().toISOString()
+    });
+  }
+
   /** Primary entry point: sync one PR on demand (button click), not an alarm sweep. */
   async syncPR(ref: PullRequestRef): Promise<void> {
     const ghToken = await this.authStore.getGitHubToken();
@@ -753,6 +1042,7 @@ export class DirectAdapter implements SyncAdapter {
     ghToken: string,
     gToken: string | undefined
   ): Promise<void> {
+    const syncT0 = performance.now();
     const lockKey = `${ref.repo}#${ref.prNumber.toString()}`;
     const mapping = await this.docStore.get(ref.repo, ref.prNumber);
 
@@ -766,8 +1056,12 @@ export class DirectAdapter implements SyncAdapter {
         updatedAt: new Date().toISOString()
       });
 
-      // Stale detection: check if new commits have landed since doc creation
-      if (!mapping.isStale) {
+      // Stale detection + refresh: if new commits landed, rebuild docs with
+      // latest markdown content, archive old docs into versions[], and clear stale.
+      // Not gated on mapping.isStale — headSha only advances inside
+      // refreshDocsIfStale, so a PR marked stale (no gToken at detection time)
+      // must keep re-checking here to recover once a gToken becomes available.
+      {
         const repoParts = mapping.repo.split("/");
         const [repoOwner, repoName] = repoParts;
         if (repoOwner && repoName) {
@@ -777,8 +1071,13 @@ export class DirectAdapter implements SyncAdapter {
               { fetch: fetch.bind(globalThis), token: ghToken }
             );
             if (meta.headSha !== mapping.headSha) {
-              mapping.isStale = true;
-              mapping.latestSha = meta.headSha;
+              if (gToken) {
+                mapping.latestSha = meta.headSha;
+                await this.refreshDocsIfStale(ref, mapping, ghToken, gToken);
+              } else {
+                mapping.isStale = true;
+                mapping.latestSha = meta.headSha;
+              }
             }
           } catch {
             // Non-fatal: stale check failure should not block sync
@@ -809,6 +1108,8 @@ export class DirectAdapter implements SyncAdapter {
 
       if (gToken) {
         // GH replies → Doc
+        const ghToDocT0 = performance.now();
+        let ghToDocCount = 0;
         for (const thread of threads) {
           if (thread.isResolved) continue;
           const rootMapping = await this.mappingStore.getByGH(thread.rootComment.id);
@@ -836,6 +1137,7 @@ export class DirectAdapter implements SyncAdapter {
               await this.pushSingleGHReplyToDoc(reply, parentMapping, mapping, gToken, {
                 cache: docCommentsCache
               });
+              ghToDocCount++;
             } catch (err) {
               console.error(`GH reply ${reply.id.toString()} sync failed:`, err);
               captureExtensionException(err, {
@@ -850,9 +1152,18 @@ export class DirectAdapter implements SyncAdapter {
             }
           }
         }
+        console.log(
+          "[dorv:runPRSync] GH→Doc reply sync:",
+          ghToDocCount,
+          "replies, took",
+          Math.round(performance.now() - ghToDocT0),
+          "ms"
+        );
 
         // Doc replies → GH. Built once from the already-fetched thread list
         // so we don't issue a redundant GH fetch per doc reply.
+        const docToGhT0 = performance.now();
+        let docToGhCount = 0;
         const ghMarkerIndex = buildGHMarkerIndex(threads);
         for (const doc of mapping.docs) {
           const docComments = await this.fetchDocCommentsCached(
@@ -862,9 +1173,26 @@ export class DirectAdapter implements SyncAdapter {
           );
           for (const docComment of docComments) {
             const parentMapping = await this.mappingStore.getByDoc(docComment.id);
-            if (!parentMapping) continue;
+            if (!parentMapping) {
+              console.log(
+                "[dorv:runPRSync] skipping doc comment",
+                docComment.id,
+                "— no parent mapping"
+              );
+              continue;
+            }
+            const replyCount = docComment.replies?.length ?? 0;
+            console.log(
+              "[dorv:runPRSync] doc comment",
+              docComment.id,
+              "has",
+              replyCount,
+              "replies"
+            );
             for (const reply of docComment.replies ?? []) {
-              if (await this.replyMappingStore.hasByDoc(reply.id)) continue;
+              const alreadyMapped = await this.replyMappingStore.hasByDoc(reply.id);
+              console.log("[dorv:runPRSync] reply", reply.id, "alreadyMapped=", alreadyMapped);
+              if (alreadyMapped) continue;
               try {
                 await this.pushSingleDocReplyToGH(
                   reply,
@@ -873,6 +1201,8 @@ export class DirectAdapter implements SyncAdapter {
                   ghToken,
                   ghMarkerIndex
                 );
+                docToGhCount++;
+                console.log("[dorv:runPRSync] pushed doc reply", reply.id, "to GH");
               } catch (err) {
                 console.error(`Doc reply ${reply.id} push failed:`, err);
                 captureExtensionException(err, {
@@ -888,8 +1218,17 @@ export class DirectAdapter implements SyncAdapter {
             }
           }
         }
+        console.log(
+          "[dorv:runPRSync] Doc→GH reply sync:",
+          docToGhCount,
+          "replies, took",
+          Math.round(performance.now() - docToGhT0),
+          "ms"
+        );
       }
 
+      const syncTotalMs = Math.round(performance.now() - syncT0);
+      console.log("[dorv:runPRSync] COMPLETE totalMs=", syncTotalMs);
       mapping.lastSyncedAt = new Date().toISOString();
       await this.docStore.upsert(mapping);
       await this.statusStore.update(ref.repo, ref.prNumber, {
@@ -897,7 +1236,8 @@ export class DirectAdapter implements SyncAdapter {
         updatedAt: new Date().toISOString()
       });
     } catch (err) {
-      console.error(`Sync failed for ${lockKey}:`, err);
+      const syncTotalMs = Math.round(performance.now() - syncT0);
+      console.error(`[dorv:runPRSync] FAILED after ${String(syncTotalMs)}ms for ${lockKey}:`, err);
       captureExtensionException(err, {
         extra: { prNumber: ref.prNumber, repo: ref.repo },
         surface: "background",

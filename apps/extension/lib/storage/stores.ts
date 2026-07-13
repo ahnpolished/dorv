@@ -194,6 +194,7 @@ export function createReplyMappingStore(storage: StorageArea) {
       const ghk = ghKey("replyMappingStore", mapping.ghReplyId);
       const dk = docKey("replyMappingStore", mapping.docReplyId);
       const pk = replyParentKey(mapping.ghParentCommentId);
+      const prk = prKey("replyMappingStore:pr", mapping);
       const existingByGH = await getValue<ReplyMapping>(storage, ghk);
       if (existingByGH && existingByGH.docReplyId !== mapping.docReplyId) {
         await storage.remove([docKey("replyMappingStore", existingByGH.docReplyId)]);
@@ -215,10 +216,18 @@ export function createReplyMappingStore(storage: StorageArea) {
         (m) => String(m.ghReplyId) !== String(mapping.ghReplyId)
       );
       updatedParentMappings.push(mapping);
+
+      const prMappings = await getArray<ReplyMapping>(storage, prk);
+      const updatedPrMappings = prMappings.filter(
+        (m) => String(m.ghReplyId) !== String(mapping.ghReplyId)
+      );
+      updatedPrMappings.push(mapping);
+
       await storage.set({
         [ghk]: mapping,
         [dk]: mapping,
-        [pk]: updatedParentMappings
+        [pk]: updatedParentMappings,
+        [prk]: updatedPrMappings
       });
     },
     async getByGH(ghReplyId: number | string): Promise<ReplyMapping | undefined> {
@@ -236,13 +245,19 @@ export function createReplyMappingStore(storage: StorageArea) {
     async listByParentGH(ghParentCommentId: number | string): Promise<ReplyMapping[]> {
       return getArray<ReplyMapping>(storage, replyParentKey(ghParentCommentId));
     },
+    async listByPR(repo: string, prNumber: number): Promise<ReplyMapping[]> {
+      return getArray<ReplyMapping>(storage, prKey("replyMappingStore:pr", { repo, prNumber }));
+    },
     async removeByGH(ghReplyId: number | string): Promise<void> {
       const mapping = await this.getByGH(ghReplyId);
       if (!mapping) return;
       const pk = replyParentKey(mapping.ghParentCommentId);
+      const prk = prKey("replyMappingStore:pr", mapping);
       const parentMappings = await getArray<ReplyMapping>(storage, pk);
+      const prMappings = await getArray<ReplyMapping>(storage, prk);
       await storage.set({
-        [pk]: parentMappings.filter((m) => String(m.ghReplyId) !== String(ghReplyId))
+        [pk]: parentMappings.filter((m) => String(m.ghReplyId) !== String(ghReplyId)),
+        [prk]: prMappings.filter((m) => String(m.ghReplyId) !== String(ghReplyId))
       });
       await storage.remove([
         ghKey("replyMappingStore", ghReplyId),

@@ -222,6 +222,85 @@ export function matchCardToComment(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+/** Searches all replies within comments for one matching the given reply id. */
+export function findReplyById(
+  replyId: string,
+  comments: GoogleDocComment[]
+): { comment: GoogleDocComment; replyIndex: number } | undefined {
+  for (const comment of comments) {
+    const replyIndex = comment.replies?.findIndex((r) => r.id === replyId) ?? -1;
+    if (replyIndex >= 0) {
+      console.log(
+        "[dorv:findReplyById] found reply",
+        replyId,
+        "in comment",
+        comment.id,
+        "at index",
+        replyIndex
+      );
+      return { comment, replyIndex };
+    }
+  }
+  console.log(
+    "[dorv:findReplyById] no reply found for id",
+    replyId,
+    "across",
+    comments.length,
+    "comments"
+  );
+  return undefined;
+}
+
+/**
+ * Heuristic fallback for reply cards: matches a card's visible author+text
+ * against all replies across all comments. Returns the parent comment and
+ * reply index when exactly one candidate matches.
+ */
+export function matchCardToReply(
+  card: { author: string; text: string },
+  comments: GoogleDocComment[]
+): { comment: GoogleDocComment; replyIndex: number } | undefined {
+  const author = normalize(card.author);
+  const text = normalize(card.text);
+  if (!author || !text) return undefined;
+
+  const matches: { comment: GoogleDocComment; replyIndex: number }[] = [];
+  for (const comment of comments) {
+    const replyIndex = comment.replies?.findIndex(
+      (r) => normalize(r.author) === author && normalize(r.content) === text
+    );
+    if (replyIndex != null && replyIndex >= 0) {
+      matches.push({ comment, replyIndex });
+    }
+  }
+
+  const logAuthor = card.author;
+  const logText = card.text.slice(0, 40);
+  if (matches.length === 0) {
+    console.log("[dorv:matchCardToReply] zero matches for author=", logAuthor, "text=", logText);
+  } else if (matches.length > 1) {
+    console.log(
+      "[dorv:matchCardToReply] ambiguous: ",
+      matches.length,
+      "matches for author=",
+      logAuthor,
+      "text=",
+      logText
+    );
+  } else {
+    const [m] = matches;
+    if (m) {
+      console.log(
+        "[dorv:matchCardToReply] matched reply index",
+        m.replyIndex,
+        "in comment",
+        m.comment.id
+      );
+    }
+  }
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 /** Candidate selectors for the action bar holding "Mark as resolved" / "More options". */
 const BADGE_CONTAINER_SELECTORS = [
   ".docos-anchoredreplyview-buttonholder",
@@ -240,6 +319,25 @@ export function findBadgeContainer(card: Element): Element | undefined {
     if (el) return el;
   }
   return undefined;
+}
+
+/** Candidate selector for individual comment/reply elements within a thread card. */
+const REPLY_ELEMENT_SELECTOR = ".docos-replyview-comment";
+
+/**
+ * Within a thread card, finds individual comment/reply elements.
+ * If the card contains `.docos-replyview-comment` children, returns those
+ * so each reply gets its own button. Falls back to the card itself for
+ * single-comment threads or when the selector doesn't match.
+ */
+export function findReplyElements(card: Element): Element[] {
+  const replies = Array.from(card.querySelectorAll(REPLY_ELEMENT_SELECTOR));
+  if (replies.length > 0) {
+    console.log("[dorv:findReplyElements] found", replies.length, "reply elements in thread card");
+    return replies;
+  }
+  console.log("[dorv:findReplyElements] no reply elements found, treating card as single element");
+  return [card];
 }
 
 /** Marks a card as synced (idempotent, cheap to check on re-scans). */

@@ -8,7 +8,11 @@ import {
   createMappingStore,
   createReplyMappingStore
 } from "../apps/extension/lib/storage/stores.js";
-import type { DocMapping } from "../apps/extension/lib/adapters/types.js";
+import type {
+  DocMapping,
+  GoogleDocComment,
+  GoogleDocReply
+} from "../apps/extension/lib/adapters/types.js";
 import type { StorageArea } from "../apps/extension/lib/storage/area.js";
 
 const mockFetch = vi.fn();
@@ -461,6 +465,70 @@ describe("Reply sync — bidirectional", () => {
       expect(replyMapping?.ghReplyId).toBe(77);
       expect(replyMapping?.ghParentCommentId).toBe(50);
       expect(replyMapping?.source).toBe("gdoc");
+    });
+
+    it("pushes a Doc reply via pushDocReplyToGH (button-triggered)", async () => {
+      const ref = { repo: "org/repo", prNumber: 1 };
+      await authStore.setGitHubToken("gh-tok");
+      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await docStore.upsert(makeDocMapping(ref));
+      await mappingStore.upsert({
+        ...ref,
+        ghCommentId: 50,
+        docCommentId: "doc-c-50",
+        docId: "doc-1",
+        source: "github"
+      });
+
+      const parentComment: GoogleDocComment = {
+        id: "doc-c-50",
+        content: "parent comment",
+        author: "Alice",
+        createdAt: "t",
+        updatedAt: "t",
+        resolved: false
+      };
+
+      const reply: GoogleDocReply = {
+        id: "doc-reply-button",
+        content: "button-pushed reply",
+        author: "Bob",
+        createdAt: "t"
+      };
+
+      let ghReplyBody: string | undefined;
+      let ghInReplyTo: number | undefined;
+      mockFetch.mockImplementation(async (url: string, opts?: RequestInit) => {
+        const method = opts?.method ?? "GET";
+        if (url.includes("api.github.com") && method === "GET") {
+          return { ok: true, json: () => Promise.resolve([]) };
+        }
+        if (url.includes("api.github.com") && method === "POST") {
+          const body = JSON.parse(String(opts?.body)) as Record<string, unknown>;
+          ghReplyBody = body.body as string;
+          ghInReplyTo = body.in_reply_to as number;
+          return { ok: true, json: () => Promise.resolve({ id: 88 }) };
+        }
+        return { ok: true, json: () => Promise.resolve({}) };
+      });
+
+      const adapter = new DirectAdapter(authStore, storage);
+      const mapping = await docStore.get(ref.repo, ref.prNumber);
+      if (!mapping) throw new Error("test setup: mapping missing");
+
+      const result = await adapter.pushDocReplyToGH(reply, parentComment, mapping, "doc-1");
+
+      expect(result.ghReplyId).toBe(88);
+      expect(result.docReplyId).toBe("doc-reply-button");
+      expect(result.ghParentCommentId).toBe(50);
+      expect(result.docParentCommentId).toBe("doc-c-50");
+      expect(result.source).toBe("gdoc");
+      expect(ghInReplyTo).toBe(50);
+      expect(ghReplyBody).toContain("button-pushed reply");
+
+      // Second push should be a no-op (local dedup)
+      const second = await adapter.pushDocReplyToGH(reply, parentComment, mapping, "doc-1");
+      expect(second.ghReplyId).toBe(88);
     });
 
     it("does not double-sync a Doc reply", async () => {

@@ -11,10 +11,11 @@ import { defineContentScript } from "wxt/utils/define-content-script";
 
 import animationsCss from "../lib/design/animations.css?inline";
 import tokensCss from "../lib/design/tokens.css?inline";
-import type { GoogleDocComment, PullRequestRef } from "../lib/adapters/types.js";
+import type { GoogleDocComment, GoogleDocReply, PullRequestRef } from "../lib/adapters/types.js";
 import {
   getDocCommentsViaBackground,
-  pushDocCommentToGHViaBackground
+  pushDocCommentToGHViaBackground,
+  pushDocReplyToGHViaBackground
 } from "../lib/adapters/messages.js";
 import { resolveAdapter } from "../lib/adapters/resolve.js";
 import {
@@ -23,9 +24,12 @@ import {
   extractCardCommentId,
   findBadgeContainer,
   findCommentCards,
+  findReplyById,
+  findReplyElements,
   isCardSynced,
   markCardSynced,
-  matchCardToComment
+  matchCardToComment,
+  matchCardToReply
 } from "../lib/gdoc/comment-card-injection.js";
 import { parseDocId } from "../lib/gdoc/urls.js";
 import { createAuthStore } from "../lib/storage/auth.js";
@@ -112,24 +116,75 @@ function ensureStyleInjected(): void {
 }
 
 /**
- * Matches a card element to a Google Doc comment.  First tries the
- * faster ID-based lookup; falls back to the shared heuristic in
- * `matchCardToComment` (normalised author+text).  Keeps the DOM
- * extraction local — the library function is DOM-agnostic.
+ * Matches a card element to a Google Doc comment or reply.
+ * First tries the faster ID-based lookup against root comments and replies;
+ * falls back to the shared heuristic in `matchCardToComment` /
+ * `matchCardToReply` (normalised author+text). Keeps the DOM extraction
+ * local — the library functions are DOM-agnostic.
+ *
+ * Returns the matched root comment and, if the card is a reply card, the
+ * specific reply within it.
  */
 function findMatchedComment(
   card: Element,
   comments: GoogleDocComment[]
-): GoogleDocComment | undefined {
+): { comment: GoogleDocComment; reply?: GoogleDocReply } | undefined {
   const id = extractCardCommentId(card);
-  if (id) {
-    const byId = comments.find((c) => c.id === id);
-    if (byId) return byId;
-  }
-
   const author = extractCardAuthor(card);
   const text = extractCardBody(card);
-  return author && text ? matchCardToComment({ author, text }, comments) : undefined;
+  console.log(
+    "[dorv-gdoc:findMatchedComment] card id=",
+    id,
+    "author=",
+    author,
+    "text=",
+    text?.slice(0, 50)
+  );
+
+  if (id) {
+    const byId = comments.find((c) => c.id === id);
+    if (byId) {
+      console.log("[dorv-gdoc:findMatchedComment] matched root comment by id", id);
+      return { comment: byId };
+    }
+
+    const byReplyId = findReplyById(id, comments);
+    if (byReplyId) {
+      const reply = byReplyId.comment.replies?.[byReplyId.replyIndex];
+      if (reply) {
+        console.log(
+          "[dorv-gdoc:findMatchedComment] matched reply by id",
+          id,
+          "reply author=",
+          reply.author
+        );
+        return { comment: byReplyId.comment, reply };
+      }
+    }
+  }
+
+  if (!author || !text) {
+    console.log("[dorv-gdoc:findMatchedComment] missing author or text, skipping heuristic match");
+    return undefined;
+  }
+
+  const byComment = matchCardToComment({ author, text }, comments);
+  if (byComment) {
+    console.log("[dorv-gdoc:findMatchedComment] matched root comment by author+text");
+    return { comment: byComment };
+  }
+
+  const byReply = matchCardToReply({ author, text }, comments);
+  if (byReply) {
+    const reply = byReply.comment.replies?.[byReply.replyIndex];
+    if (reply) {
+      console.log("[dorv-gdoc:findMatchedComment] matched reply by author+text");
+      return { comment: byReply.comment, reply };
+    }
+  }
+
+  console.log("[dorv-gdoc:findMatchedComment] no match found for card");
+  return undefined;
 }
 
 /** Prefer the visible action bar (next to "Mark as resolved" / "More options"); falls back to the card itself so the button is never trapped inside a hidden hover-only container. */
@@ -164,7 +219,8 @@ function injectButton(
   card: Element,
   ref: PullRequestRef,
   docId: string,
-  comment: GoogleDocComment
+  comment: GoogleDocComment,
+  reply?: GoogleDocReply
 ): void {
   if (card.querySelector(`[${BUTTON_ATTR}]`)) return;
 
@@ -184,7 +240,19 @@ function injectButton(
     button.innerHTML = ICON_SPINNER;
     card.querySelector(".dorv-push-error")?.remove();
 
-    pushDocCommentToGHViaBackground({ ref, docId, comment })
+    console.log(
+      "[dorv-gdoc:button-click] pushing",
+      reply ? "reply" : "root comment",
+      "replyId=",
+      reply?.id,
+      "commentId=",
+      comment.id
+    );
+    const pushPromise = reply
+      ? pushDocReplyToGHViaBackground({ ref, docId, comment, reply })
+      : pushDocCommentToGHViaBackground({ ref, docId, comment });
+
+    pushPromise
       .then(() => {
         button.setAttribute("aria-label", "Pushed");
         button.innerHTML = ICON_CHECK;
@@ -194,15 +262,17 @@ function injectButton(
         }, CHECK_DISPLAY_MS);
       })
       .catch((err: unknown) => {
+        console.error("[dorv-gdoc:button-click] push FAILED:", err);
         button.disabled = false;
         button.setAttribute("aria-label", "Push to GitHub");
         button.title = "Push to GitHub";
         button.innerHTML = ICON_GITHUB;
-        renderErrorNear(card, "push failed, try again");
+        const msg = err instanceof Error ? err.message : String(err);
+        renderErrorNear(card, `push failed — ${msg}`);
         captureExtensionException(err, {
           surface: SURFACE,
-          tags: { operation: "push_doc_comment_to_gh" },
-          extra: { docId, commentId: comment.id }
+          tags: { operation: reply ? "push_doc_reply_to_gh" : "push_doc_comment_to_gh" },
+          extra: { docId, commentId: comment.id, replyId: reply?.id }
         });
       });
   });
@@ -211,48 +281,91 @@ function injectButton(
 }
 
 async function scanAndInject(ref: PullRequestRef, docId: string): Promise<void> {
-  const cards = findCommentCards(document.body).filter((card) => !isCardSynced(card));
-  console.log("[dorv-gdoc] scanAndInject: cards found =", cards.length);
+  const cards = findCommentCards(document.body);
+  console.log("[dorv-gdoc] scanAndInject: thread cards found =", cards.length);
   if (cards.length === 0) return;
 
-  // Fetching Google Doc comments requires a Google OAuth token via
-  // chrome.identity, which is not accessible from a content script's
-  // execution context — proxied through the background service worker
-  // instead (see docs/GDOC_COMMENT_DOM_NOTES.md).
-  // getDocCommentsViaBackground returns comments across every doc in the PR's
-  // mapping (GoogleDocComment doesn't carry a docId — same shape the rest of
-  // the adapter uses), so cards are matched against the full set; safe since
-  // matchCardToComment only returns a match when it's unambiguous.
   const [comments, mappings] = await Promise.all([
     getDocCommentsViaBackground(ref),
     adapter.getCommentMappings(ref)
   ]);
-  console.log("[dorv-gdoc] comments fetched =", comments.length, "mappings =", mappings.length);
+  console.log(
+    "[dorv-gdoc] comments fetched =",
+    comments.length,
+    "root mappings =",
+    mappings.length
+  );
+
+  const totalReplies = comments.reduce((sum, c) => sum + (c.replies?.length ?? 0), 0);
+  console.log("[dorv-gdoc] total replies across all comments =", totalReplies);
 
   const syncedDocCommentIds = new Set(
     mappings.filter((m) => m.source === "gdoc").map((m) => m.docCommentId)
   );
 
+  const replyMappings = await adapter.getReplyMappings(ref);
+  const syncedDocReplyIds = new Set(
+    replyMappings.filter((m) => m.source === "gdoc").map((m) => m.docReplyId)
+  );
+
   for (const card of cards) {
-    const comment = findMatchedComment(card, comments);
-    if (!comment) {
+    const elements = findReplyElements(card);
+    console.log(
+      "[dorv-gdoc] processing thread card, elements=",
+      elements.length,
+      "card already synced=",
+      isCardSynced(card)
+    );
+
+    for (const el of elements) {
+      if (isCardSynced(el)) {
+        console.log("[dorv-gdoc] element already synced, skipping");
+        continue;
+      }
+
+      const matched = findMatchedComment(el, comments);
+      if (!matched) {
+        console.log(
+          "[dorv-gdoc] no matched comment for element",
+          extractCardAuthor(el),
+          "|",
+          extractCardBody(el)?.slice(0, 40)
+        );
+        continue;
+      }
+
+      const { comment, reply } = matched;
+
+      if (reply) {
+        const isSynced = syncedDocReplyIds.has(reply.id);
+        console.log("[dorv-gdoc] element matched as reply", reply.id, "synced=", isSynced);
+        if (isSynced) {
+          markCardSynced(el);
+          renderSyncedIndicator(el);
+          continue;
+        }
+      } else {
+        const isSynced = syncedDocCommentIds.has(comment.id);
+        console.log("[dorv-gdoc] element matched as root comment", comment.id, "synced=", isSynced);
+        if (isSynced) {
+          markCardSynced(el);
+          renderSyncedIndicator(el);
+          continue;
+        }
+      }
+
       console.log(
-        "[dorv-gdoc] no matched comment for card",
-        extractCardAuthor(card),
-        "|",
-        extractCardBody(card)?.slice(0, 40)
+        "[dorv-gdoc] injecting button for",
+        reply ? `reply ${reply.id} on comment ${comment.id}` : `comment ${comment.id}`
       );
-      continue;
+      injectButton(el, ref, docId, comment, reply);
     }
 
-    if (syncedDocCommentIds.has(comment.id)) {
+    // If every sub-element is synced, mark the whole card so re-scans skip it
+    const allSynced = elements.every((el) => isCardSynced(el));
+    if (allSynced && !isCardSynced(card)) {
       markCardSynced(card);
-      renderSyncedIndicator(card);
-      continue;
     }
-
-    console.log("[dorv-gdoc] injecting button for comment", comment.id);
-    injectButton(card, ref, docId, comment);
   }
 }
 
