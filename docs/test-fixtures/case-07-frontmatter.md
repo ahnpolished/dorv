@@ -10,4 +10,4 @@ tags:
 # Frontmatter Fixture
 
 Tests that YAML frontmatter is preserved and not mistaken for a
-horizontal rule or heading during markdown sync.
+horizontal rule or heading during markdown sync. updated
