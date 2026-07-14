@@ -7,7 +7,7 @@ describe("AuthStore managed storage", () => {
   beforeEach(() => {
     (global as any).chrome = {
       runtime: { lastError: null },
-      identity: { getAuthToken: vi.fn(), removeCachedAuthToken: vi.fn() }
+      identity: {}
     };
   });
 

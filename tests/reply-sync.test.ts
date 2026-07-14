@@ -52,10 +52,7 @@ describe("Reply sync — bidirectional", () => {
 
     (global as any).chrome = {
       runtime: { lastError: null },
-      identity: {
-        getAuthToken: vi.fn(),
-        removeCachedAuthToken: vi.fn()
-      }
+      identity: {}
     };
   });
 
@@ -63,7 +60,7 @@ describe("Reply sync — bidirectional", () => {
     it("syncs a GH reply to Drive when parent is mapped", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
 
       // Parent comment already mapped
@@ -136,7 +133,7 @@ describe("Reply sync — bidirectional", () => {
     it("skips GH reply if parent comment not yet mapped", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
       // No parent mapping stored
 
@@ -174,7 +171,7 @@ describe("Reply sync — bidirectional", () => {
     it("pushes a nested GH reply (reply-to-reply) to Drive when parent reply is already mapped", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
 
       // Root comment mapping
@@ -269,7 +266,7 @@ describe("Reply sync — bidirectional", () => {
     it("skips nested GH reply when parent reply's inReplyToId has no mapping in either store", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
 
       // Root comment mapping exists for id=10
@@ -339,7 +336,7 @@ describe("Reply sync — bidirectional", () => {
     it("does not double-sync a GH reply", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
       await mappingStore.upsert({
         ...ref,
@@ -412,7 +409,7 @@ describe("Reply sync — bidirectional", () => {
     it("syncs a Doc reply to GH when parent is mapped", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
       await mappingStore.upsert({
         ...ref,
@@ -470,7 +467,7 @@ describe("Reply sync — bidirectional", () => {
     it("pushes a Doc reply via pushDocReplyToGH (button-triggered)", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
       await mappingStore.upsert({
         ...ref,
@@ -534,7 +531,7 @@ describe("Reply sync — bidirectional", () => {
     it("does not double-sync a Doc reply", async () => {
       const ref = { repo: "org/repo", prNumber: 1 };
       await authStore.setGitHubToken("gh-tok");
-      (chrome.identity.getAuthToken as any).mockImplementation((_: any, cb: any) => cb("g-tok"));
+      await storage.set({ google_token: "g-tok" });
       await docStore.upsert(makeDocMapping(ref));
       await mappingStore.upsert({
         ...ref,

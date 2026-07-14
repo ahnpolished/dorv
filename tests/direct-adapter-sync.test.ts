@@ -35,10 +35,7 @@ describe("DirectAdapter baseline sync", () => {
 
     (global as any).chrome = {
       runtime: { lastError: null },
-      identity: {
-        getAuthToken: vi.fn((_opts: any, cb: any) => cb(undefined)),
-        removeCachedAuthToken: vi.fn()
-      }
+      identity: {}
     };
   });
 
@@ -69,9 +66,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("pushes new comments to GDoc", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     const ref = { repo: "org/repo", prNumber: 123 };
     const mapping: DocMapping = {
@@ -134,9 +129,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("pushes GH comments to GDoc with exact body and line context", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     const ref = { repo: "org/repo", prNumber: 123 };
     await docStore.upsert({
@@ -200,9 +193,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("skips LEFT-side GitHub review threads without creating GDoc comments", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     const ref = { repo: "org/repo", prNumber: 123 };
     await docStore.upsert({
@@ -278,9 +269,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("syncs 100 GH comments to distinct GDoc comments", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     const ref = { repo: "org/repo", prNumber: 123 };
     await docStore.upsert({
@@ -338,9 +327,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("creates review docs with anyone-with-link commenter access", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
@@ -405,9 +392,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("HUM-1412: merges docs across separate createDoc calls instead of dropping earlier files", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     let botCommentId = 0;
     const postedComments: Array<{ method: string; body: string }> = [];
@@ -518,9 +503,7 @@ describe("DirectAdapter baseline sync", () => {
     // both read GitHub issue comments before either had posted, so both saw
     // no existing bot comment and both POSTed, creating a duplicate.
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     let botCommentId = 0;
     const postedComments: Array<{ method: string; body: string }> = [];
@@ -627,9 +610,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("renders mermaid fenced blocks as images in the uploaded Google Doc HTML", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     let uploadBody = "";
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
@@ -695,9 +676,7 @@ describe("DirectAdapter baseline sync", () => {
 
   it("falls back to organization commenter access when public link sharing is blocked", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
@@ -866,10 +845,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
     mockFetch.mockReset();
     (global as any).chrome = {
       runtime: { lastError: null },
-      identity: {
-        getAuthToken: vi.fn((_opts: any, cb: any) => cb(undefined)),
-        removeCachedAuthToken: vi.fn()
-      }
+      identity: {}
     };
   });
 
@@ -1017,9 +993,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
 
   it("falls through to creation when no bot comment is found", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
     const calls: string[] = [];
 
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
@@ -1068,9 +1042,7 @@ describe("DirectAdapter createDoc: reuse existing GDoc from PR comment", () => {
 
   it("green-field: creates new GDoc and posts bot comment with hidden marker when no prior comment exists", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) =>
-      cb("mock-g-token")
-    );
+    await storage.set({ google_token: "mock-g-token" });
 
     let postedBotComment = "";
     mockFetch.mockImplementation(async (url: any, init?: RequestInit) => {
@@ -1145,7 +1117,7 @@ describe("DirectAdapter refreshDocsIfStale", () => {
   let docStore: any;
   let activityStore: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     storage = createMemoryStorageArea();
     authStore = createAuthStore(storage);
     docStore = createDocStore(storage);
@@ -1154,11 +1126,9 @@ describe("DirectAdapter refreshDocsIfStale", () => {
     mockFetch.mockReset();
     (global as any).chrome = {
       runtime: { lastError: null },
-      identity: {
-        getAuthToken: vi.fn((_opts: any, cb: any) => cb("mock-g-token")),
-        removeCachedAuthToken: vi.fn()
-      }
+      identity: {}
     };
+    await storage.set({ google_token: "mock-g-token" });
   });
 
   it("creates a new doc, archives the old one in versions, and clears stale", async () => {
@@ -1488,7 +1458,7 @@ describe("DirectAdapter refreshDocsIfStale", () => {
 
   it("marks stale but does not refresh when Google token is missing", async () => {
     await authStore.setGitHubToken("mock-gh-token");
-    (chrome.identity.getAuthToken as any).mockImplementation((opts: any, cb: any) => cb(undefined));
+    await storage.set({ google_token: undefined });
 
     mockFetch.mockImplementation(async (url: any) => {
       const urlStr = String(url);

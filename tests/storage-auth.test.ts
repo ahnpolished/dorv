@@ -12,7 +12,6 @@ describe("AuthStore", () => {
     storage = createMemoryStorageArea();
     authStore = createAuthStore(storage);
 
-    // Mock chrome globals — defaults simulate real Chrome (native identity supported)
     (global as any).chrome = {
       runtime: {
         lastError: null,
@@ -21,11 +20,6 @@ describe("AuthStore", () => {
         })
       },
       identity: {
-        getAuthToken: vi.fn(),
-        removeCachedAuthToken: vi.fn(),
-        getProfileUserInfo: vi.fn().mockImplementation((opts: any, cb: any) => {
-          cb({ id: "chrome-profile-id", email: "test@example.com" });
-        }),
         launchWebAuthFlow: vi.fn(),
         getRedirectURL: vi.fn().mockReturnValue("https://test-extension-id.chromiumapp.org/")
       }
@@ -41,34 +35,38 @@ describe("AuthStore", () => {
   });
 
   describe("Google OAuth", () => {
-    it("gets google token via chrome.identity", async () => {
-      const mockToken = "mock-google-token";
-      (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
-        cb(mockToken);
-      });
+    it("gets google token via launchWebAuthFlow and caches it", async () => {
+      (vi.mocked(chrome.identity.launchWebAuthFlow) as any).mockImplementation(
+        (opts: any, cb: any) => {
+          cb(
+            "https://test-extension-id.chromiumapp.org/#access_token=mock-google-token&token_type=Bearer"
+          );
+        }
+      );
 
       const token = await authStore.getGoogleToken(true);
-      expect(token).toBe(mockToken);
-      expect(chrome.identity.getAuthToken).toHaveBeenCalledWith(
-        { interactive: true },
+      expect(token).toBe("mock-google-token");
+      expect(chrome.identity.launchWebAuthFlow).toHaveBeenCalledWith(
+        expect.objectContaining({ interactive: true }),
         expect.any(Function)
       );
+
+      // Passive lookups read the token back from the cache populated above.
+      await expect(authStore.getGoogleToken(false)).resolves.toBe("mock-google-token");
     });
 
     it("returns undefined when passive google token lookup misses", async () => {
-      (chrome.runtime as any).lastError = { message: "OAuth2 not granted or revoked." };
-      (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
-        cb(undefined);
-      });
-
       await expect(authStore.getGoogleToken(false)).resolves.toBeUndefined();
+      expect(chrome.identity.launchWebAuthFlow).not.toHaveBeenCalled();
     });
 
-    it("rejects with the Chrome error message on interactive identity failure", async () => {
-      (chrome.runtime as any).lastError = { message: "The user did not approve access." };
-      (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
-        cb(undefined);
-      });
+    it("rejects when the user cancels the auth popup", async () => {
+      (vi.mocked(chrome.identity.launchWebAuthFlow) as any).mockImplementation(
+        (opts: any, cb: any) => {
+          (chrome.runtime as any).lastError = { message: "The user did not approve access." };
+          cb(undefined);
+        }
+      );
 
       await expect(authStore.getGoogleToken(true)).rejects.toThrow(
         "The user did not approve access."
@@ -117,56 +115,19 @@ describe("AuthStore", () => {
       }
     });
 
-    it("falls back to launchWebAuthFlow on browsers without native identity support (e.g. Arc)", async () => {
-      (vi.mocked(chrome.identity.getProfileUserInfo) as any).mockImplementation(
-        (opts: any, cb: any) => {
-          cb({ id: "", email: "" });
-        }
-      );
+    it("revokes google token by clearing the cache", async () => {
       (vi.mocked(chrome.identity.launchWebAuthFlow) as any).mockImplementation(
         (opts: any, cb: any) => {
           cb(
-            "https://test-extension-id.chromiumapp.org/#access_token=web-flow-token&token_type=Bearer"
+            "https://test-extension-id.chromiumapp.org/#access_token=stale-token&token_type=Bearer"
           );
         }
       );
-
-      const token = await authStore.getGoogleToken(true);
-      expect(token).toBe("web-flow-token");
-      expect(chrome.identity.getAuthToken).not.toHaveBeenCalled();
-      expect(chrome.identity.launchWebAuthFlow).toHaveBeenCalledWith(
-        expect.objectContaining({ interactive: true }),
-        expect.any(Function)
-      );
-    });
-
-    it("skips launchWebAuthFlow for passive lookups on unsupported browsers", async () => {
-      (vi.mocked(chrome.identity.getProfileUserInfo) as any).mockImplementation(
-        (opts: any, cb: any) => {
-          cb({ id: "", email: "" });
-        }
-      );
-
-      await expect(authStore.getGoogleToken(false)).resolves.toBeUndefined();
-      expect(chrome.identity.launchWebAuthFlow).not.toHaveBeenCalled();
-    });
-
-    it("revokes google token", async () => {
-      const mockToken = "stale-token";
-      (vi.mocked(chrome.identity.getAuthToken) as any).mockImplementation((opts: any, cb: any) => {
-        cb(mockToken);
-      });
-      (vi.mocked(chrome.identity.removeCachedAuthToken) as any).mockImplementation(
-        (opts: any, cb: any) => {
-          cb();
-        }
-      );
+      await authStore.getGoogleToken(true);
+      await expect(authStore.getGoogleToken(false)).resolves.toBe("stale-token");
 
       await authStore.revokeGoogleToken();
-      expect(chrome.identity.removeCachedAuthToken).toHaveBeenCalledWith(
-        { token: mockToken },
-        expect.any(Function)
-      );
+      await expect(authStore.getGoogleToken(false)).resolves.toBeUndefined();
     });
   });
 });

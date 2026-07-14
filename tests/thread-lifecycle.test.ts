@@ -111,10 +111,14 @@ describe("GitHub thread lifecycle sync", () => {
     (global as any).chrome = {
       runtime: { lastError: null },
       identity: {
-        getAuthToken: vi.fn((_opts: any, cb: any) => cb("g-token")),
-        removeCachedAuthToken: vi.fn()
+        launchWebAuthFlow: vi.fn(),
+        getRedirectURL: vi.fn().mockReturnValue("https://test-extension-id.chromiumapp.org/")
       }
     };
+
+    // Passive (non-interactive) token lookups read from cache; seed it directly
+    // rather than driving a real launchWebAuthFlow popup.
+    await storage.set({ google_token: "g-token" });
 
     await authStore.setGitHubToken("gh-token");
     await docStore.upsert(DOC_MAPPING);

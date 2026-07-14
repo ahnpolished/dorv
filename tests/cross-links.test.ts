@@ -31,7 +31,7 @@ describe("HUM-1254 cross-links", () => {
   let docStore: ReturnType<typeof createDocStore>;
   let mappingStore: ReturnType<typeof createMappingStore>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     storage = createMemoryStorageArea();
     authStore = createAuthStore(storage);
     docStore = createDocStore(storage);
@@ -41,11 +41,9 @@ describe("HUM-1254 cross-links", () => {
 
     (global as any).chrome = {
       runtime: { lastError: null },
-      identity: {
-        getAuthToken: vi.fn((_opts: any, cb: any) => cb("mock-g-token")),
-        removeCachedAuthToken: vi.fn()
-      }
+      identity: {}
     };
+    await storage.set({ google_token: "mock-g-token" });
   });
 
   it("GH → GDoc: pushed comment includes link back to original GitHub comment", async () => {

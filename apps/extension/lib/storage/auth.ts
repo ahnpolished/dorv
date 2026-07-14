@@ -18,38 +18,12 @@ export interface AuthStore {
   revokeGoogleToken(): Promise<void>;
 }
 
-function hasChromeIdentitySupport(): Promise<boolean> {
-  if (typeof chrome.identity.getProfileUserInfo !== "function") {
-    // Older/partial chrome.identity shims (and some test mocks): assume
-    // native support and let getAuthToken itself surface any failure.
-    return Promise.resolve(true);
-  }
-  return new Promise((resolve) => {
-    chrome.identity.getProfileUserInfo({ accountStatus: "ANY" }, (info) => {
-      resolve(!!info.id);
-    });
-  });
-}
-
-function getTokenViaChromeIdentity(interactive: boolean): Promise<string | undefined> {
-  return new Promise((resolve, reject) => {
-    chrome.identity.getAuthToken({ interactive }, (token) => {
-      if (chrome.runtime.lastError) {
-        if (!interactive) {
-          resolve(undefined);
-          return;
-        }
-        reject(new Error(chrome.runtime.lastError.message ?? "Unknown identity error"));
-        return;
-      }
-      resolve(token as string);
-    });
-  });
-}
-
-// Traditional OAuth popup flow for browsers without Chrome's native identity
-// integration. Requires the manifest's oauth2 client to allow the
-// https://<extension-id>.chromiumapp.org/ redirect URI in Google Cloud Console.
+// OAuth popup flow, used in Chrome and Chromium forks alike (Arc, Brave,
+// Edge, ...). Requires the manifest's oauth2 client to be a "Web application"
+// type client with https://<extension-id>.chromiumapp.org/ added as an
+// authorized redirect URI in Google Cloud Console. We don't use
+// chrome.identity.getAuthToken: that call only accepts a "Chrome App" type
+// client, which is a separate, unrelated client-type requirement.
 function getTokenViaWebAuthFlow(): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
     const oauth2 = chrome.runtime.getManifest().oauth2;
@@ -118,18 +92,8 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
       return !!managed[keys.backendUrl];
     },
     async getGoogleToken(interactive: boolean): Promise<string | undefined> {
-      // ponytail: chrome.identity.getAuthToken is only backed by a real OAuth
-      // flow in actual Google Chrome. Chromium forks (Arc, Brave, ...) fall
-      // through to a broken redirect flow that Google rejects with a 400
-      // page. getProfileUserInfo is a silent, popup-free way to tell them
-      // apart: only real Chrome (signed into a profile) returns an id.
-      const chromeNative = await hasChromeIdentitySupport();
-      if (chromeNative) {
-        return getTokenViaChromeIdentity(interactive);
-      }
-      // Non-Chrome browsers (Arc, Brave, Edge, …) use launchWebAuthFlow.
-      // That flow does NOT cache the token in chrome.identity, so we persist
-      // it ourselves in storage so that passive (non-interactive) lookups work.
+      // launchWebAuthFlow doesn't cache the token in chrome.identity, so we
+      // persist it ourselves in storage so passive (non-interactive) lookups work.
       if (!interactive) {
         const cached = await storage.get([keys.googleToken]);
         return cached[keys.googleToken] as string | undefined;
@@ -165,20 +129,7 @@ export function createAuthStore(storage: StorageArea, managedStorage?: StorageAr
     },
 
     async revokeGoogleToken(): Promise<void> {
-      // Always clear our fallback storage, even if chrome.identity has nothing cached.
       await storage.remove([keys.googleToken]);
-      return new Promise((resolve) => {
-        chrome.identity.getAuthToken({ interactive: false }, (token) => {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          if (token) {
-            chrome.identity.removeCachedAuthToken({ token: token as string }, () => {
-              resolve();
-            });
-          } else {
-            resolve();
-          }
-        });
-      });
     }
   };
 }
