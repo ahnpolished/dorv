@@ -2,6 +2,42 @@
 
 All notable changes to dorv are documented here.
 
+## [0.3.1] — 2026-07-14
+
+Release pipeline fixes: Chrome Web Store publishing and Google sign-in were both broken after the Google Cloud OAuth client was migrated from "Chrome Extension" to "Web application" type.
+
+### Fixed
+
+- **Google sign-in "bad client id"** — `chrome.identity.getAuthToken` only accepts a "Chrome App"-type OAuth client; switched entirely to `chrome.identity.launchWebAuthFlow`, which works with the current "Web application" client type in both real Chrome and Chromium forks (Arc, Brave, Edge)
+- **Chrome Web Store upload rejected (`PKG_MANIFEST_KEY_NOT_MATCH`)** — CI builds no longer bake a `key` into `manifest.json`; Chrome Web Store keeps its own registered key for the published item, so shipping our dev key clobbered it on every upload
+- **Release workflow error visibility** — upload/publish steps to the Chrome Web Store API now print the response body on failure instead of swallowing it behind `curl -fsS`, so future rejections are diagnosable straight from the Actions log
+
+## [0.3.0] — 2026-07-12
+
+DirectAdapter-only architecture: no side panel (native-UI buttons instead), no background alarm (user-triggered sync), multi-doc PRs, exact-once sync.
+
+### Added
+
+- **Per-file button injection** — `FileButton` component replaces the side panel; buttons anchor to each PR file's `.file-header` via cascade selectors, injected through a `MutationObserver` (HUM-1416, HUM-1415, HUM-1412)
+- **Icon-based push button** — Primer-style dorv-branded button with shared outline + logo, retry affordance, and stale badge in the GDoc comment header (HUM-1416)
+- **Google auth profile display** — name/email/avatar shown on the options page; adds `identity.email` + `profile`/`email` OAuth scopes
+- **Per-file Google Doc revision history** — `listGoogleDocRevisions` read API surfaces version history per file (HUM-1417)
+- **Edit-in-place bot comment** — bot comment updates in place instead of re-posting on each doc creation (HUM-1417-pi)
+- **Multi-doc PRs** — `docStore.upsert` merges into `docs[]` instead of overwriting, supporting multiple synced docs per PR (HUM-1412)
+- **Background-routed GitHub calls** — content scripts route GitHub API calls through the background service worker instead of calling directly (HUM-1413, HUM-1411)
+- **dev:loop** — one-command rebuild → reload → verify script for local iteration (HUM-1414)
+- **Agent orchestration tooling** — `dorv-worker`/`dorv-reviewer`/`dorv-gatekeeper`/`dorv-conflict-resolver`/`dorv-e2e-fixer` subagent roles and `/dorv-dispatch` command for claim-based multi-agent development
+
+### Fixed
+
+- **P0: Create Doc broken** — wrong ref shape passed to `fetchPrInfoViaBackground` (HUM-1409)
+- **Nested GDoc comment reply push** — replies to replies failed to push to GitHub (HUM-1415)
+- **Button silent failure** — errors now propagate and display visibly instead of failing silently
+- **OAuth setup warning** — cleared once `GOOGLE_CLIENT_ID` is a real, non-placeholder value (HUM-1410)
+- **Google auth token not saving** — token persistence fixed after the auth-profile rework
+- **Zero-width space in filenames** — `‎` stripped from both ends of injected filenames
+- **React 19 `createRoot`** — no longer clears the `span.id` attribute on mount
+
 ## [0.2.0] — 2026-05-30
 
 Stable bidirectional sync with thread lifecycle, Activities feed, real-credential E2E coverage, Sentry error tracking, and storage efficiency.
